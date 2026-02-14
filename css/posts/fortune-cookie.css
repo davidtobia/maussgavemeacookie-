@@ -719,7 +719,9 @@ body::after {
   }
 
   .game-mascot-img {
-    width: 120px;
+    width: 150px;
+    display: block;
+    margin: 0 auto var(--space-md);
   }
 
   /* Fix loading character visibility */
