@@ -595,6 +595,9 @@ body::after {
   text-align: center;
   animation: revealCard 0.5s ease-out;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 @keyframes revealCard {
@@ -763,62 +766,75 @@ body::after {
     padding: var(--space-sm);
   }
 
-  /* Fortune Card Mobile Optimization - More Aggressive */
+  /* Fortune Card Mobile - Match Canvas Proportions */
   .fortune-card {
-    padding: var(--space-md);
-    margin-top: var(--space-md);
+    /* Create square-ish card like the canvas version */
+    max-width: min(90vw, 500px);
+    margin: var(--space-lg) auto;
+    padding: clamp(1.25rem, 5vw, 2rem);
     border-width: 2px;
+    aspect-ratio: 1 / 1.1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
   }
 
   .fortune-category {
-    font-size: 0.65rem;
-    margin-bottom: var(--space-xs);
-    letter-spacing: 0.08em;
+    font-size: clamp(0.7rem, 2.5vw, 0.875rem);
+    margin-bottom: clamp(0.25rem, 1.5vw, 0.5rem);
+    letter-spacing: 0.1em;
   }
 
   .fortune-emoji {
-    font-size: 1.75rem;
-    margin-bottom: var(--space-xs);
+    font-size: clamp(2.5rem, 10vw, 3.5rem);
+    margin-bottom: clamp(0.5rem, 2vw, 0.75rem);
+    line-height: 1;
   }
 
   .fortune-text {
-    font-size: 0.9rem;
-    padding: 0;
-    margin-bottom: var(--space-sm);
-    line-height: 1.4;
+    font-size: clamp(0.95rem, 3.5vw, 1.125rem);
+    padding: 0 clamp(0.5rem, 2vw, 1rem);
+    margin-bottom: clamp(0.75rem, 3vw, 1rem);
+    line-height: 1.5;
+    flex-grow: 0;
   }
 
   .fortune-fate {
-    font-size: 0.75rem;
-    padding: var(--space-xs) var(--space-sm);
-    margin-bottom: var(--space-sm);
-    line-height: 1.3;
+    font-size: clamp(0.8rem, 3vw, 1rem);
+    padding: clamp(0.5rem, 2vw, 0.75rem);
+    margin-bottom: clamp(0.5rem, 2vw, 0.75rem);
+    line-height: 1.4;
+    flex-grow: 0;
   }
 
   .fortune-action {
-    font-size: 0.8rem;
-    padding: var(--space-xs) var(--space-sm);
-    margin-bottom: var(--space-sm);
-    line-height: 1.3;
+    font-size: clamp(0.85rem, 3vw, 1rem);
+    padding: clamp(0.5rem, 2vw, 0.75rem);
+    margin-bottom: clamp(0.5rem, 2vw, 0.75rem);
+    line-height: 1.4;
+    flex-grow: 0;
   }
 
   .fortune-share-text {
-    font-size: 0.7rem;
-    padding: 0;
-    margin-bottom: var(--space-md);
-    line-height: 1.3;
+    font-size: clamp(0.75rem, 2.5vw, 0.875rem);
+    padding: 0 clamp(0.5rem, 2vw, 1rem);
+    margin-bottom: clamp(0.75rem, 3vw, 1rem);
+    line-height: 1.4;
+    flex-grow: 0;
   }
 
   .fortune-footer {
-    gap: var(--space-xs);
+    gap: clamp(0.5rem, 2vw, 0.75rem);
     flex-direction: column;
+    margin-top: auto;
   }
 
   .action-btn {
-    font-size: 0.85rem;
-    padding: var(--space-sm) var(--space-lg);
+    font-size: clamp(0.85rem, 3vw, 1rem);
+    padding: clamp(0.625rem, 2.5vw, 0.875rem) var(--space-lg);
     width: 100%;
   }
+}
 }
 
 /* Special card styling based on theme */
