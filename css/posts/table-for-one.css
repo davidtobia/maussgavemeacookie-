@@ -1,0 +1,30 @@
+/*
+ * table-for-one.css - Custom styles for "Table for one" post
+ * Simple, readable presentation with emoji dividers
+ */
+
+/* Emoji Section Dividers */
+.emoji-divider {
+  text-align: center;
+  font-size: var(--font-size-3xl);
+  margin: var(--space-4xl) 0;
+  padding: var(--space-2xl) 0;
+  letter-spacing: 0.5em;
+  line-height: 1;
+}
+
+/* Slightly softer background for this post */
+body {
+  background-color: #fafaf9;
+}
+
+/* Enhanced readability */
+.post-content p {
+  margin-bottom: var(--space-xl);
+}
+
+.post-content h2 {
+  margin-top: var(--space-4xl);
+  margin-bottom: var(--space-xl);
+  font-size: var(--font-size-3xl);
+}

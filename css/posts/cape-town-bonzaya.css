@@ -1,0 +1,61 @@
+/*
+ * cape-town-bonzaya.css - Custom styles for Cape Town post
+ * Rich visual experience with mood transitions and scene-based styling
+ */
+
+/* Scene-specific typography adjustments */
+.scene {
+  padding: var(--space-4xl) var(--space-lg);
+}
+
+.scene h2 {
+  font-size: var(--font-size-3xl);
+  margin-bottom: var(--space-2xl);
+}
+
+/* Scene content with parallax-ready structure */
+.scene-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Enhanced paragraph spacing for narrative flow */
+.scene-content p {
+  margin-bottom: var(--space-xl);
+}
+
+/* Emphasized text for tense scenes */
+[data-mood="tense"] .scene-content p {
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+/* Final reflection styling - smaller, more intimate */
+[data-mood="dark"] .scene-content p:last-child {
+  font-size: var(--font-size-2xl);
+  font-weight: 600;
+  text-align: center;
+  margin-top: var(--space-3xl);
+  padding: var(--space-2xl);
+}
+
+/* Smooth transitions between scenes */
+.scene {
+  scroll-margin-top: var(--space-2xl);
+}
+
+/* Typography emphasis effect for tense sections */
+[data-scroll-behavior="emphasize"] {
+  transition: font-weight 0.3s ease;
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .scene {
+    padding: var(--space-3xl) var(--space-md);
+  }
+
+  [data-mood="dark"] .scene-content p:last-child {
+    font-size: var(--font-size-xl);
+  }
+}

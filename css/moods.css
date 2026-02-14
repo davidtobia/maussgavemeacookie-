@@ -1,0 +1,157 @@
+/*
+ * moods.css - Atmospheric presets and mood-based styling
+ * maussgavemeacookie - a gift to the internet
+ */
+
+/* Mood System - Data Attributes and Classes */
+
+/* Default/Neutral Mood */
+body {
+  transition: background-color 0.6s ease, color 0.6s ease;
+}
+
+/* Bright Mood - Optimistic, light, energetic */
+[data-mood="bright"],
+.mood-bright {
+  background-color: #fef9e7;
+  color: #1a1a1a;
+}
+
+[data-mood="bright"] a,
+.mood-bright a {
+  color: #f59e0b;
+}
+
+/* Dark Mood - Somber, reflective, heavy */
+[data-mood="dark"],
+.mood-dark {
+  background-color: #1a1a1a;
+  color: #e5e5e5;
+}
+
+[data-mood="dark"] a,
+.mood-dark a {
+  color: #60a5fa;
+}
+
+[data-mood="dark"] .post-header,
+[data-mood="dark"] .site-header {
+  border-bottom-color: #404040;
+}
+
+/* Tense Mood - Anxious, nervous, on edge */
+[data-mood="tense"],
+.mood-tense {
+  background-color: #fef2f2;
+  color: #1a1a1a;
+}
+
+[data-mood="tense"] a,
+.mood-tense a {
+  color: #dc2626;
+}
+
+/* Calm Mood - Peaceful, serene, restful */
+[data-mood="calm"],
+.mood-calm {
+  background-color: #f0f9ff;
+  color: #1a1a1a;
+}
+
+[data-mood="calm"] a,
+.mood-calm a {
+  color: #0284c7;
+}
+
+/* Hopeful Mood - Looking forward, possibility */
+[data-mood="hopeful"],
+.mood-hopeful {
+  background-color: #f0fdf4;
+  color: #1a1a1a;
+}
+
+[data-mood="hopeful"] a,
+.mood-hopeful a {
+  color: #059669;
+}
+
+/* Melancholic Mood - Wistful, nostalgic, bittersweet */
+[data-mood="melancholic"],
+.mood-melancholic {
+  background-color: #f5f3ff;
+  color: #1a1a1a;
+}
+
+[data-mood="melancholic"] a,
+.mood-melancholic a {
+  color: #7c3aed;
+}
+
+/* Neutral Mood - Clear, straightforward */
+[data-mood="neutral"],
+.mood-neutral {
+  background-color: #ffffff;
+  color: #1a1a1a;
+}
+
+/* Scene-specific Mood Transitions */
+.scene[data-mood] {
+  /* Padding is set in layout.css */
+}
+
+/* Mood Indicators (optional visual elements) */
+.mood-indicator {
+  position: fixed;
+  top: var(--space-md);
+  right: var(--space-md);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  transition: background-color 0.6s ease;
+  pointer-events: none;
+  z-index: 100;
+}
+
+[data-mood="bright"] .mood-indicator {
+  background-color: #f59e0b;
+}
+
+[data-mood="dark"] .mood-indicator {
+  background-color: #1a1a1a;
+}
+
+[data-mood="tense"] .mood-indicator {
+  background-color: #dc2626;
+}
+
+[data-mood="calm"] .mood-indicator {
+  background-color: #0284c7;
+}
+
+[data-mood="hopeful"] .mood-indicator {
+  background-color: #059669;
+}
+
+[data-mood="melancholic"] .mood-indicator {
+  background-color: #7c3aed;
+}
+
+/* Smooth transitions between moods */
+.scene,
+.scene * {
+  transition: background-color 0.6s ease, color 0.6s ease, border-color 0.6s ease;
+}
+
+/* Special Effects for Moods - Disabled to prevent jumping */
+/* Can be re-enabled if desired */
+
+/* Responsive Mood Adjustments */
+@media (max-width: 768px) {
+  .scene {
+    padding: var(--space-2xl) var(--space-md);
+  }
+
+  .scene-content {
+    padding: 0 var(--space-md);
+  }
+}
