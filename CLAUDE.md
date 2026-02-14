@@ -174,12 +174,81 @@ git push
 - **Anti-modern** - no frameworks, hand-crafted approach
 - **Gift economy** - each post is a gift, not optimized for engagement
 
+## Recent Changes (2026-02-14)
+
+### Deployment Completed ✅
+- Deployed to GitHub Pages
+- Custom domain configured: maussgavemeacookie.com
+- DNS via Cloudflare (Free plan)
+- HTTPS enabled (may take up to 1 hour after initial setup)
+- GoatCounter analytics installed on all pages
+
+### DNS Configuration (Cloudflare)
+**A Records (all pointing to GitHub Pages):**
+- `@` → `185.199.108.153` (Proxied)
+- `@` → `185.199.109.153` (Proxied)
+- `@` → `185.199.110.153` (Proxied)
+- `@` → `185.199.111.153` (Proxied)
+
+**CNAME Record:**
+- `www` → `davidtobia.github.io` (Proxied)
+
+### Content Updates
+- Site subtitle changed to "trying to create a Fun website"
+- Removed "Personal Essay" and "Narrative Journalism" labels
+- Removed "In progress" placeholder text from post descriptions
+- Posts now show only "Originally published [year]"
+- Header centered with mascot positioned next to title
+
+### Git Workflow Established
+```bash
+# Make changes with Claude Code
+git add .
+git commit -m "Description"
+git push
+# Site updates automatically in ~30 seconds
+```
+
+### Analytics Setup
+- **GoatCounter:** https://maussgavemeacookie.goatcounter.com
+- Privacy-friendly, no cookies, GDPR compliant
+- Tracking code added to all HTML pages
+
 ## Next Session Tasks
 
-1. Deploy to GitHub Pages
-2. Get live URL
-3. Set up custom domain (if ready)
-4. Add analytics and comments (optional)
+### Quick Wins:
+- [ ] Add tip button (Ko-fi - 5 minutes)
+- [ ] Add Giscus comments to Daily Thoughts section
+- [ ] Write descriptions for post cards (currently blank)
+- [ ] Add footer content (currently "In progress")
+
+### Bigger Projects:
+- [ ] Build murder mystery game (multi-session project)
+- [ ] Add posts to News Analysis & Predictions
+- [ ] Start Daily Thoughts blog section
+- [ ] Optimize images (currently 25MB total, could compress)
+
+### Technical Notes for Next Session:
+- Images are large (mascot: 6.5MB) - could optimize with `sips` or online tools
+- HTTPS checkbox in GitHub Pages might still be grayed out if <1 hour since domain setup
+- First GoatCounter stats might take a few minutes to appear
+
+## Troubleshooting
+
+### If custom domain shows 404:
+1. Check DNS records in Cloudflare match above
+2. Verify custom domain in GitHub Pages settings
+3. Wait 5-10 minutes for DNS propagation
+
+### If images don't load:
+1. Check HTTPS is enabled in GitHub Pages settings
+2. Clear browser cache
+3. Wait for SSL certificate provisioning (up to 1 hour)
+
+### If analytics don't show:
+1. Visit site to generate a test pageview
+2. Check GoatCounter dashboard (might take 2-3 minutes)
+3. Verify script is in HTML with browser dev tools
 
 ## Contact & Collaboration
 
@@ -187,4 +256,4 @@ This is a personal project designed to be managed through Claude Code. The struc
 
 ---
 
-Last updated: 2026-02-14
+Last updated: 2026-02-14 (afternoon session - deployment complete!)
