@@ -34,15 +34,18 @@ main.container {
 }
 
 .header-content {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-lg);
+  gap: var(--space-md);
   margin-bottom: var(--space-md);
 }
 
+.site-title {
+  margin-bottom: 0;
+}
+
 .site-mascot {
-  width: 100px;
+  width: 80px;
   height: auto;
   flex-shrink: 0;
 }
