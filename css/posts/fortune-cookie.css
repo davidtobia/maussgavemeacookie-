@@ -726,6 +726,56 @@ body::after {
   .choice-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  /* Fortune Card Mobile Optimization */
+  .fortune-card {
+    padding: var(--space-xl) var(--space-md);
+    margin-top: var(--space-lg);
+  }
+
+  .fortune-category {
+    font-size: var(--font-size-xs);
+    margin-bottom: var(--space-sm);
+  }
+
+  .fortune-emoji {
+    font-size: 2rem;
+    margin-bottom: var(--space-sm);
+  }
+
+  .fortune-text {
+    font-size: var(--font-size-base);
+    padding: 0 var(--space-xs);
+    margin-bottom: var(--space-md);
+  }
+
+  .fortune-fate {
+    font-size: var(--font-size-sm);
+    padding: var(--space-sm);
+    margin-bottom: var(--space-md);
+  }
+
+  .fortune-action {
+    font-size: var(--font-size-sm);
+    padding: var(--space-sm);
+    margin-bottom: var(--space-md);
+  }
+
+  .fortune-share-text {
+    font-size: var(--font-size-xs);
+    padding: 0 var(--space-xs);
+    margin-bottom: var(--space-lg);
+  }
+
+  .fortune-footer {
+    gap: var(--space-sm);
+  }
+
+  .action-btn {
+    font-size: var(--font-size-sm);
+    padding: var(--space-sm) var(--space-md);
+    white-space: nowrap;
+  }
 }
 
 /* Special card styling based on theme */
