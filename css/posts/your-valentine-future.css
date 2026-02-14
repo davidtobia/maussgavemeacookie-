@@ -782,7 +782,7 @@ body::after {
     margin: var(--space-lg) auto;
     padding: clamp(1.25rem, 5vw, 2rem);
     border-width: 2px;
-    aspect-ratio: 1 / 1.1;
+    min-height: min(90vw, 500px);
     display: flex;
     flex-direction: column;
     justify-content: space-between;
