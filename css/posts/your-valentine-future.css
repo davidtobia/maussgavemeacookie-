@@ -158,7 +158,7 @@ body::after {
   padding: var(--space-2xl);
   position: relative;
   z-index: 1;
-  background-image: url('/posts/your-valentine-future/images/tent-background.png');
+  background-image: url('https://maussgavemeacookie.com/posts/your-valentine-future/images/tent-background.png');
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
@@ -706,7 +706,7 @@ body::after {
   .game-container {
     padding: var(--space-md);
     min-height: auto;
-    background-image: url('/posts/your-valentine-future/images/tent-background.png') !important;
+    background-image: url('https://maussgavemeacookie.com/posts/your-valentine-future/images/tent-background.png') !important;
     background-size: cover !important;
     background-position: center !important;
   }
