@@ -6,7 +6,10 @@ Personal website called "Mauss Gave Me a Cookie" - a handcrafted, anti-modern ap
 
 **Philosophy:** Each post is a gift to the internet. No frameworks, no dark patterns, no optimization for engagement. Handcrafted HTML/CSS/JS only.
 
-**Live Status:** Not yet deployed (ready to deploy)
+**Live Status:** ✅ DEPLOYED!
+- Live URL: https://davidtobia.github.io/maussgavemeacookie-/
+- GitHub: https://github.com/davidtobia/maussgavemeacookie-
+- Deployed: February 14, 2026
 
 ## Site Structure
 
@@ -113,19 +116,20 @@ Homepage is organized into 4 sections:
 
 **Implementation:** Can be built entirely with vanilla JS, works perfectly on static hosting.
 
-## Deployment Checklist (Not Yet Done)
+## Deployment Checklist
 
-- [ ] Initialize git repository
-- [ ] Create GitHub repository
-- [ ] Push code to GitHub
-- [ ] Enable GitHub Pages in repo settings
-- [ ] Add `.nojekyll` file (disable Jekyll processing)
-- [ ] Test live site
+- [x] Initialize git repository
+- [x] Create GitHub repository
+- [x] Push code to GitHub
+- [x] Enable GitHub Pages in repo settings
+- [x] Add `.nojekyll` file (disable Jekyll processing)
+- [x] Test live site - IT'S LIVE!
 - [ ] Purchase custom domain (maussgavemeacookie.com)
 - [ ] Configure custom domain on GitHub Pages
 - [ ] Set up GoatCounter analytics
 - [ ] Add Giscus comments to Daily Thoughts section
-- [ ] Update README with live URL
+- [ ] Add tip button (Ko-fi or Stripe)
+- [x] Update README with live URL
 
 ## What Won't Work on GitHub Pages
 

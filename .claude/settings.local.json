@@ -4,7 +4,13 @@
       "Bash(curl:*)",
       "Bash(sips:*)",
       "Bash(done)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(du:*)"
     ]
   }
 }

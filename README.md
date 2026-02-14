@@ -1,6 +1,8 @@
-# maussgavemeacookie
+# Mauss Gave Me a Cookie
 
 A gift to the internet. A personal website embodying the philosophy of the early, free internet - a gift economy approach inspired by Marcel Mauss and David Graeber.
+
+**🌐 Live Site:** https://davidtobia.github.io/maussgavemeacookie-/
 
 ## Philosophy
 
