@@ -699,82 +699,125 @@ body::after {
 /* Responsive */
 @media (max-width: 768px) {
   .game-container {
+    padding: var(--space-md);
+    min-height: auto;
+  }
+
+  .game-header {
     padding: var(--space-lg);
   }
 
+  .game-title {
+    font-size: var(--font-size-xl);
+  }
+
+  .game-subtitle {
+    font-size: var(--font-size-sm);
+  }
+
   .game-mascot-img {
-    width: 180px;
+    width: 120px;
+  }
+
+  /* Fix loading character visibility */
+  .loading-character {
+    padding: var(--space-lg);
   }
 
   .loading-character img {
-    width: 150px;
+    width: 120px;
+    z-index: 100 !important;
+    position: relative;
   }
 
   #conversation {
-    min-height: 300px;
-    max-height: 400px;
+    min-height: 250px;
+    max-height: 350px;
+    padding: var(--space-md);
   }
 
+  /* Make conversation text readable */
   .bubble {
-    max-width: 85%;
+    max-width: 90%;
+    font-size: var(--font-size-sm);
+    padding: var(--space-sm) var(--space-md);
+    line-height: 1.4;
   }
 
-  .fortune-text {
-    font-size: var(--font-size-lg);
+  .mascot-message .bubble {
+    font-size: 0.9rem;
   }
 
   .choice-grid {
     grid-template-columns: repeat(2, 1fr);
-  }
-
-  /* Fortune Card Mobile Optimization */
-  .fortune-card {
-    padding: var(--space-xl) var(--space-md);
-    margin-top: var(--space-lg);
-  }
-
-  .fortune-category {
-    font-size: var(--font-size-xs);
-    margin-bottom: var(--space-sm);
-  }
-
-  .fortune-emoji {
-    font-size: 2rem;
-    margin-bottom: var(--space-sm);
-  }
-
-  .fortune-text {
-    font-size: var(--font-size-base);
-    padding: 0 var(--space-xs);
-    margin-bottom: var(--space-md);
-  }
-
-  .fortune-fate {
-    font-size: var(--font-size-sm);
-    padding: var(--space-sm);
-    margin-bottom: var(--space-md);
-  }
-
-  .fortune-action {
-    font-size: var(--font-size-sm);
-    padding: var(--space-sm);
-    margin-bottom: var(--space-md);
-  }
-
-  .fortune-share-text {
-    font-size: var(--font-size-xs);
-    padding: 0 var(--space-xs);
-    margin-bottom: var(--space-lg);
-  }
-
-  .fortune-footer {
     gap: var(--space-sm);
   }
 
-  .action-btn {
+  .choice-btn {
     font-size: var(--font-size-sm);
     padding: var(--space-sm) var(--space-md);
-    white-space: nowrap;
+  }
+
+  #trust-input {
+    font-size: var(--font-size-base);
+    padding: var(--space-sm);
+  }
+
+  /* Fortune Card Mobile Optimization - More Aggressive */
+  .fortune-card {
+    padding: var(--space-md);
+    margin-top: var(--space-md);
+    border-width: 2px;
+  }
+
+  .fortune-category {
+    font-size: 0.65rem;
+    margin-bottom: var(--space-xs);
+    letter-spacing: 0.08em;
+  }
+
+  .fortune-emoji {
+    font-size: 1.75rem;
+    margin-bottom: var(--space-xs);
+  }
+
+  .fortune-text {
+    font-size: 0.9rem;
+    padding: 0;
+    margin-bottom: var(--space-sm);
+    line-height: 1.4;
+  }
+
+  .fortune-fate {
+    font-size: 0.75rem;
+    padding: var(--space-xs) var(--space-sm);
+    margin-bottom: var(--space-sm);
+    line-height: 1.3;
+  }
+
+  .fortune-action {
+    font-size: 0.8rem;
+    padding: var(--space-xs) var(--space-sm);
+    margin-bottom: var(--space-sm);
+    line-height: 1.3;
+  }
+
+  .fortune-share-text {
+    font-size: 0.7rem;
+    padding: 0;
+    margin-bottom: var(--space-md);
+    line-height: 1.3;
+  }
+
+  .fortune-footer {
+    gap: var(--space-xs);
+    flex-direction: column;
+  }
+
+  .action-btn {
+    font-size: 0.85rem;
+    padding: var(--space-sm) var(--space-lg);
+    width: 100%;
   }
 }
 
