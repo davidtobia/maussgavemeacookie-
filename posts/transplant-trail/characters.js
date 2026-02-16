@@ -5,9 +5,9 @@
 
 const CHARACTERS = [
   {
-    id: 'ohio-girl',
-    name: 'Ohio Girl',
-    origin: 'Columbus, Ohio (Sorority)',
+    id: 'nursing-student',
+    name: 'Nursing Student',
+    origin: 'Akron, Ohio',
     money: 800,
     vibes: 1, // Very Low (1-5 scale)
     audacity: 3, // Medium
@@ -31,9 +31,9 @@ const CHARACTERS = [
     }
   },
   {
-    id: 'jersey-person',
-    name: 'Jersey Person',
-    origin: 'New Jersey',
+    id: 'bartender',
+    name: 'Bartender',
+    origin: 'Hoboken, New Jersey',
     money: 850,
     vibes: 3, // Medium
     audacity: 5, // Very High
@@ -53,9 +53,9 @@ const CHARACTERS = [
     }
   },
   {
-    id: 'long-island',
-    name: 'Long Island Person',
-    origin: 'Long Island',
+    id: 'hockey-coach',
+    name: 'Youth Hockey Coach',
+    origin: 'Massapequa, Long Island',
     money: 900,
     vibes: 2, // Low-Medium
     audacity: 5, // Very High
@@ -77,9 +77,9 @@ const CHARACTERS = [
     }
   },
   {
-    id: 'california-person',
-    name: 'California Person',
-    origin: 'California',
+    id: 'remote-worker',
+    name: 'Remote Worker',
+    origin: 'Austin, Texas',
     money: 1400,
     vibes: 3, // Medium (thinks it's Very High)
     audacity: 2, // Low
@@ -103,8 +103,8 @@ const CHARACTERS = [
   },
   {
     id: 'delivery-driver',
-    name: 'West African Delivery Driver',
-    origin: 'West Africa (e-bike)',
+    name: 'Delivery Driver',
+    origin: 'Jackson Heights, Queens',
     money: 200,
     vibes: 5, // Very High
     audacity: 5, // Very High
@@ -129,9 +129,9 @@ const CHARACTERS = [
     storeMessage: 'You already have everything you need. And also you live here.'
   },
   {
-    id: 'uk-banker',
-    name: 'UK Banker',
-    origin: 'London',
+    id: 'investment-banker',
+    name: 'Investment Banker',
+    origin: 'Canary Wharf, London',
     money: 1400,
     vibes: 2, // Low
     audacity: 3, // Medium
@@ -154,9 +154,9 @@ const CHARACTERS = [
     }
   },
   {
-    id: 'european-model',
-    name: 'European Model',
-    origin: 'Europe',
+    id: 'ceramicist',
+    name: 'Ceramicist',
+    origin: 'Copenhagen, Denmark',
     money: 500,
     vibes: 5, // Very High
     audacity: 3, // Medium
@@ -176,9 +176,9 @@ const CHARACTERS = [
     }
   },
   {
-    id: 'aristocrat',
-    name: 'Russian/Chinese Aristocrat',
-    origin: 'Moscow or Shanghai',
+    id: 'heiress',
+    name: 'Heiress',
+    origin: 'Shanghai',
     money: 5000,
     vibes: 1, // Very Low
     audacity: 5, // Very High
