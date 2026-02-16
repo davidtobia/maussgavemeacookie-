@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Transplant Trail</title>
+  <meta name="description" content="The Oregon Trail, but make it about moving to NYC.">
+
+  <!-- Google Fonts - Pixel/Retro Font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+
+  <!-- Core Styles -->
+  <link rel="stylesheet" href="../../css/base.css">
+  <link rel="stylesheet" href="../../css/posts/transplant-trail.css">
+</head>
+<body>
+  <div class="game-container">
+    <!-- Load Screen -->
+    <div id="load-screen" class="screen active">
+      <img src="images/loadscreen.png" alt="The Transplant Trail" class="load-image">
+      <div class="load-prompt">Press ENTER or tap to continue</div>
+    </div>
+
+    <!-- Main Menu -->
+    <div id="main-menu" class="screen">
+      <div class="border-decoration top"></div>
+
+      <h1 class="game-title">The Transplant Trail</h1>
+
+      <div class="menu-content">
+        <p class="menu-intro">You may:</p>
+
+        <div class="menu-options">
+          <button class="menu-option" data-action="start">1. Travel the trail</button>
+          <button class="menu-option" data-action="learn">2. Learn about the trail</button>
+          <button class="menu-option" data-action="leaderboard">3. See the leaderboard</button>
+          <button class="menu-option" data-action="sound">4. Turn sound off</button>
+        </div>
+
+        <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
+      </div>
+
+      <div class="border-decoration bottom"></div>
+    </div>
+
+    <!-- Character Select -->
+    <div id="character-select" class="screen">
+      <div class="border-decoration top"></div>
+
+      <h2 class="screen-title">Many kinds of people made the<br>trip to New York.</h2>
+
+      <div class="menu-content">
+        <p class="menu-intro">You may:</p>
+
+        <div class="character-options">
+          <!-- Characters will be added by JavaScript -->
+        </div>
+
+        <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
+      </div>
+
+      <div class="border-decoration bottom"></div>
+    </div>
+
+    <!-- Character Info Screen -->
+    <div id="character-info" class="screen">
+      <div class="border-decoration top"></div>
+
+      <div class="info-content">
+        <!-- Character details will be inserted here -->
+      </div>
+
+      <div class="menu-content">
+        <p class="menu-prompt">Press ENTER to continue <span class="cursor">_</span></p>
+      </div>
+
+      <div class="border-decoration bottom"></div>
+    </div>
+
+    <!-- Supplies Store -->
+    <div id="supplies-store" class="screen">
+      <div class="border-decoration top"></div>
+
+      <div class="store-content">
+        <!-- Store interface will be built here -->
+      </div>
+
+      <div class="border-decoration bottom"></div>
+    </div>
+  </div>
+
+  <!-- Game Logic -->
+  <script src="characters.js"></script>
+  <script src="game.js"></script>
+
+  <!-- GoatCounter Analytics -->
+  <script data-goatcounter="https://maussgavemeacookie.goatcounter.com/count"
+          async src="//gc.zgo.at/count.js"></script>
+</body>
+</html>

@@ -1,0 +1,341 @@
+/**
+ * THE TRANSPLANT TRAIL - STYLES
+ * Oregon Trail aesthetic: black background, tan pixel font, decorative borders
+ */
+
+/* Reset and Base */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #000;
+  color: #d4a574;
+  font-family: 'VT323', monospace;
+  font-size: 24px;
+  line-height: 1.4;
+  overflow-x: hidden;
+  -webkit-font-smoothing: none;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Game Container */
+.game-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* Screen Management */
+.screen {
+  display: none;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.screen.active {
+  display: block;
+}
+
+/* Load Screen */
+#load-screen {
+  text-align: center;
+  animation: fadeIn 0.5s ease-in;
+}
+
+.load-image {
+  width: 100%;
+  max-width: 600px;
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.load-prompt {
+  margin-top: 40px;
+  font-size: 20px;
+  animation: blink 1.5s infinite;
+}
+
+@keyframes blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Decorative Borders */
+.border-decoration {
+  height: 20px;
+  background: repeating-linear-gradient(
+    90deg,
+    #d4a574 0px,
+    #d4a574 10px,
+    transparent 10px,
+    transparent 20px
+  );
+  margin: 20px 0;
+  position: relative;
+}
+
+.border-decoration::before,
+.border-decoration::after {
+  content: '◆';
+  position: absolute;
+  top: -8px;
+  font-size: 32px;
+  color: #d4a574;
+}
+
+.border-decoration.top::before {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.border-decoration.bottom::after {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+/* Game Title */
+.game-title {
+  font-size: 48px;
+  text-align: center;
+  margin: 40px 0;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.screen-title {
+  font-size: 32px;
+  text-align: center;
+  margin: 40px 0;
+  line-height: 1.6;
+}
+
+/* Menu Content */
+.menu-content {
+  padding: 40px 20px;
+}
+
+.menu-intro {
+  font-size: 28px;
+  margin-bottom: 30px;
+}
+
+.menu-options {
+  margin: 30px 0;
+}
+
+.menu-option,
+.character-option {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: #d4a574;
+  font-family: 'VT323', monospace;
+  font-size: 24px;
+  text-align: left;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  margin: 5px 0;
+}
+
+.menu-option:hover,
+.character-option:hover {
+  background: #d4a574;
+  color: #000;
+  padding-left: 40px;
+}
+
+.menu-option:active,
+.character-option:active {
+  transform: scale(0.98);
+}
+
+.menu-prompt {
+  font-size: 28px;
+  margin-top: 40px;
+}
+
+.cursor {
+  animation: blink 1s infinite;
+  font-weight: bold;
+}
+
+/* Character Info */
+.info-content {
+  padding: 20px;
+  line-height: 1.8;
+}
+
+.character-name {
+  font-size: 36px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+.character-stats {
+  margin: 30px 0;
+}
+
+.stat-line {
+  font-size: 24px;
+  margin: 10px 0;
+  padding-left: 40px;
+}
+
+.character-description {
+  font-size: 22px;
+  margin: 20px 0;
+  line-height: 1.6;
+}
+
+.special-ability {
+  margin-top: 30px;
+  padding: 20px;
+  border: 2px solid #d4a574;
+}
+
+.ability-title {
+  font-size: 28px;
+  margin-bottom: 10px;
+}
+
+/* Store */
+.store-content {
+  padding: 20px;
+}
+
+.store-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.store-location {
+  font-size: 32px;
+  margin-bottom: 10px;
+}
+
+.store-date {
+  font-size: 24px;
+  margin-bottom: 20px;
+}
+
+.money-display {
+  font-size: 28px;
+  margin-top: 20px;
+}
+
+.store-items {
+  margin: 30px 0;
+}
+
+.store-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  margin: 10px 0;
+  border: 1px solid #d4a574;
+}
+
+.item-name {
+  font-size: 24px;
+}
+
+.item-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.item-quantity {
+  font-size: 24px;
+  min-width: 60px;
+  text-align: center;
+}
+
+.quantity-btn {
+  background: none;
+  border: 2px solid #d4a574;
+  color: #d4a574;
+  font-family: 'VT323', monospace;
+  font-size: 28px;
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.quantity-btn:hover {
+  background: #d4a574;
+  color: #000;
+}
+
+.quantity-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  body {
+    font-size: 20px;
+  }
+
+  .game-title {
+    font-size: 36px;
+  }
+
+  .screen-title {
+    font-size: 24px;
+  }
+
+  .menu-intro,
+  .menu-prompt {
+    font-size: 22px;
+  }
+
+  .menu-option,
+  .character-option {
+    font-size: 20px;
+  }
+
+  .menu-option:hover,
+  .character-option:hover {
+    padding-left: 30px;
+  }
+
+  .load-image {
+    max-width: 100%;
+  }
+
+  .border-decoration {
+    height: 15px;
+  }
+
+  .border-decoration::before,
+  .border-decoration::after {
+    font-size: 24px;
+  }
+}
+
+/* Keyboard hint for desktop */
+@media (min-width: 769px) {
+  .load-prompt::after {
+    content: ' (or click)';
+    font-size: 16px;
+    opacity: 0.7;
+  }
+}
