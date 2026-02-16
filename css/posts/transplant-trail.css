@@ -212,6 +212,48 @@ body {
   margin-bottom: 10px;
 }
 
+/* Squad Naming */
+.squad-inputs {
+  margin: 40px 0;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.input-row {
+  display: flex;
+  align-items: center;
+  margin: 20px 0;
+  gap: 20px;
+}
+
+.input-row label {
+  font-size: 28px;
+  min-width: 30px;
+}
+
+.input-row input {
+  flex: 1;
+  background: #000;
+  border: 2px solid #d4a574;
+  color: #d4a574;
+  font-family: 'VT323', monospace;
+  font-size: 24px;
+  padding: 10px 15px;
+  outline: none;
+  text-transform: uppercase;
+}
+
+.input-row input::placeholder {
+  color: rgba(212, 165, 116, 0.4);
+  text-transform: none;
+}
+
+.input-row input:focus {
+  background: rgba(212, 165, 116, 0.1);
+  border-color: #d4a574;
+}
+
 /* Store */
 .store-content {
   padding: 20px;

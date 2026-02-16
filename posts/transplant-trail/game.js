@@ -205,21 +205,37 @@ class TransplantTrail {
   // ============================================
 
   goToStore() {
-    const character = this.state.selectedCharacter;
+    // Skip store for now, go straight to squad naming
+    this.showSquadNaming();
+  }
 
-    // Check if character skips store (Delivery Driver)
-    if (character.skipStore) {
-      alert(character.storeMessage);
-      this.startTrail();
-      return;
+  // ============================================
+  // SQUAD NAMING
+  // ============================================
+
+  showSquadNaming() {
+    this.showScreen('squad-naming');
+    // Focus first input
+    setTimeout(() => {
+      document.getElementById('squad-1').focus();
+    }, 100);
+  }
+
+  confirmSquad() {
+    // Get squad member names
+    const squad = [];
+    for (let i = 1; i <= 4; i++) {
+      const input = document.getElementById(`squad-${i}`);
+      const name = input.value.trim() || `Friend ${i}`;
+      squad.push(name);
     }
 
-    // Show special message for Aristocrat
-    if (character.specialStoreMessage) {
-      // TODO: Display this in the store UI
-    }
+    this.state.squad = squad;
+    console.log('Squad:', squad);
 
-    this.showSuppliesStore();
+    // TODO: Go to transportation/spending selection
+    // For now, show alert
+    alert(`Your squad: ${squad.join(', ')}\n\nTransportation and trail screens coming next!`);
   }
 
   showSuppliesStore() {
