@@ -166,7 +166,19 @@
       <div class="border-decoration top"></div>
 
       <div class="store-content">
-        <!-- Store interface will be built here -->
+        <div class="store-header">
+          <h2 class="screen-title">Before you leave</h2>
+          <p class="store-intro">You have <span id="store-money">$0</span> to spend on supplies.</p>
+        </div>
+
+        <div class="store-items">
+          <!-- Items will be populated by JavaScript -->
+        </div>
+
+        <div class="store-footer">
+          <p class="store-total">Spent: <span id="spent-amount">$0</span> / Remaining: <span id="remaining-amount">$0</span></p>
+          <button class="menu-option" onclick="game.leaveStore()">Done - Hit the trail</button>
+        </div>
       </div>
 
       <div class="border-decoration bottom"></div>
@@ -175,6 +187,7 @@
 
   <!-- Game Logic -->
   <script src="characters.js"></script>
+  <script src="store.js"></script>
   <script src="game.js"></script>
 
   <!-- GoatCounter Analytics -->

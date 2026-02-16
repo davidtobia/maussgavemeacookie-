@@ -12,7 +12,8 @@ class TransplantTrail {
       departureMonth: null,
       money: 0,
       squad: [],
-      aura: 100
+      aura: 100,
+      inventory: {}
     };
 
     this.init();
@@ -281,9 +282,111 @@ class TransplantTrail {
     this.state.squad = squad;
     console.log('Squad:', squad);
 
-    // TODO: Go to transportation/spending selection
-    // For now, show alert
-    alert(`Your squad: ${squad.join(', ')}\n\nTransportation and trail screens coming next!`);
+    // Go to store
+    this.showStore();
+  }
+
+  // ============================================
+  // STORE
+  // ============================================
+
+  showStore() {
+    this.showScreen('supplies-store');
+    this.populateStore();
+  }
+
+  populateStore() {
+    const container = document.querySelector('.store-items');
+    const character = this.state.selectedCharacter;
+
+    // Update money display
+    document.getElementById('store-money').textContent = `$${character.money}`;
+    this.updateStoreTotal();
+
+    // Initialize inventory for each item
+    STORE_ITEMS.forEach(item => {
+      if (!this.state.inventory[item.id]) {
+        this.state.inventory[item.id] = 0;
+      }
+    });
+
+    // Build item list
+    container.innerHTML = '';
+    STORE_ITEMS.forEach(item => {
+      const itemDiv = document.createElement('div');
+      itemDiv.className = 'store-item';
+      itemDiv.innerHTML = `
+        <div class="item-info">
+          <div class="item-name">${item.name}</div>
+          <div class="item-description">${item.description}</div>
+        </div>
+        <div class="item-price">$${item.price}</div>
+        <div class="item-controls">
+          <button class="quantity-btn" onclick="game.changeQuantity('${item.id}', -1)">−</button>
+          <div class="item-quantity" id="qty-${item.id}">0</div>
+          <button class="quantity-btn" onclick="game.changeQuantity('${item.id}', 1)">+</button>
+        </div>
+      `;
+      container.appendChild(itemDiv);
+    });
+  }
+
+  changeQuantity(itemId, delta) {
+    const item = getStoreItem(itemId);
+    const currentQty = this.state.inventory[itemId] || 0;
+    const newQty = Math.max(0, currentQty + delta);
+
+    // Check max quantity
+    if (item.maxQuantity && newQty > item.maxQuantity) {
+      return;
+    }
+
+    // Check if we can afford it
+    const currentSpent = this.calculateSpent();
+    const newSpent = currentSpent + (delta * item.price);
+    const character = this.state.selectedCharacter;
+
+    if (newSpent > character.money) {
+      return; // Can't afford
+    }
+
+    // Update inventory
+    this.state.inventory[itemId] = newQty;
+
+    // Update display
+    document.getElementById(`qty-${itemId}`).textContent = newQty;
+    this.updateStoreTotal();
+  }
+
+  calculateSpent() {
+    let total = 0;
+    for (const itemId in this.state.inventory) {
+      const item = getStoreItem(itemId);
+      const qty = this.state.inventory[itemId];
+      total += item.price * qty;
+    }
+    return total;
+  }
+
+  updateStoreTotal() {
+    const character = this.state.selectedCharacter;
+    const spent = this.calculateSpent();
+    const remaining = character.money - spent;
+
+    document.getElementById('spent-amount').textContent = `$${spent}`;
+    document.getElementById('remaining-amount').textContent = `$${remaining}`;
+  }
+
+  leaveStore() {
+    const spent = this.calculateSpent();
+    const character = this.state.selectedCharacter;
+    this.state.money = character.money - spent;
+
+    console.log('Inventory:', this.state.inventory);
+    console.log('Money remaining:', this.state.money);
+
+    // TODO: Start the trail
+    alert('Store complete! Trail screens coming next.');
   }
 
   showSuppliesStore() {
