@@ -83,6 +83,50 @@
       <div class="border-decoration bottom"></div>
     </div>
 
+    <!-- Departure Month -->
+    <div id="departure-month" class="screen">
+      <div class="border-decoration top"></div>
+
+      <div class="menu-content">
+        <h2 class="screen-title">It is 2026. You may begin<br>your trip to New York, and your<br>attempt to get to the Brooklyn Mirage<br>in time for the shows.</h2>
+
+        <p class="menu-intro" style="margin-top: 40px;">You may:</p>
+
+        <div class="menu-options">
+          <button class="menu-option" data-month="february">1. Leave in February</button>
+          <button class="menu-option" data-month="march">2. Leave in March</button>
+          <button class="menu-option" data-month="april">3. Leave in April</button>
+          <button class="menu-option" data-month="may">4. Leave in May</button>
+          <button class="menu-option" data-month="june">5. Leave in June</button>
+          <button class="menu-option" data-month="advice">6. Ask a local</button>
+        </div>
+
+        <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
+      </div>
+
+      <div class="border-decoration bottom"></div>
+    </div>
+
+    <!-- Local Advice Screen -->
+    <div id="local-advice" class="screen">
+      <div class="border-decoration top"></div>
+
+      <div class="menu-content">
+        <div class="advice-text">
+          <p style="margin-bottom: 30px;">A native New Yorker tells you:</p>
+          <p style="font-style: italic; margin-bottom: 20px;">"The Brooklyn Mirage is only open June through October. Leave too early and you'll be stuck making small talk at indoor venues all winter. Leave too late and you'll miss the shows entirely."</p>
+          <p style="font-style: italic; margin-bottom: 30px;">"May is your best bet. You'll arrive just as summer starts, your squad will be excited, and you'll catch opening weekend."</p>
+          <p style="margin-top: 30px;">(But honestly, do what you want.)</p>
+        </div>
+
+        <button class="menu-option" style="margin-top: 40px;" onclick="game.backToMonthSelect()">
+          Go back and choose
+        </button>
+      </div>
+
+      <div class="border-decoration bottom"></div>
+    </div>
+
     <!-- Squad Naming -->
     <div id="squad-naming" class="screen">
       <div class="border-decoration top"></div>

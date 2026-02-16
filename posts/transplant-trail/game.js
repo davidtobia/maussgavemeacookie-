@@ -9,9 +9,10 @@ class TransplantTrail {
       currentScreen: 'load-screen',
       selectedCharacter: null,
       gameStarted: false,
-      inventory: {},
+      departureMonth: null,
       money: 0,
-      squad: []
+      squad: [],
+      aura: 100
     };
 
     this.init();
@@ -205,7 +206,54 @@ class TransplantTrail {
   // ============================================
 
   goToStore() {
-    // Skip store for now, go straight to squad naming
+    // After character info, go to departure month selection
+    this.showDepartureMonth();
+  }
+
+  // ============================================
+  // DEPARTURE MONTH
+  // ============================================
+
+  showDepartureMonth() {
+    this.showScreen('departure-month');
+
+    // Set up month selection buttons
+    const monthButtons = document.querySelectorAll('#departure-month .menu-option');
+    monthButtons.forEach(button => {
+      button.addEventListener('click', () => {
+        const month = button.dataset.month;
+        if (month === 'advice') {
+          this.showLocalAdvice();
+        } else {
+          this.selectDepartureMonth(month);
+        }
+      });
+    });
+  }
+
+  showLocalAdvice() {
+    this.showScreen('local-advice');
+  }
+
+  backToMonthSelect() {
+    this.showDepartureMonth();
+  }
+
+  selectDepartureMonth(month) {
+    this.state.departureMonth = month;
+    console.log('Departure month:', month);
+
+    // Show confirmation message based on choice
+    const messages = {
+      'february': "February? Bold. Hope you like making friends in the cold.",
+      'march': "March. Still chilly, but you'll have time to settle in.",
+      'april': "April. Good choice. You'll arrive as things warm up.",
+      'may': "May. Optimal timing. You'll catch summer just right.",
+      'june': "June. Cutting it close, but you might make it."
+    };
+
+    // TODO: Show this in a prettier way
+    // For now, just continue to squad naming
     this.showSquadNaming();
   }
 
