@@ -202,18 +202,11 @@ class TransplantTrail {
     `;
 
     this.showScreen('character-info');
+  }
 
-    // Continue to store after viewing character info
-    const continueHandler = (e) => {
-      if (e.key === 'Enter' || e.type === 'click') {
-        document.removeEventListener('keydown', continueHandler);
-        document.querySelector('#character-info').removeEventListener('click', continueHandler);
-        this.goToStore();
-      }
-    };
-
-    document.addEventListener('keydown', continueHandler);
-    document.querySelector('#character-info').addEventListener('click', continueHandler);
+  backToCharacterSelect() {
+    this.state.selectedCharacter = null;
+    this.showCharacterSelect();
   }
 
   showCharacterComparison() {

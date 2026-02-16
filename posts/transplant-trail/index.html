@@ -73,7 +73,11 @@
       </div>
 
       <div class="menu-content">
-        <p class="menu-prompt">Press ENTER to continue <span class="cursor">_</span></p>
+        <div class="character-actions">
+          <button class="menu-option" onclick="game.goToStore()">1. Continue with this character</button>
+          <button class="menu-option" onclick="game.backToCharacterSelect()">2. Go back and choose someone else</button>
+        </div>
+        <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
       </div>
 
       <div class="border-decoration bottom"></div>
