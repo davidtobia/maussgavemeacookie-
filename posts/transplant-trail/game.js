@@ -179,26 +179,12 @@ class TransplantTrail {
 
     infoContent.innerHTML = `
       <h2 class="character-name">${character.name}</h2>
-      <p class="character-description">${character.description}</p>
+      <p class="character-description" style="font-size: 22px; margin: 30px 0; line-height: 1.6;">${character.description}</p>
 
-      <div class="character-stats">
+      <div class="character-stats" style="margin: 40px 0;">
         <div class="stat-line">Starting Money: $${character.money}</div>
-        <div class="stat-line">Vibes: ${'★'.repeat(character.vibes)}${'☆'.repeat(5 - character.vibes)}</div>
-        <div class="stat-line">Audacity: ${'★'.repeat(character.audacity)}${'☆'.repeat(5 - character.audacity)}</div>
-        <div class="stat-line">Difficulty Multiplier: ${character.difficulty}x</div>
+        <div class="stat-line">Difficulty Multiplier: ${character.difficulty}x points</div>
       </div>
-
-      <div class="special-ability">
-        <div class="ability-title">Special Ability: ${character.specialAbility.name}</div>
-        <p>${character.specialAbility.description}</p>
-      </div>
-
-      ${character.restrictions && character.restrictions.length > 0 ? `
-        <div class="character-restrictions">
-          <p style="margin-top: 20px;">Restrictions:</p>
-          ${character.restrictions.map(r => `<p style="padding-left: 20px;">• ${r}</p>`).join('')}
-        </div>
-      ` : ''}
     `;
 
     this.showScreen('character-info');
