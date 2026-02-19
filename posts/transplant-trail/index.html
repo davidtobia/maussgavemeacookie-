@@ -49,138 +49,233 @@
     <div id="character-select" class="screen">
       <div class="border-decoration top"></div>
 
-      <h2 class="screen-title">Many kinds of people made the<br>trip to New York.</h2>
-
       <div class="menu-content">
-        <p class="menu-intro">You may:</p>
+        <p class="menu-intro">Many kinds of people made the trip to New York.</p>
 
-        <div class="character-options">
-          <!-- Characters will be added by JavaScript -->
+        <p class="menu-intro" style="margin-top: 40px;">You may:</p>
+
+        <div class="menu-options" style="margin-top: 20px;">
+          <button class="menu-option" onclick="game.selectCharacter('remote-worker')">1. Be a remote worker from Austin</button>
+          <button class="menu-option" onclick="game.selectCharacter('nursing-student')">2. Be a nursing student from Akron</button>
+          <button class="menu-option" onclick="game.selectCharacter('hockey-coach')">3. Be a youth hockey coach from Massapequa</button>
+          <button class="menu-option" onclick="game.showCharacterComparison()">4. Find out the differences between these choices</button>
         </div>
 
         <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
       </div>
 
+      <div class="border-decoration bottom"></div>
+    </div>
+
+    <!-- Character Comparison -->
+    <div id="character-comparison" class="screen">
+      <div class="border-decoration top"></div>
+      <div class="menu-content">
+        <div class="comparison-table">
+          <div class="comparison-row header">
+            <span></span><span>Money</span><span>Multiplier</span>
+          </div>
+          <div class="comparison-row">
+            <span>Remote Worker</span><span>$1,400</span><span>1x</span>
+          </div>
+          <div class="comparison-row">
+            <span>Nursing Student</span><span>$800</span><span>2x</span>
+          </div>
+          <div class="comparison-row">
+            <span>Hockey Coach</span><span>$500</span><span>3x</span>
+          </div>
+        </div>
+        <button class="menu-option" style="margin-top: 60px;" onclick="game.showCharacterSelect()">Go back</button>
+      </div>
+      <div class="border-decoration bottom"></div>
+    </div>
+
+    <!-- Player Name -->
+    <div id="player-name" class="screen">
+      <div class="border-decoration top"></div>
+      <div class="menu-content">
+        <h2 class="screen-title">What is your name?</h2>
+        <div class="squad-inputs">
+          <div class="input-row">
+            <input type="text" id="player-name-input" maxlength="20" placeholder="Your name">
+          </div>
+        </div>
+        <button class="menu-option" style="margin-top: 40px;" onclick="game.confirmPlayerName()">
+          Continue
+        </button>
+      </div>
       <div class="border-decoration bottom"></div>
     </div>
 
     <!-- Character Info Screen -->
     <div id="character-info" class="screen">
       <div class="border-decoration top"></div>
-
       <div class="info-content">
         <!-- Character details will be inserted here -->
       </div>
-
       <div class="menu-content">
         <div class="character-actions">
-          <button class="menu-option" onclick="game.goToStore()">1. Continue with this character</button>
+          <button class="menu-option" onclick="game.showPremise()">1. Continue with this character</button>
           <button class="menu-option" onclick="game.backToCharacterSelect()">2. Go back and choose someone else</button>
         </div>
         <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
       </div>
-
       <div class="border-decoration bottom"></div>
     </div>
 
-    <!-- Departure Month -->
-    <div id="departure-month" class="screen">
+    <!-- Premise Screen -->
+    <div id="premise" class="screen">
       <div class="border-decoration top"></div>
-
       <div class="menu-content">
-        <h2 class="screen-title">It is 2026. You may begin<br>your trip to New York, and your<br>attempt to get to the Brooklyn Mirage<br>in time for the shows.</h2>
-
-        <p class="menu-intro" style="margin-top: 40px;">You may:</p>
-
-        <div class="menu-options">
-          <button class="menu-option" data-month="february">1. Leave in February</button>
-          <button class="menu-option" data-month="march">2. Leave in March</button>
-          <button class="menu-option" data-month="april">3. Leave in April</button>
-          <button class="menu-option" data-month="may">4. Leave in May</button>
-          <button class="menu-option" data-month="june">5. Leave in June</button>
-          <button class="menu-option" data-month="advice">6. Ask a local</button>
+        <p class="premise-text">Your dreams are coming true. Your life is a tv show. It is time to leave these small town losers behind!</p>
+        <p class="premise-text" style="margin-top: 30px;">Your goal is to acquire a romantic partner, three friends, and make it to opening night at the Brooklyn Mirage in July.</p>
+        <p class="premise-text" style="margin-top: 30px;">When do you want to start your lease — your lease on life — and become somebody?</p>
+        <div class="menu-options" style="margin-top: 50px;">
+          <button class="menu-option" data-month="february">1. February</button>
+          <button class="menu-option" data-month="march">2. March</button>
+          <button class="menu-option" data-month="april">3. April</button>
         </div>
-
         <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
       </div>
+      <div class="border-decoration bottom"></div>
+    </div>
+
+    <!-- NYC Arrival + Store -->
+    <div id="nyc-arrival" class="screen">
+      <div class="border-decoration top"></div>
+
+      <div class="arrival-scene">
+        <img src="images/shopkeeper.png" alt="Eric Adams" class="shopkeeper-image">
+        <div class="speech-bubble">
+          <p id="adams-text"></p>
+          <div id="adams-shop-items" class="adams-shop-items hidden"></div>
+          <div id="adams-shop-footer" class="hidden">
+            <p class="store-total">Spent: <span id="spent-amount">$0</span> &nbsp;|&nbsp; Remaining: <span id="remaining-amount">$0</span></p>
+          </div>
+          <button id="adams-advance" class="menu-option" style="margin-top: 20px;"></button>
+        </div>
+      </div>
 
       <div class="border-decoration bottom"></div>
     </div>
 
-    <!-- Local Advice Screen -->
-    <div id="local-advice" class="screen">
-      <div class="border-decoration top"></div>
+    <!-- Trail Screen -->
+    <div id="trail-screen" class="screen">
+      <!-- Canvas for animated trail scene -->
+      <canvas id="trail-canvas"></canvas>
 
+      <!-- Status bar -->
+      <div class="trail-status">
+        <div class="status-row">
+          <span class="status-label">Date:</span>
+          <span id="trail-date">May 1, 2026</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Vibe Weather:</span>
+          <span id="trail-weather">Immaculate</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Aura:</span>
+          <span id="trail-aura">Good</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Money:</span>
+          <span id="trail-money">$500</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Next landmark:</span>
+          <span id="trail-landmark">Brooklyn Mirage</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Miles to go:</span>
+          <span id="trail-miles">50 miles</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Transportation:</span>
+          <span id="trail-transport">Walk</span>
+        </div>
+        <div class="status-row">
+          <span class="status-label">Spending:</span>
+          <span id="trail-spending">Trader Joe's</span>
+        </div>
+      </div>
+
+      <!-- Trail menu (shown when stopped) -->
+      <div id="trail-menu" class="trail-menu hidden">
+        <div class="border-decoration top"></div>
+        <div class="menu-content">
+          <p class="menu-intro">You may:</p>
+          <div class="menu-options">
+            <button class="menu-option" onclick="trailGame.continueTrail()">1. Continue on trail</button>
+            <button class="menu-option" onclick="trailGame.checkSupplies()">2. Check supplies</button>
+            <button class="menu-option" onclick="trailGame.lookAtMap()">3. Look at map</button>
+            <button class="menu-option" onclick="trailGame.changeTransportation()">4. Change transportation</button>
+            <button class="menu-option" onclick="trailGame.changeSpending()">5. Change spending mode</button>
+            <button class="menu-option" onclick="trailGame.rest()">6. Stop to rest</button>
+            <button class="menu-option" onclick="trailGame.workGig()">7. Work a gig</button>
+            <button class="menu-option" onclick="trailGame.goOut()">8. Go out</button>
+          </div>
+          <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
+        </div>
+        <div class="border-decoration bottom"></div>
+      </div>
+
+      <!-- Event popup -->
+      <div id="trail-event" class="trail-event hidden">
+        <div class="event-box">
+          <p id="event-text"></p>
+          <p class="event-prompt">Press ENTER or SPACE to continue</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Transportation Selection -->
+    <div id="transportation-select" class="screen">
+      <div class="border-decoration top"></div>
       <div class="menu-content">
-        <div class="advice-text">
-          <p style="margin-bottom: 30px;">A native New Yorker tells you:</p>
-          <p style="font-style: italic; margin-bottom: 20px;">"The Brooklyn Mirage is only open June through October. Leave too early and you'll be stuck making small talk at indoor venues all winter. Leave too late and you'll miss the shows entirely."</p>
-          <p style="font-style: italic; margin-bottom: 30px;">"May is your best bet. You'll arrive just as summer starts, your squad will be excited, and you'll catch opening weekend."</p>
-          <p style="margin-top: 30px;">(But honestly, do what you want.)</p>
+        <h2 class="screen-title">Change transportation</h2>
+        <p class="menu-intro">You may:</p>
+        <div class="menu-options" id="transport-options">
+          <!-- Will be populated based on character restrictions -->
         </div>
-
-        <button class="menu-option" style="margin-top: 40px;" onclick="game.backToMonthSelect()">
-          Go back and choose
-        </button>
+        <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
       </div>
-
       <div class="border-decoration bottom"></div>
     </div>
 
-    <!-- Squad Naming -->
-    <div id="squad-naming" class="screen">
+    <!-- Spending Mode Selection -->
+    <div id="spending-select" class="screen">
       <div class="border-decoration top"></div>
-
       <div class="menu-content">
-        <h2 class="screen-title">What are the first names of<br>the people in your squad?</h2>
-
-        <div class="squad-inputs">
-          <div class="input-row">
-            <label>1.</label>
-            <input type="text" id="squad-1" maxlength="15" placeholder="First squad member">
-          </div>
-          <div class="input-row">
-            <label>2.</label>
-            <input type="text" id="squad-2" maxlength="15" placeholder="Second squad member">
-          </div>
-          <div class="input-row">
-            <label>3.</label>
-            <input type="text" id="squad-3" maxlength="15" placeholder="Third squad member">
-          </div>
-          <div class="input-row">
-            <label>4.</label>
-            <input type="text" id="squad-4" maxlength="15" placeholder="Fourth squad member">
-          </div>
+        <h2 class="screen-title">Change spending mode</h2>
+        <p class="menu-intro">You may:</p>
+        <div class="menu-options">
+          <button class="menu-option" data-spending="dollar-slice">1. Dollar Slice Mode (bare bones)</button>
+          <button class="menu-option" data-spending="dumpling">2. Dumpling Maxxing (frugal)</button>
+          <button class="menu-option" data-spending="trader-joes">3. Trader Joe's Wine Mode (middle)</button>
+          <button class="menu-option" data-spending="west-village">4. West Village Resy Hop (comfortable)</button>
+          <button class="menu-option" data-spending="omakase">5. Omakase (expensive)</button>
+          <button class="menu-option" data-spending="carbone">6. Carbone (ruinous)</button>
         </div>
-
-        <button class="menu-option" style="margin-top: 40px;" onclick="game.confirmSquad()">
-          Continue to the trail
-        </button>
+        <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
       </div>
-
       <div class="border-decoration bottom"></div>
     </div>
 
-    <!-- Supplies Store -->
-    <div id="supplies-store" class="screen">
+    <!-- Apartment Hunt -->
+    <div id="apartment-hunt" class="screen">
       <div class="border-decoration top"></div>
-
-      <div class="store-content">
-        <div class="store-header">
-          <h2 class="screen-title">Before you leave</h2>
-          <p class="store-intro">You have <span id="store-money">$0</span> to spend on supplies.</p>
+      <div class="menu-content">
+        <h2 class="screen-title">You need to find an apartment.</h2>
+        <div class="menu-options">
+          <button class="menu-option" data-apartment="railroad">1. Railroad apartment with roommates</button>
+          <button class="menu-option" data-apartment="subdivision">2. 3-person one bedroom subdivision</button>
+          <button class="menu-option" data-apartment="studio">3. 400 sq ft studio</button>
+          <button class="menu-option" data-apartment="one-bed">4. One bedroom solo</button>
+          <button class="menu-option" data-apartment="penthouse">5. Penthouse</button>
         </div>
-
-        <div class="store-items">
-          <!-- Items will be populated by JavaScript -->
-        </div>
-
-        <div class="store-footer">
-          <p class="store-total">Spent: <span id="spent-amount">$0</span> / Remaining: <span id="remaining-amount">$0</span></p>
-          <button class="menu-option" onclick="game.leaveStore()">Done - Hit the trail</button>
-        </div>
+        <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
       </div>
-
       <div class="border-decoration bottom"></div>
     </div>
   </div>
@@ -188,6 +283,8 @@
   <!-- Game Logic -->
   <script src="characters.js"></script>
   <script src="store.js"></script>
+  <script src="trail-data.js"></script>
+  <script src="trail.js"></script>
   <script src="game.js"></script>
 
   <!-- GoatCounter Analytics -->

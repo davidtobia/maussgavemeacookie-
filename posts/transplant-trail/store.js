@@ -1,89 +1,35 @@
 /**
- * THE TRANSPLANT TRAIL - STORE ITEMS
- * Supplies you can buy before hitting the trail
+ * THE TRANSPLANT TRAIL - STORE DATA
  */
 
-const STORE_ITEMS = [
-  {
-    id: 'metrocard',
-    name: 'Metrocard',
-    price: 150,
-    description: 'Unlimited monthly. Essential unless you bike everywhere.',
-    category: 'transport'
-  },
-  {
-    id: 'bank-bike-pass',
-    name: 'Bank Bike Pass',
-    price: 200,
-    description: 'Monthly membership. Show up sweaty or show up late.',
-    category: 'transport'
-  },
-  {
-    id: 'work-outfit',
-    name: 'Work Outfit',
-    price: 120,
-    description: 'Professional clothes. More outfits = more money earning potential.',
-    category: 'clothing',
-    maxQuantity: 5
-  },
-  {
-    id: 'fun-outfit',
-    name: 'Fun Outfit',
-    price: 80,
-    description: 'For nights out. Boosts aura, gets you into places.',
-    category: 'clothing',
-    maxQuantity: 5
-  },
-  {
-    id: 'thrift-find',
-    name: 'Thrift Store Find',
-    price: 25,
-    description: 'Vintage vibes, major aura boost. Risk: bedbugs.',
-    category: 'clothing',
-    maxQuantity: 3,
-    risk: 'bedbugs'
-  },
-  {
-    id: 'advil',
-    name: 'Advil (bottle)',
-    price: 15,
-    description: 'For hangovers and general NYC life.',
-    category: 'medicine',
-    maxQuantity: 10
-  },
-  {
-    id: 'zyn',
-    name: 'Zyn (tin)',
-    price: 8,
-    description: 'Nicotine pouches. Everyone has them now apparently.',
-    category: 'supplies',
-    maxQuantity: 20
-  },
-  {
-    id: 'energy-drink',
-    name: 'Energy Drinks (case)',
-    price: 30,
-    description: 'For late nights and early mornings.',
-    category: 'supplies',
-    maxQuantity: 5
-  },
-  {
-    id: 'phone-charger',
-    name: 'Portable Charger',
-    price: 45,
-    description: 'Dead phone = lost in the city.',
-    category: 'supplies'
-  },
-  {
-    id: 'sunglasses',
-    name: 'Sunglasses',
-    price: 20,
-    description: 'Look cool, avoid eye contact.',
-    category: 'supplies'
-  }
-];
+const STORE_CATEGORIES = {
+  transport: [
+    { id: 'metrocard', name: 'Metrocard', price: 132, maxQuantity: 3 },
+    { id: 'bank-bike', name: 'Bank Bike Pass', price: 220, maxQuantity: 1 },
+    { id: 'uber-credit', name: 'Uber Credit', price: 100, maxQuantity: 5 }
+  ],
+  clothing: [
+    { id: 'chanel', name: 'Chanel', price: 800, maxQuantity: 3 },
+    { id: 'aritzia', name: 'Aritzia', price: 300, maxQuantity: 5 },
+    { id: 'thrift', name: 'Thrift Store', price: 250, maxQuantity: 5 },
+    { id: 'zara', name: 'Zara', price: 80, maxQuantity: 5 },
+    { id: 'gap', name: 'Gap', price: 60, maxQuantity: 5 }
+  ],
+  other: [
+    { id: 'zyn', name: 'Zyn', price: 8, maxQuantity: 20 },
+    { id: 'adderall', name: 'Adderall', price: 40, maxQuantity: 10 },
+    { id: 'cocaine', name: 'Cocaine', price: 150, maxQuantity: 5 },
+    { id: 'gun', name: 'Gun', price: 600, maxQuantity: 1 }
+  ]
+};
 
-// Helper to get item by ID
 function getStoreItem(id) {
-  return STORE_ITEMS.find(item => item.id === id);
+  for (const category of Object.values(STORE_CATEGORIES)) {
+    const item = category.find(i => i.id === id);
+    if (item) return item;
+  }
+  return null;
 }
+
+// Keep STORE_ITEMS as flat array for compatibility
+const STORE_ITEMS = Object.values(STORE_CATEGORIES).flat();

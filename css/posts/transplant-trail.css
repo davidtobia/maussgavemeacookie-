@@ -28,6 +28,12 @@ body {
   align-items: center;
   justify-content: center;
   padding: 20px;
+  position: relative;
+}
+
+.game-container:has(#trail-screen.active) {
+  padding: 0;
+  align-items: stretch;
 }
 
 /* Screen Management */
@@ -173,6 +179,113 @@ body {
   font-weight: bold;
 }
 
+.hidden {
+  display: none !important;
+}
+
+/* Premise Screen */
+.premise-text {
+  font-size: 26px;
+  line-height: 1.7;
+  max-width: 680px;
+}
+
+/* NYC Arrival */
+.arrival-scene {
+  display: flex;
+  align-items: flex-end;
+  gap: 30px;
+  padding: 20px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.shopkeeper-image {
+  width: 55%;
+  height: auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  flex-shrink: 0;
+}
+
+.speech-bubble {
+  position: relative;
+  background: #000;
+  border: 3px solid #d4a574;
+  padding: 25px;
+  flex: 1;
+  margin-bottom: 40px;
+}
+
+.speech-bubble::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  bottom: 30px;
+  border: 10px solid transparent;
+  border-right-color: #d4a574;
+}
+
+.speech-bubble::after {
+  content: '';
+  position: absolute;
+  left: -14px;
+  bottom: 32px;
+  border: 8px solid transparent;
+  border-right-color: #000;
+}
+
+.speech-bubble p {
+  font-size: 26px;
+  line-height: 1.6;
+}
+
+.adams-shop-items {
+  margin: 20px 0 10px;
+  border-top: 1px solid rgba(212, 165, 116, 0.3);
+  padding-top: 15px;
+}
+
+.adams-item-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 8px 0;
+  font-size: 22px;
+  border-bottom: 1px solid rgba(212, 165, 116, 0.15);
+}
+
+.adams-item-name {
+  flex: 1;
+}
+
+.adams-item-price {
+  min-width: 60px;
+  text-align: right;
+  opacity: 0.8;
+}
+
+/* Character Comparison */
+.comparison-table {
+  margin: 40px 0;
+  width: 100%;
+}
+
+.comparison-row {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  padding: 12px 20px;
+  font-size: 24px;
+  border-bottom: 1px solid rgba(212, 165, 116, 0.2);
+}
+
+.comparison-row.header {
+  opacity: 0.6;
+  font-size: 20px;
+  border-bottom: 2px solid #d4a574;
+  margin-bottom: 10px;
+}
+
 /* Character Info */
 .info-content {
   padding: 20px;
@@ -226,6 +339,16 @@ body {
 }
 
 /* Squad Naming */
+.squad-image {
+  width: 100%;
+  max-width: 700px;
+  height: auto;
+  margin: 0 auto 40px;
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
 .squad-inputs {
   margin: 40px 0;
   max-width: 600px;
@@ -376,6 +499,101 @@ body {
   font-weight: bold;
 }
 
+/* Trail Screen */
+#trail-screen {
+  width: 100%;
+  height: 100vh;
+  display: none;
+  flex-direction: column;
+  background: #000;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+#trail-screen.active {
+  display: flex;
+}
+
+#trail-canvas {
+  width: 100%;
+  flex: 1;
+  background: #000;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.trail-status {
+  background: #000;
+  border-top: 3px solid #d4a574;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 30px;
+  flex-shrink: 0;
+}
+
+.status-row {
+  display: flex;
+  gap: 10px;
+  font-size: 20px;
+}
+
+.status-label {
+  opacity: 0.8;
+}
+
+.trail-menu {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #000;
+  border: 3px solid #d4a574;
+  padding: 30px;
+  min-width: 600px;
+  max-width: 90%;
+  z-index: 10;
+}
+
+.trail-menu.hidden {
+  display: none;
+}
+
+.trail-event {
+  position: absolute;
+  bottom: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 700px;
+  z-index: 10;
+}
+
+.trail-event.hidden {
+  display: none;
+}
+
+.event-box {
+  background: #d4a574;
+  color: #000;
+  border: 4px solid #000;
+  padding: 30px;
+  text-align: center;
+  box-shadow: 8px 8px 0 rgba(212, 165, 116, 0.3);
+}
+
+.event-box p {
+  font-size: 24px;
+  margin: 0;
+}
+
+.event-prompt {
+  margin-top: 20px !important;
+  font-size: 18px !important;
+  opacity: 0.8;
+}
+
 /* Mobile Responsive */
 @media (max-width: 768px) {
   body {
@@ -416,6 +634,30 @@ body {
   .border-decoration::before,
   .border-decoration::after {
     font-size: 24px;
+  }
+
+  .trail-status {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 15px;
+  }
+
+  .status-row {
+    font-size: 18px;
+  }
+
+  .trail-menu {
+    min-width: auto;
+    width: 95%;
+    padding: 20px;
+  }
+
+  .event-box {
+    padding: 20px;
+  }
+
+  .event-box p {
+    font-size: 20px;
   }
 }
 
