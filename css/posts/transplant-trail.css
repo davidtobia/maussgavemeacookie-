@@ -17,6 +17,7 @@ body {
   font-size: 24px;
   line-height: 1.4;
   overflow-x: hidden;
+  overflow-y: auto;
   -webkit-font-smoothing: none;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -25,9 +26,9 @@ body {
 .game-container {
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 20px;
+  padding: 40px 20px;
   position: relative;
 }
 
