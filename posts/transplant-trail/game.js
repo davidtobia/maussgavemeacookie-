@@ -172,10 +172,11 @@ class TransplantTrail {
 
     infoContent.innerHTML = `
       <h2 class="character-name">${character.name} from ${character.origin}</h2>
-      <div class="character-stats" style="margin: 60px 0;">
+      <div class="character-stats" style="margin: 30px 0;">
         <div class="stat-line">Starting Money: $${character.money}</div>
         <div class="stat-line">Score Multiplier: ${character.difficulty}x</div>
       </div>
+      <div class="character-portrait ${character.id}"></div>
     `;
 
     this.showScreen('character-info');
@@ -267,9 +268,22 @@ class TransplantTrail {
     };
 
     const stage5 = () => {
-      textEl.textContent = `Aight. Good luck out there. And remember — plant-based.`;
-      btn.textContent = 'Hit the trail.';
+      textEl.textContent = `You're ready to hit these streets! I've packed up all your goodies in this popular knapsack with many different locations. I love you`;
+
+      const kissPrompt = document.createElement('p');
+      kissPrompt.textContent = 'Do you want to kiss Eric?';
+      kissPrompt.style.marginTop = '20px';
+      btn.parentNode.insertBefore(kissPrompt, btn);
+
+      btn.textContent = '1. Yes';
+      btn.style.marginTop = '10px';
       btn.onclick = () => this.leaveStore();
+
+      const noBtn = document.createElement('button');
+      noBtn.className = 'menu-option';
+      noBtn.textContent = '2. No';
+      noBtn.onclick = () => this.leaveStore();
+      btn.insertAdjacentElement('afterend', noBtn);
     };
 
     // Start

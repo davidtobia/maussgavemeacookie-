@@ -10,8 +10,14 @@ const STORE_CATEGORIES = {
   ],
   clothing: [
     { id: 'chanel', name: 'Chanel', price: 800, maxQuantity: 3 },
+    { id: 'rag-and-bone', name: 'Rag & Bone', price: 500, maxQuantity: 3 },
     { id: 'aritzia', name: 'Aritzia', price: 300, maxQuantity: 5 },
+    { id: 'patagonia-vest', name: 'Patagonia Vest', price: 280, maxQuantity: 2 },
     { id: 'thrift', name: 'Thrift Store', price: 250, maxQuantity: 5 },
+    { id: 'todd-snyder', name: 'Todd Snyder', price: 350, maxQuantity: 3 },
+    { id: 'scotch-and-soda', name: 'Scotch & Soda', price: 180, maxQuantity: 5 },
+    { id: 'allsaints', name: 'AllSaints', price: 160, maxQuantity: 3 },
+    { id: 'bonobos', name: 'Bonobos', price: 120, maxQuantity: 5 },
     { id: 'zara', name: 'Zara', price: 80, maxQuantity: 5 },
     { id: 'gap', name: 'Gap', price: 60, maxQuantity: 5 }
   ],
