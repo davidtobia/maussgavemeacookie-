@@ -10,6 +10,7 @@ const CHARACTERS = [
     origin: 'Austin, Texas',
     difficulty: 1,
     description: '',
+    checkingAccount: 1400,
     balances: {
       cash: 0,
       chaseFreedom: 400,
@@ -24,6 +25,7 @@ const CHARACTERS = [
     origin: 'Akron, Ohio',
     difficulty: 2,
     description: '',
+    checkingAccount: 800,
     balances: {
       cash: 0,
       chaseFreedom: 250,
@@ -38,6 +40,7 @@ const CHARACTERS = [
     origin: 'Massapequa, Long Island',
     difficulty: 3,
     description: '',
+    checkingAccount: 500,
     balances: {
       cash: 0,
       chaseFreedom: 150,

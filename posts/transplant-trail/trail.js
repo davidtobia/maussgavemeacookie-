@@ -105,6 +105,14 @@ class TrailGame {
         this.dismissEvent();
       }
     });
+
+    // Tap canvas to open menu
+    this.canvas.addEventListener('click', () => {
+      if (!this.state.running) return;
+      const eventBox = document.getElementById('trail-event');
+      if (!eventBox.classList.contains('hidden')) return;
+      this.toggleMenu();
+    });
   }
 
   dismissEvent() {
@@ -358,9 +366,9 @@ class TrailGame {
     const milesThisHour = speed * speedMod;
     this.state.milesFromLandmark += milesThisHour;
 
-    // Hourly costs (transportation) — Chase Sapphire, the travel card
+    // Hourly costs (transportation) — checking first, then Sapphire
     if (transport && transport.cost > 0) {
-      this.gameState.balances.chaseSapphire -= transport.cost / 24;
+      this.chargeExpense(transport.cost / 24, 'chaseSapphire');
     }
 
     this.updateStatusDisplay();
@@ -501,8 +509,8 @@ class TrailGame {
     const spendingMode = SPENDING_MODES.find(m => m.id === this.state.spendingMode);
     if (!spendingMode) return;
 
-    // Daily food/living costs — Chase Freedom, the everyday card
-    this.gameState.balances.chaseFreedom -= spendingMode.dailyCost;
+    // Daily food/living costs — checking first, then Freedom
+    this.chargeExpense(spendingMode.dailyCost, 'chaseFreedom');
 
     // Apply vibe effect from spending mode
     this.gameState.aura += spendingMode.vibeEffect;
@@ -564,9 +572,8 @@ class TrailGame {
   }
 
   handleDeath() {
-    // TODO: Death screen
-    alert('Your aura hit zero. Game over!');
     this.stop();
+    this.showEvent('Your aura hit zero. You have been absorbed by the city.');
   }
 
   // ============================================
@@ -578,13 +585,21 @@ class TrailGame {
   }
 
   checkSupplies() {
-    // TODO: Show inventory screen
-    alert(`Inventory: ${JSON.stringify(this.gameState.inventory)}`);
+    this.toggleMenu();
+    const inv = this.gameState.inventory;
+    const items = Object.entries(inv)
+      .filter(([, qty]) => qty > 0)
+      .map(([id, qty]) => `${id.replace(/-/g, ' ')} x${qty}`)
+      .join(', ');
+    this.showEvent(items ? `You have: ${items}` : 'Your bags are empty.');
   }
 
   lookAtMap() {
-    // TODO: Show map screen
-    alert('Map view - Coming soon!');
+    this.toggleMenu();
+    const current = this.getCurrentLandmark();
+    const next = this.getNextLandmark();
+    const miles = Math.floor(this.state.milesPerLandmark - this.state.milesFromLandmark);
+    this.showEvent(`You are near ${current.name}. Next stop: ${next.name} (${miles} miles).`);
   }
 
   changeTransportation() {
@@ -631,29 +646,40 @@ class TrailGame {
   }
 
   rest() {
-    // Rest for a day, recover aura
+    this.toggleMenu();
     this.gameState.aura = Math.min(100, this.gameState.aura + 20);
     this.state.currentDay++;
-    alert('You rested. Aura +20. Time advanced 1 day.');
-    this.toggleMenu();
+    this.showEvent('You stayed in and doom-scrolled. Aura +20. One day lost.');
   }
 
   workGig() {
-    // TODO: Launch minigame
-    alert('Work gig minigame - Coming soon!');
+    this.toggleMenu();
+    this.showEvent('Work gig — coming soon.');
   }
 
   goOut() {
-    // Going out costs money but boosts aura
-    const cost = 50;
-    if (this.gameState.money >= cost) {
-      this.gameState.money -= cost;
-      this.gameState.aura += 15;
-      alert('You went out! -$50, Aura +15');
-    } else {
-      alert('Not enough money to go out.');
-    }
     this.toggleMenu();
+    this.chargeExpense(50, 'chaseFreedom');
+    this.gameState.aura += 15;
+    this.showEvent('You went out. -$50 on Freedom. Aura +15.');
+  }
+
+  // ============================================
+  // FINANCES
+  // ============================================
+
+  // Drain checking first; any remainder goes on the fallback credit card
+  chargeExpense(amount, fallbackCard) {
+    if (this.gameState.checkingAccount > 0) {
+      const fromChecking = Math.min(amount, this.gameState.checkingAccount);
+      this.gameState.checkingAccount -= fromChecking;
+      const remainder = amount - fromChecking;
+      if (remainder > 0) {
+        this.gameState.balances[fallbackCard] -= remainder;
+      }
+    } else {
+      this.gameState.balances[fallbackCard] -= amount;
+    }
   }
 
   // ============================================
@@ -676,9 +702,9 @@ class TrailGame {
                      this.gameState.aura > 25 ? 'Mid' : 'Cooked';
     document.getElementById('trail-aura').textContent = auraText;
 
-    // Card balances
+    // Checking account and card balances
     const b = this.gameState.balances;
-    document.getElementById('trail-cash').textContent = `$0`;
+    document.getElementById('trail-checking').textContent = `$${Math.floor(this.gameState.checkingAccount)}`;
     document.getElementById('trail-freedom').textContent = `$${Math.floor(b.chaseFreedom)}`;
     document.getElementById('trail-sapphire').textContent = `$${Math.floor(b.chaseSapphire)}`;
     document.getElementById('trail-dads-amex').textContent = `$${Math.floor(b.dadsAmex)}`;

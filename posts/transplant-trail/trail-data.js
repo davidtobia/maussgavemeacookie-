@@ -152,14 +152,14 @@ const SPENDING_MODES = [
 const VIBE_WEATHER = [
   {
     id: 'perfect-fall',
-    name: 'Perfect fall day',
+    name: 'Perfect fall',
     speedMod: 1.2,
     vibeMod: 5,
     effects: []
   },
   {
     id: 'august',
-    name: 'August in the city',
+    name: 'August heat',
     speedMod: 0.8,
     vibeMod: -5,
     healthMod: -2,
@@ -167,28 +167,28 @@ const VIBE_WEATHER = [
   },
   {
     id: 'raining',
-    name: "It's raining",
+    name: 'Rain',
     speedMod: 0.9,
     vibeMod: -2,
     effects: ['Bank Bike unavailable', 'App Car surge pricing (+$20)']
   },
   {
     id: 'blizzard',
-    name: 'A blizzard',
+    name: 'Blizzard',
     speedMod: 0.3,
     vibeMod: -8,
     effects: ['Subway chaos', 'Most transportation unavailable']
   },
   {
     id: 'major-event',
-    name: 'A major event',
+    name: 'Major event',
     speedMod: 0.5,
     vibeMod: 3,
     effects: ['Path blocked or great story unlocked']
   },
   {
     id: 'subway-weird',
-    name: 'The subway is being weird',
+    name: 'Subway being weird',
     speedMod: 1.0,
     vibeMod: -3,
     effects: ['Cascading subway consequences if using subway']

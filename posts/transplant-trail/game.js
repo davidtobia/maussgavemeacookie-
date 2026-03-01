@@ -11,6 +11,7 @@ class TransplantTrail {
       playerName: null,
       gameStarted: false,
       departureMonth: null,
+      checkingAccount: 0,
       balances: { cash: 0, chaseFreedom: 0, chaseSapphire: 0, dadsAmex: 0, bilt: 0 },
       dadsAmexCancelled: false,
       aura: 100,
@@ -141,6 +142,7 @@ class TransplantTrail {
   selectCharacter(characterId) {
     const character = getCharacter(characterId);
     this.state.selectedCharacter = character;
+    this.state.checkingAccount = character.checkingAccount;
     this.state.balances = { ...character.balances };
     this.state.inventory = {};
 
@@ -175,6 +177,7 @@ class TransplantTrail {
     infoContent.innerHTML = `
       <h2 class="character-name">${character.name} from ${character.origin}</h2>
       <div class="character-stats" style="margin: 30px 0;">
+        <div class="stat-line">Checking: $${character.checkingAccount}</div>
         <div class="stat-line">Total credit: $${totalMoney}</div>
         <div class="stat-line">Score Multiplier: ${character.difficulty}x</div>
       </div>
