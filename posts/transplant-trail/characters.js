@@ -8,25 +8,43 @@ const CHARACTERS = [
     id: 'remote-worker',
     name: 'Remote Worker',
     origin: 'Austin, Texas',
-    money: 1400,
     difficulty: 1,
-    description: ''
+    description: '',
+    balances: {
+      cash: 0,
+      chaseFreedom: 400,
+      chaseSapphire: 600,
+      dadsAmex: 300,
+      bilt: 100
+    }
   },
   {
     id: 'nursing-student',
     name: 'Nursing Student',
     origin: 'Akron, Ohio',
-    money: 800,
     difficulty: 2,
-    description: ''
+    description: '',
+    balances: {
+      cash: 0,
+      chaseFreedom: 250,
+      chaseSapphire: 350,
+      dadsAmex: 150,
+      bilt: 50
+    }
   },
   {
     id: 'hockey-coach',
     name: 'Youth Hockey Coach',
     origin: 'Massapequa, Long Island',
-    money: 500,
     difficulty: 3,
-    description: ''
+    description: '',
+    balances: {
+      cash: 0,
+      chaseFreedom: 150,
+      chaseSapphire: 250,
+      dadsAmex: 75,
+      bilt: 25
+    }
   }
 ];
 
@@ -45,4 +63,8 @@ function getCharacter(id) {
 
 function getAllCharacters() {
   return CHARACTERS;
+}
+
+function getTotalMoney(character) {
+  return Object.values(character.balances).reduce((a, b) => a + b, 0);
 }

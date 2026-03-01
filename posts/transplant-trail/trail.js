@@ -26,6 +26,9 @@ class TrailGame {
       hoursElapsed: 0
     };
 
+    // Pending callback after event box is dismissed
+    this.pendingAfterEvent = null;
+
     // Animation settings
     this.scrollSpeed = 1;
     this.backgroundOffset = 0;
@@ -78,23 +81,41 @@ class TrailGame {
   }
 
   setupControls() {
-    // Spacebar or Enter to pause/show menu
+    // Spacebar or Enter to dismiss event or toggle menu
     document.addEventListener('keydown', (e) => {
-      if ((e.key === ' ' || e.key === 'Enter') && this.state.running) {
+      if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault();
 
-        // If event is showing, clear it
         const eventBox = document.getElementById('trail-event');
         if (!eventBox.classList.contains('hidden')) {
-          eventBox.classList.add('hidden');
-          this.state.paused = false;
+          this.dismissEvent();
           return;
         }
 
-        // Otherwise toggle menu
-        this.toggleMenu();
+        if (this.state.running) {
+          this.toggleMenu();
+        }
       }
     });
+
+    // Tap to dismiss event on mobile
+    document.getElementById('trail-event').addEventListener('click', () => {
+      const eventBox = document.getElementById('trail-event');
+      if (!eventBox.classList.contains('hidden')) {
+        this.dismissEvent();
+      }
+    });
+  }
+
+  dismissEvent() {
+    const eventBox = document.getElementById('trail-event');
+    eventBox.classList.add('hidden');
+    this.state.paused = false;
+    if (this.pendingAfterEvent) {
+      const cb = this.pendingAfterEvent;
+      this.pendingAfterEvent = null;
+      cb();
+    }
   }
 
   start() {
@@ -337,9 +358,9 @@ class TrailGame {
     const milesThisHour = speed * speedMod;
     this.state.milesFromLandmark += milesThisHour;
 
-    // Hourly costs (transportation)
+    // Hourly costs (transportation) — Chase Sapphire, the travel card
     if (transport && transport.cost > 0) {
-      this.gameState.money -= transport.cost / 24; // Divide daily cost by 24 hours
+      this.gameState.balances.chaseSapphire -= transport.cost / 24;
     }
 
     this.updateStatusDisplay();
@@ -352,12 +373,16 @@ class TrailGame {
     // Check aura
     this.checkAura();
 
+    // Dad's AMEX: if maxed out and not already cancelled, trigger the event
+    if (!this.gameState.dadsAmexCancelled && this.gameState.balances.dadsAmex <= 0) {
+      this.gameState.dadsAmexCancelled = true;
+      this.showEvent(`Your dad just called. "I'm cancelling the card. You need to figure this out yourself." The AMEX is dead.`);
+    }
+
     // Change weather occasionally (20% chance)
     if (Math.random() < 0.2) {
       this.state.vibeWeather = this.randomVibeWeather();
     }
-
-    console.log(`Day ${this.state.currentDay} - Money: $${Math.floor(this.gameState.money)}, Aura: ${Math.floor(this.gameState.aura)}`);
   }
 
   reachLandmark() {
@@ -443,30 +468,21 @@ class TrailGame {
     const apt = apartments[apartmentType];
     if (!apt) return;
 
-    // Check if can afford
-    const totalCost = apt.cost + apt.brokerFee;
-    if (this.gameState.money < totalCost) {
-      game.showScreen('trail-screen');
-      this.showEvent("You can't afford that.");
-      setTimeout(() => this.apartmentHunt(), 100);
-      return;
-    }
-
     // Roll for success
     const success = Math.random() < apt.successRate;
 
     if (success) {
-      this.gameState.money -= totalCost;
+      // Rent goes on BILT — can go negative, that's the joke
+      const totalCost = apt.cost + apt.brokerFee;
+      this.gameState.balances.bilt -= totalCost;
       this.gameState.aura += apt.auraEffect;
       game.showScreen('trail-screen');
-      this.showEvent(apt.successText);
-      setTimeout(() => this.start(), 100);
+      this.showEvent(apt.successText, () => this.start());
     } else {
       this.state.currentDay += 1;
       this.gameState.aura -= 5;
       game.showScreen('trail-screen');
-      this.showEvent(apt.failText);
-      setTimeout(() => this.apartmentHunt(), 100);
+      this.showEvent(apt.failText, () => this.apartmentHunt());
     }
   }
 
@@ -485,13 +501,11 @@ class TrailGame {
     const spendingMode = SPENDING_MODES.find(m => m.id === this.state.spendingMode);
     if (!spendingMode) return;
 
-    // Deduct daily food/living cost
-    this.gameState.money -= spendingMode.dailyCost;
+    // Daily food/living costs — Chase Freedom, the everyday card
+    this.gameState.balances.chaseFreedom -= spendingMode.dailyCost;
 
     // Apply vibe effect from spending mode
     this.gameState.aura += spendingMode.vibeEffect;
-
-    console.log(`Daily expenses: -$${spendingMode.dailyCost} (${spendingMode.name})`);
   }
 
   checkAura() {
@@ -534,18 +548,19 @@ class TrailGame {
     // Apply event effects
     if (event.includes("puddle")) this.gameState.aura -= 5;
     if (event.includes("complimented")) this.gameState.aura += 10;
-    if (event.includes("$20")) this.gameState.money += 20;
+    if (event.includes("$20")) this.gameState.balances.chaseFreedom += 20;
     if (event.includes("pigeon")) this.gameState.aura -= 15;
     if (event.includes("taco")) this.gameState.aura += 5;
   }
 
-  showEvent(text) {
+  showEvent(text, onDismiss = null) {
     const eventBox = document.getElementById('trail-event');
     const eventText = document.getElementById('event-text');
 
     eventText.textContent = text;
     eventBox.classList.remove('hidden');
     this.state.paused = true;
+    this.pendingAfterEvent = onDismiss;
   }
 
   handleDeath() {
@@ -661,8 +676,13 @@ class TrailGame {
                      this.gameState.aura > 25 ? 'Mid' : 'Cooked';
     document.getElementById('trail-aura').textContent = auraText;
 
-    // Money
-    document.getElementById('trail-money').textContent = `$${Math.floor(this.gameState.money)}`;
+    // Card balances
+    const b = this.gameState.balances;
+    document.getElementById('trail-cash').textContent = `$0`;
+    document.getElementById('trail-freedom').textContent = `$${Math.floor(b.chaseFreedom)}`;
+    document.getElementById('trail-sapphire').textContent = `$${Math.floor(b.chaseSapphire)}`;
+    document.getElementById('trail-dads-amex').textContent = `$${Math.floor(b.dadsAmex)}`;
+    document.getElementById('trail-bilt').textContent = `$${Math.floor(b.bilt)}`;
 
     // Next landmark
     const nextLandmark = this.getNextLandmark();

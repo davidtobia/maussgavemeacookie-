@@ -11,7 +11,8 @@ class TransplantTrail {
       playerName: null,
       gameStarted: false,
       departureMonth: null,
-      money: 0,
+      balances: { cash: 0, chaseFreedom: 0, chaseSapphire: 0, dadsAmex: 0, bilt: 0 },
+      dadsAmexCancelled: false,
       aura: 100,
       inventory: {}
     };
@@ -140,7 +141,7 @@ class TransplantTrail {
   selectCharacter(characterId) {
     const character = getCharacter(characterId);
     this.state.selectedCharacter = character;
-    this.state.money = character.money;
+    this.state.balances = { ...character.balances };
     this.state.inventory = {};
 
     this.showPlayerName();
@@ -170,10 +171,11 @@ class TransplantTrail {
     const character = this.state.selectedCharacter;
     const infoContent = document.querySelector('#character-info .info-content');
 
+    const totalMoney = getTotalMoney(character);
     infoContent.innerHTML = `
       <h2 class="character-name">${character.name} from ${character.origin}</h2>
       <div class="character-stats" style="margin: 30px 0;">
-        <div class="stat-line">Starting Money: $${character.money}</div>
+        <div class="stat-line">Total credit: $${totalMoney}</div>
         <div class="stat-line">Score Multiplier: ${character.difficulty}x</div>
       </div>
       <div class="character-portrait ${character.id}"></div>
@@ -303,7 +305,7 @@ class TransplantTrail {
     const newQty = Math.max(0, currentQty + delta);
     if (item.maxQuantity && newQty > item.maxQuantity) return;
     const newSpent = this.calculateSpent() + (delta * item.price);
-    if (newSpent > this.state.selectedCharacter.money) return;
+    if (newSpent < 0) return;
     this.state.inventory[itemId] = newQty;
     document.getElementById(`qty-${itemId}`).textContent = newQty;
     this.updateStoreTotal();
@@ -325,9 +327,8 @@ class TransplantTrail {
   }
 
   updateStoreTotal() {
-    const character = this.state.selectedCharacter;
     const spent = this.calculateSpent();
-    const remaining = character.money - spent;
+    const remaining = this.state.balances.chaseSapphire - spent;
 
     document.getElementById('spent-amount').textContent = `$${spent}`;
     document.getElementById('remaining-amount').textContent = `$${remaining}`;
@@ -335,8 +336,7 @@ class TransplantTrail {
 
   leaveStore() {
     const spent = this.calculateSpent();
-    const character = this.state.selectedCharacter;
-    this.state.money = character.money - spent;
+    this.state.balances.chaseSapphire -= spent;
 
     console.log('Inventory:', this.state.inventory);
     console.log('Money remaining:', this.state.money);
