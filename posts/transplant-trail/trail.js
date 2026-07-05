@@ -266,22 +266,155 @@ class TrailGame {
     }
   }
 
+  getOutfitConfig(inventory) {
+    // Priority: most expensive / prestigious item wins
+    if (inventory['chanel']          > 0) return { top: '#111',    bottom: '#111',    label: 'chanel'         };
+    if (inventory['rag-and-bone']    > 0) return { top: '#2c3e50', bottom: '#1a252f', label: 'rag-and-bone'   };
+    if (inventory['todd-snyder']     > 0) return { top: '#5d4e37', bottom: '#3d3320', label: 'todd-snyder'    };
+    if (inventory['aritzia']         > 0) return { top: '#c9b8a8', bottom: '#a09080', label: 'aritzia'        };
+    if (inventory['patagonia-vest']  > 0) return { top: '#4a5568', bottom: '#4a5568', label: 'patagonia-vest', vest: '#2d6a4f' };
+    if (inventory['thrift']          > 0) return { top: '#c0392b', bottom: '#8e44ad', label: 'thrift'         };
+    if (inventory['scotch-and-soda'] > 0) return { top: '#2980b9', bottom: '#2471a3', label: 'scotch-and-soda' };
+    if (inventory['allsaints']       > 0) return { top: '#2d2d2d', bottom: '#1a1a1a', label: 'allsaints'      };
+    if (inventory['bonobos']         > 0) return { top: '#2e86c1', bottom: '#c4a862', label: 'bonobos'        };
+    if (inventory['zara']            > 0) return { top: '#e91e63', bottom: '#c2185b', label: 'zara'           };
+    if (inventory['gap']             > 0) return { top: '#1565c0', bottom: '#0d47a1', label: 'gap'            };
+    return { top: '#d4a574', bottom: '#b8935a', label: null };
+  }
+
   renderWalkingPerson(x, y) {
-    const colors = ['#d4a574', '#c49464', '#d4a574', '#c49464'];
-    this.ctx.fillStyle = colors[this.spriteFrame];
+    const ctx = this.ctx;
+    const inv = this.gameState.inventory;
+    const outfit = this.getOutfitConfig(inv);
+    const hasZyn = (inv['zyn'] || 0) > 0;
+    const skin = this.spriteFrame % 2 === 0 ? '#d4a574' : '#c49464';
+    const legOffset = this.spriteFrame % 2 === 0 ? 5 : -5;
 
     // Head
-    this.ctx.fillRect(x + 20, y - 60, 20, 20);
-    // Body
-    this.ctx.fillRect(x + 15, y - 40, 30, 30);
-    // Legs (animate)
-    const legOffset = this.spriteFrame % 2 === 0 ? 5 : -5;
-    this.ctx.fillRect(x + 15, y - 10, 10, 20); // Left leg
-    this.ctx.fillRect(x + 35 + legOffset, y - 10, 10, 20); // Right leg
+    ctx.fillStyle = skin;
+    ctx.fillRect(x + 20, y - 60, 20, 20);
 
-    // Suitcase
-    this.ctx.fillStyle = '#8B4513';
-    this.ctx.fillRect(x + 50, y - 25, 15, 20);
+    // Minimal face (eyes)
+    ctx.fillStyle = '#3d2b1f';
+    ctx.fillRect(x + 24, y - 54, 3, 3);
+    ctx.fillRect(x + 33, y - 54, 3, 3);
+
+    // Zyn cheek bulge (lower right side of face)
+    if (hasZyn) {
+      ctx.fillStyle = '#c8a070';
+      ctx.beginPath();
+      ctx.ellipse(x + 37, y - 46, 5, 4, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Hair
+    ctx.fillStyle = '#5d4037';
+    ctx.fillRect(x + 20, y - 62, 20, 5);
+
+    // Body (base shirt / pants)
+    ctx.fillStyle = outfit.top;
+    ctx.fillRect(x + 15, y - 40, 30, 20); // torso
+    ctx.fillStyle = outfit.bottom;
+    ctx.fillRect(x + 15, y - 20, 30, 10); // lower body
+
+    // --- Brand-specific overlays ---
+
+    if (outfit.label === 'chanel') {
+      // White collar
+      ctx.fillStyle = '#f0ece4';
+      ctx.fillRect(x + 22, y - 40, 16, 4);
+      // White cuffs
+      ctx.fillRect(x + 14, y - 24, 4, 4);
+      ctx.fillRect(x + 42, y - 24, 4, 4);
+    }
+
+    if (outfit.label === 'patagonia-vest') {
+      // Green quilted vest over the shirt
+      ctx.fillStyle = outfit.vest;
+      ctx.fillRect(x + 17, y - 38, 26, 22);
+      // Quilting horizontal lines
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.fillRect(x + 17, y - 31, 26, 1);
+      ctx.fillRect(x + 17, y - 23, 26, 1);
+      // Vest opening (V-neck center gap)
+      ctx.fillStyle = outfit.top;
+      ctx.fillRect(x + 27, y - 38, 6, 14);
+    }
+
+    if (outfit.label === 'scotch-and-soda') {
+      // Checkered pattern on torso
+      ctx.fillStyle = '#1a5276';
+      for (let row = 0; row < 2; row++) {
+        for (let col = 0; col < 2; col++) {
+          if ((row + col) % 2 === 0) {
+            ctx.fillRect(x + 15 + col * 15, y - 40 + row * 10, 15, 10);
+          }
+        }
+      }
+    }
+
+    if (outfit.label === 'allsaints') {
+      // Diagonal zipper line
+      ctx.fillStyle = '#666';
+      for (let i = 0; i < 6; i++) {
+        ctx.fillRect(x + 27 + i, y - 40 + i * 3, 2, 2);
+      }
+    }
+
+    if (outfit.label === 'gap') {
+      // White chest stripe
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(x + 20, y - 32, 20, 3);
+    }
+
+    if (outfit.label === 'thrift') {
+      // Mismatched pocket square
+      ctx.fillStyle = '#f1c40f';
+      ctx.fillRect(x + 18, y - 38, 8, 8);
+    }
+
+    if (outfit.label === 'todd-snyder') {
+      // Button placket
+      ctx.fillStyle = '#7a6548';
+      ctx.fillRect(x + 29, y - 38, 2, 18);
+      ctx.fillStyle = '#8a7558';
+      for (let b = 0; b < 3; b++) ctx.fillRect(x + 28, y - 35 + b * 6, 4, 2);
+    }
+
+    // Legs
+    ctx.fillStyle = outfit.bottom;
+    ctx.fillRect(x + 15, y - 10, 10, 20);
+    ctx.fillRect(x + 35 + legOffset, y - 10, 10, 20);
+
+    // Shoes
+    ctx.fillStyle = '#2c2c2c';
+    ctx.fillRect(x + 13, y + 10, 13, 5);
+    ctx.fillRect(x + 33 + legOffset, y + 10, 13, 5);
+
+    // Suitcase (right hand)
+    ctx.fillStyle = '#8B4513';
+    ctx.fillRect(x + 50, y - 25, 15, 20);
+    ctx.fillStyle = '#6d3510';
+    ctx.fillRect(x + 51, y - 28, 13, 4);
+
+    // Zyn tin (left hand, circular)
+    if (hasZyn) {
+      // Side of tin
+      ctx.fillStyle = '#2980b9';
+      ctx.beginPath();
+      ctx.ellipse(x + 8, y - 12, 6, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Top of tin (white/silver lid)
+      ctx.fillStyle = '#ecf0f1';
+      ctx.beginPath();
+      ctx.ellipse(x + 8, y - 13, 5, 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Lid edge
+      ctx.fillStyle = '#bdc3c7';
+      ctx.beginPath();
+      ctx.ellipse(x + 8, y - 13, 5, 2, 0, 0, Math.PI);
+      ctx.fill();
+    }
   }
 
   renderBiker(x, y) {
