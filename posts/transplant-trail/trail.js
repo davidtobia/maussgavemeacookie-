@@ -399,21 +399,39 @@ class TrailGame {
 
     // Zyn tin (left hand, circular)
     if (hasZyn) {
-      // Side of tin
       ctx.fillStyle = '#2980b9';
       ctx.beginPath();
       ctx.ellipse(x + 8, y - 12, 6, 6, 0, 0, Math.PI * 2);
       ctx.fill();
-      // Top of tin (white/silver lid)
       ctx.fillStyle = '#ecf0f1';
       ctx.beginPath();
       ctx.ellipse(x + 8, y - 13, 5, 2, 0, 0, Math.PI * 2);
       ctx.fill();
-      // Lid edge
       ctx.fillStyle = '#bdc3c7';
       ctx.beginPath();
       ctx.ellipse(x + 8, y - 13, 5, 2, 0, 0, Math.PI);
       ctx.fill();
+    }
+
+    // Gun (right hip, tucked in waistband)
+    if ((inv['gun'] || 0) > 0) {
+      ctx.fillStyle = '#222';
+      ctx.fillRect(x + 44, y - 20, 5, 9);  // grip
+      ctx.fillRect(x + 44, y - 22, 11, 4); // slide / barrel
+      ctx.fillStyle = '#444';
+      ctx.fillRect(x + 45, y - 21, 9, 2);  // slide detail
+      ctx.fillStyle = '#111';
+      ctx.fillRect(x + 54, y - 21, 2, 3);  // barrel tip
+    }
+
+    // Cocaine (small white baggie in breast pocket)
+    if ((inv['cocaine'] || 0) > 0) {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(x + 17, y - 38, 7, 9);  // baggie body
+      ctx.fillStyle = '#ddd';
+      ctx.fillRect(x + 18, y - 39, 5, 3);  // twist top
+      ctx.fillStyle = 'rgba(255,255,255,0.6)';
+      ctx.fillRect(x + 19, y - 36, 2, 5);  // shine
     }
   }
 
