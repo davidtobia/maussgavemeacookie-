@@ -17,7 +17,7 @@ class TrailGame {
       currentDate: new Date(2026, this.getStartMonth(), 1),
       landmarkIndex: 0, // Current position in LANDMARKS array
       milesFromLandmark: 0, // Distance traveled since last landmark
-      milesPerLandmark: 50, // Distance between landmarks
+      milesPerLandmark: 15, // Distance between landmarks
       transportation: 'walk', // Start with walking
       spendingMode: 'trader-joes', // Default to middle option
       vibeWeather: this.randomVibeWeather(),
@@ -146,6 +146,11 @@ class TrailGame {
     } else {
       menu.classList.add('hidden');
     }
+  }
+
+  closeMenu() {
+    document.getElementById('trail-menu').classList.add('hidden');
+    this.state.paused = false;
   }
 
   // ============================================
@@ -792,6 +797,7 @@ class TrailGame {
   }
 
   changeTransportation() {
+    this.closeMenu();
     this.stop();
     game.showScreen('transportation-select');
 
@@ -821,6 +827,7 @@ class TrailGame {
   }
 
   changeSpending() {
+    this.closeMenu();
     this.stop();
     game.showScreen('spending-select');
 
