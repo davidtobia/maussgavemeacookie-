@@ -15,7 +15,8 @@ class TransplantTrail {
       balances: { cash: 0, chaseFreedom: 0, chaseSapphire: 0, dadsAmex: 0, bilt: 0 },
       dadsAmexCancelled: false,
       aura: 100,
-      inventory: {}
+      inventory: {},
+      bodegaScore: 0
     };
 
     this.init();
@@ -340,9 +341,6 @@ class TransplantTrail {
   leaveStore() {
     const spent = this.calculateSpent();
     this.state.balances.chaseSapphire -= spent;
-
-    console.log('Inventory:', this.state.inventory);
-    console.log('Money remaining:', this.state.money);
 
     // Start the trail
     this.startTrail();

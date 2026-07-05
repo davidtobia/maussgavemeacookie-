@@ -171,20 +171,22 @@ class TrailGame {
   update() {
     this.frameCounter++;
 
-    // Update scroll position
-    this.backgroundOffset += this.scrollSpeed;
-    if (this.backgroundOffset > this.canvas.width) {
-      this.backgroundOffset = 0;
-    }
-
     // Update sprite animation frame (every 10 frames)
     if (this.frameCounter % 10 === 0) {
       this.spriteFrame = (this.spriteFrame + 1) % 4;
     }
 
-    // Advance time (every 10 frames = ~1 hour of game time, so ~4 seconds = 1 day)
-    if (this.frameCounter % 10 === 0) {
+    // Advance time (every 90 frames = ~1.5 real seconds per game hour)
+    if (this.frameCounter % 90 === 0) {
       this.advanceTime();
+    }
+
+    // Scroll speed tied to transport — slow walk, fast cab
+    const transport = TRANSPORTATION_MODES.find(m => m.id === this.state.transportation);
+    const travelSpeed = transport ? transport.speed : 0.5;
+    this.backgroundOffset += travelSpeed * 0.8;
+    if (this.backgroundOffset > this.canvas.width) {
+      this.backgroundOffset = 0;
     }
 
     // Check if reached next landmark
@@ -485,13 +487,22 @@ class TrailGame {
       this.gameState.balances.bilt -= totalCost;
       this.gameState.aura += apt.auraEffect;
       game.showScreen('trail-screen');
-      this.showEvent(apt.successText, () => this.start());
+      this.showEvent(apt.successText, () => this.startBodegaGame());
     } else {
       this.state.currentDay += 1;
       this.gameState.aura -= 5;
       game.showScreen('trail-screen');
       this.showEvent(apt.failText, () => this.apartmentHunt());
     }
+  }
+
+  startBodegaGame() {
+    game.showScreen('bodega-game');
+    bodegaGame = new BodegaGame(this.gameState, () => {
+      game.showScreen('trail-screen');
+      this.start();
+    });
+    bodegaGame.init();
   }
 
   lTrainCrossing() {

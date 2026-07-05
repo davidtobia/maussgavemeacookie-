@@ -279,6 +279,44 @@
       <div class="border-decoration bottom"></div>
     </div>
 
+    <!-- Bodega Mini-Game -->
+    <div id="bodega-game" class="screen">
+
+      <!-- Intro phase -->
+      <div id="bodega-intro">
+        <div class="border-decoration top"></div>
+        <div class="menu-content">
+          <p id="bodega-intro-text"></p>
+          <button id="bodega-start-btn" class="menu-option" style="margin-top: 40px;"></button>
+        </div>
+        <div class="border-decoration bottom"></div>
+      </div>
+
+      <!-- Catching phase -->
+      <div id="bodega-catching" class="hidden">
+        <div class="bodega-hud">
+          <span id="bodega-timer">0:45</span>
+          <span id="bodega-score">Score: 0</span>
+        </div>
+        <canvas id="bodega-canvas"></canvas>
+        <div class="bodega-legend">
+          <span class="bodega-good">Catch: Chopped Cheese, Vape, Broccoli</span>
+          <span class="bodega-bad">Avoid: Cat, Poop, Mouthwash</span>
+        </div>
+      </div>
+
+      <!-- Gamble phase -->
+      <div id="bodega-gamble" class="hidden">
+        <div class="border-decoration top"></div>
+        <div class="menu-content">
+          <p id="bodega-gamble-text"></p>
+          <div id="bodega-gamble-choices" class="menu-options" style="margin-top: 40px;"></div>
+        </div>
+        <div class="border-decoration bottom"></div>
+      </div>
+
+    </div>
+
     <!-- Apartment Hunt -->
     <div id="apartment-hunt" class="screen">
       <div class="border-decoration top"></div>
@@ -302,6 +340,7 @@
   <script src="store.js?v=2"></script>
   <script src="trail-data.js?v=2"></script>
   <script src="trail.js?v=2"></script>
+  <script src="bodega.js?v=1"></script>
   <script src="game.js?v=2"></script>
 
   <!-- GoatCounter Analytics -->
