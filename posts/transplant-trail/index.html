@@ -33,15 +33,25 @@
         <p class="menu-intro">You may:</p>
 
         <div class="menu-options">
-          <button class="menu-option" data-action="start">1. Travel the trail</button>
-          <button class="menu-option" data-action="learn">2. Learn about the trail</button>
-          <button class="menu-option" data-action="leaderboard">3. See the leaderboard</button>
-          <button class="menu-option" data-action="sound">4. Turn sound off</button>
+          <!-- Populated dynamically by setupMainMenu() -->
         </div>
 
         <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
       </div>
 
+      <div class="border-decoration bottom"></div>
+    </div>
+
+    <!-- Chapter Select -->
+    <div id="chapter-select" class="screen">
+      <div class="border-decoration top"></div>
+      <div class="menu-content">
+        <h2 class="screen-title">Choose a chapter</h2>
+        <div class="menu-options" id="chapter-options">
+          <!-- Populated by showChapterSelect() -->
+        </div>
+        <button class="menu-option" style="margin-top: 40px;" onclick="game.showMainMenu()">Back</button>
+      </div>
       <div class="border-decoration bottom"></div>
     </div>
 
@@ -282,37 +292,34 @@
     <!-- Bodega Mini-Game -->
     <div id="bodega-game" class="screen">
 
-      <!-- Intro phase -->
-      <div id="bodega-intro">
-        <div class="border-decoration top"></div>
-        <div class="menu-content">
-          <p id="bodega-intro-text"></p>
-          <button id="bodega-start-btn" class="menu-option" style="margin-top: 40px;"></button>
-        </div>
-        <div class="border-decoration bottom"></div>
-      </div>
-
-      <!-- Catching phase -->
-      <div id="bodega-catching" class="hidden">
-        <div class="bodega-hud">
+      <!-- Canvas layer (always visible) -->
+      <div id="bodega-catching">
+        <div class="bodega-hud hidden" id="bodega-hud">
           <span id="bodega-timer">0:45</span>
           <span id="bodega-score">Score: 0</span>
         </div>
         <canvas id="bodega-canvas"></canvas>
-        <div class="bodega-legend">
+        <div class="bodega-legend hidden" id="bodega-legend">
           <span class="bodega-good">Catch: Chopped Cheese, Vape, Broccoli</span>
           <span class="bodega-bad">Avoid: Cat, Poop, Mouthwash</span>
         </div>
       </div>
 
-      <!-- Gamble phase -->
-      <div id="bodega-gamble" class="hidden">
-        <div class="border-decoration top"></div>
-        <div class="menu-content">
-          <p id="bodega-gamble-text"></p>
-          <div id="bodega-gamble-choices" class="menu-options" style="margin-top: 40px;"></div>
+      <!-- Intro overlay (splash on top of canvas) -->
+      <div id="bodega-intro" class="bodega-overlay">
+        <div class="bodega-splash">
+          <h2 class="bodega-splash-title">BODEGA RUN</h2>
+          <p id="bodega-intro-text" class="bodega-splash-text"></p>
+          <button id="bodega-start-btn" class="menu-option" style="margin-top: 30px;"></button>
         </div>
-        <div class="border-decoration bottom"></div>
+      </div>
+
+      <!-- Gamble overlay (shown after timer ends) -->
+      <div id="bodega-gamble" class="bodega-overlay hidden">
+        <div class="bodega-splash">
+          <p id="bodega-gamble-text" class="bodega-splash-text"></p>
+          <div id="bodega-gamble-choices" class="menu-options" style="margin-top: 30px;"></div>
+        </div>
       </div>
 
     </div>

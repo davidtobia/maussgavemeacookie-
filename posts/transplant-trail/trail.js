@@ -401,6 +401,9 @@ class TrailGame {
     this.state.landmarkIndex++;
     this.state.milesFromLandmark = 0;
 
+    // Save if this is a chapter boundary (ch3 = Union Square, ch4 = LES)
+    this.checkChapterSave();
+
     const landmark = this.getCurrentLandmark();
     console.log('Reached:', landmark.name);
 
@@ -499,10 +502,34 @@ class TrailGame {
   startBodegaGame() {
     game.showScreen('bodega-game');
     bodegaGame = new BodegaGame(this.gameState, () => {
+      // Save chapter 2 checkpoint after bodega completes
+      game.saveChapter(2, this.getTrailStateSnapshot());
       game.showScreen('trail-screen');
       this.start();
     });
     bodegaGame.init();
+  }
+
+  getTrailStateSnapshot() {
+    return {
+      landmarkIndex: this.state.landmarkIndex,
+      transportation: this.state.transportation,
+      spendingMode: this.state.spendingMode,
+      currentDay: this.state.currentDay,
+      currentDate: this.state.currentDate.toISOString(),
+      vibeWeather: this.state.vibeWeather,
+      hoursElapsed: this.state.hoursElapsed,
+      milesFromLandmark: 0,
+    };
+  }
+
+  checkChapterSave() {
+    // landmarkIndex → chapter number
+    const chapterMap = { 3: 3, 6: 4 };
+    const chNum = chapterMap[this.state.landmarkIndex];
+    if (chNum) {
+      game.saveChapter(chNum, this.getTrailStateSnapshot());
+    }
   }
 
   lTrainCrossing() {

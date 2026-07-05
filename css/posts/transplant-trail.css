@@ -170,6 +170,17 @@ body {
   padding-left: 40px;
 }
 
+.menu-option.chapter-locked {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.menu-option.chapter-locked:hover {
+  background: none;
+  color: #d4a574;
+  padding-left: 20px;
+}
+
 .menu-option:active,
 .character-option:active {
   transform: scale(0.98);
@@ -795,6 +806,7 @@ body {
 
 #bodega-game.active {
   display: flex;
+  position: relative; /* needed for overlay positioning */
 }
 
 .game-container:has(#bodega-game.active) {
@@ -802,12 +814,7 @@ body {
   align-items: stretch;
 }
 
-#bodega-intro,
-#bodega-gamble {
-  flex: 1;
-  overflow-y: auto;
-}
-
+/* Canvas container — always visible, fills all space */
 #bodega-catching {
   display: flex;
   flex-direction: column;
@@ -843,6 +850,38 @@ body {
 
 .bodega-good { color: #d4a574; }
 .bodega-bad  { color: #c0392b; }
+
+/* Overlays sit on top of the canvas */
+.bodega-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 5;
+}
+
+.bodega-splash {
+  background: #000;
+  border: 3px solid #d4a574;
+  padding: 30px 36px;
+  max-width: min(500px, 92vw);
+  text-align: center;
+}
+
+.bodega-splash-title {
+  font-size: 52px;
+  letter-spacing: 4px;
+  margin-bottom: 20px;
+  text-transform: uppercase;
+}
+
+.bodega-splash-text {
+  font-size: 20px;
+  line-height: 1.7;
+  color: #d4a574;
+}
 
 /* Keyboard hint for desktop */
 @media (min-width: 769px) {

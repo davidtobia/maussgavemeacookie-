@@ -3,6 +3,29 @@
  * Screen navigation and game state management
  */
 
+const CHAPTERS = [
+  {
+    id: 1,
+    title: 'Your Big Move',
+    landmarkIndex: 0,
+  },
+  {
+    id: 2,
+    title: 'Your New Beginning in the center of the Universe: Murray Hill',
+    landmarkIndex: 1,
+  },
+  {
+    id: 3,
+    title: 'You Meet A Local and Learn Nothing Happens in the Eye of the Storm (other than dinner reservations and crowded bars)',
+    landmarkIndex: 3,
+  },
+  {
+    id: 4,
+    title: 'You Get What You Give - Finding Love is an Unusual Place',
+    landmarkIndex: 6,
+  },
+];
+
 class TransplantTrail {
   constructor() {
     this.state = {
@@ -81,31 +104,44 @@ class TransplantTrail {
   // ============================================
 
   setupMainMenu() {
-    const menuOptions = document.querySelectorAll('#main-menu .menu-option');
+    const saves = this.loadSaves();
+    const hasSave = (saves.latestChapter || 0) >= 2;
+    const container = document.querySelector('#main-menu .menu-options');
+    container.innerHTML = '';
 
-    menuOptions.forEach(option => {
-      option.addEventListener('click', () => {
-        const action = option.dataset.action;
-        this.handleMainMenuAction(action);
-      });
+    const actions = [
+      { label: 'Travel the trail', action: 'start' },
+      ...(hasSave ? [{ label: 'Continue', action: 'continue' }] : []),
+      ...(hasSave ? [{ label: 'Choose chapter', action: 'chapters' }] : []),
+      { label: 'Learn about the trail', action: 'learn' },
+      { label: 'See the leaderboard', action: 'leaderboard' },
+      { label: 'Turn sound off', action: 'sound' },
+    ];
+
+    actions.forEach((a, i) => {
+      const btn = document.createElement('button');
+      btn.className = 'menu-option';
+      btn.dataset.action = a.action;
+      btn.textContent = `${i + 1}. ${a.label}`;
+      btn.addEventListener('click', () => this.handleMainMenuAction(a.action));
+      container.appendChild(btn);
     });
   }
 
   handleMainMenuAction(action) {
     switch(action) {
-      case 'start':
-        this.startGame();
-        break;
-      case 'learn':
-        this.showLearnAboutTrail();
-        break;
-      case 'leaderboard':
-        this.showLeaderboard();
-        break;
-      case 'sound':
-        this.toggleSound();
-        break;
+      case 'start':       this.startGame(); break;
+      case 'continue':    this.continueGame(); break;
+      case 'chapters':    this.showChapterSelect(); break;
+      case 'learn':       this.showLearnAboutTrail(); break;
+      case 'leaderboard': this.showLeaderboard(); break;
+      case 'sound':       this.toggleSound(); break;
     }
+  }
+
+  showMainMenu() {
+    this.setupMainMenu();
+    this.showScreen('main-menu');
   }
 
   startGame() {
@@ -348,6 +384,97 @@ class TransplantTrail {
 
 
   // ============================================
+  // CHAPTERS & SAVE SYSTEM
+  // ============================================
+
+  loadSaves() {
+    try {
+      return JSON.parse(localStorage.getItem('transplant-saves') || '{}');
+    } catch (e) {
+      return {};
+    }
+  }
+
+  saveChapter(chapterNum, trailStateSnapshot) {
+    const saves = this.loadSaves();
+    saves[`ch${chapterNum}`] = {
+      characterId: this.state.selectedCharacter.id,
+      playerName: this.state.playerName,
+      departureMonth: this.state.departureMonth,
+      checkingAccount: this.state.checkingAccount,
+      balances: { ...this.state.balances },
+      dadsAmexCancelled: this.state.dadsAmexCancelled,
+      aura: this.state.aura,
+      inventory: { ...this.state.inventory },
+      bodegaScore: this.state.bodegaScore || 0,
+      trailState: trailStateSnapshot,
+    };
+    saves.latestChapter = Math.max(saves.latestChapter || 1, chapterNum);
+    localStorage.setItem('transplant-saves', JSON.stringify(saves));
+  }
+
+  continueGame() {
+    const saves = this.loadSaves();
+    this.resumeChapter(saves.latestChapter || 1);
+  }
+
+  resumeChapter(chapterNum) {
+    if (chapterNum === 1) {
+      this.showCharacterSelect();
+      return;
+    }
+
+    const saves = this.loadSaves();
+    const save = saves[`ch${chapterNum}`];
+    if (!save) { this.showChapterSelect(); return; }
+
+    // Restore game state
+    this.state.selectedCharacter  = getCharacter(save.characterId);
+    this.state.playerName         = save.playerName;
+    this.state.departureMonth     = save.departureMonth;
+    this.state.checkingAccount    = save.checkingAccount;
+    this.state.balances           = { ...save.balances };
+    this.state.dadsAmexCancelled  = save.dadsAmexCancelled || false;
+    this.state.aura               = save.aura;
+    this.state.inventory          = { ...save.inventory };
+    this.state.bodegaScore        = save.bodegaScore || 0;
+
+    this.showScreen('trail-screen');
+    trailGame = new TrailGame(this.state);
+
+    // Restore trail state on top of defaults
+    const ts = save.trailState;
+    trailGame.state.landmarkIndex      = ts.landmarkIndex;
+    trailGame.state.transportation     = ts.transportation;
+    trailGame.state.spendingMode       = ts.spendingMode;
+    trailGame.state.currentDay         = ts.currentDay;
+    trailGame.state.currentDate        = new Date(ts.currentDate);
+    trailGame.state.vibeWeather        = ts.vibeWeather;
+    trailGame.state.hoursElapsed       = ts.hoursElapsed || 0;
+    trailGame.state.milesFromLandmark  = 0;
+
+    trailGame.start();
+  }
+
+  showChapterSelect() {
+    const saves = this.loadSaves();
+    this.showScreen('chapter-select');
+
+    const container = document.getElementById('chapter-options');
+    container.innerHTML = '';
+
+    CHAPTERS.forEach((ch, i) => {
+      const unlocked = ch.id === 1 || !!saves[`ch${ch.id}`];
+      const btn = document.createElement('button');
+      btn.className = 'menu-option' + (unlocked ? '' : ' chapter-locked');
+      btn.disabled = !unlocked;
+      btn.textContent = `${i + 1}. ${ch.title}`;
+      if (unlocked) btn.onclick = () => this.resumeChapter(ch.id);
+      container.appendChild(btn);
+    });
+  }
+
+  // ============================================
   // TRAIL
   // ============================================
 
@@ -387,4 +514,18 @@ class TransplantTrail {
 let game;
 document.addEventListener('DOMContentLoaded', () => {
   game = new TransplantTrail();
+
+  // Dev shortcut: ?scene=bodega skips straight to the mini-game
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('scene') === 'bodega') {
+    const char = getCharacter('remote-worker');
+    game.state.selectedCharacter = char;
+    game.state.playerName = 'Dev';
+    game.state.checkingAccount = char.checkingAccount;
+    game.state.balances = { ...char.balances };
+    game.state.departureMonth = 'march';
+    game.showScreen('trail-screen');
+    trailGame = new TrailGame(game.state);
+    trailGame.startBodegaGame();
+  }
 });
