@@ -658,6 +658,7 @@ class TrailGame {
   }
 
   startBodegaGame() {
+    this.stop();
     game.showScreen('bodega-game');
     bodegaGame = new BodegaGame(this.gameState, () => {
       // Save chapter 2 checkpoint after bodega completes
@@ -669,6 +670,7 @@ class TrailGame {
   }
 
   startCannonGame() {
+    this.stop();
     game.showScreen('cannon-game');
     cannonGame = new CannonGame(this.gameState, () => {
       // Save chapter 3 checkpoint after cannon game completes
