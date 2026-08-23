@@ -566,6 +566,8 @@ class TrailGame {
     // Handle different landmark types
     if (landmark.id === 'murray-hill') {
       this.apartmentHunt();
+    } else if (landmark.id === 'washington-square-park') {
+      this.showEvent('You arrive at Washington Square Park. Three figures are waiting by the arch.', () => this.startCannonGame());
     } else if (landmark.type === 'fort') {
       this.showEvent(`You reached ${landmark.name}! You can rest and resupply here.`);
     } else if (landmark.type === 'crossing') {
@@ -666,6 +668,17 @@ class TrailGame {
     bodegaGame.init();
   }
 
+  startCannonGame() {
+    game.showScreen('cannon-game');
+    cannonGame = new CannonGame(this.gameState, () => {
+      // Save chapter 3 checkpoint after cannon game completes
+      game.saveChapter(3, this.getTrailStateSnapshot());
+      game.showScreen('trail-screen');
+      this.start();
+    });
+    cannonGame.init();
+  }
+
   getTrailStateSnapshot() {
     return {
       landmarkIndex: this.state.landmarkIndex,
@@ -680,8 +693,9 @@ class TrailGame {
   }
 
   checkChapterSave() {
-    // landmarkIndex → chapter number
-    const chapterMap = { 3: 3, 6: 4 };
+    // Auto-save ch4 when reaching LES (index 7).
+    // ch2 is saved by startBodegaGame callback; ch3 by startCannonGame callback.
+    const chapterMap = { 7: 4 };
     const chNum = chapterMap[this.state.landmarkIndex];
     if (chNum) {
       game.saveChapter(chNum, this.getTrailStateSnapshot());

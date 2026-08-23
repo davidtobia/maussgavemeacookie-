@@ -21,8 +21,8 @@ const CHAPTERS = [
   },
   {
     id: 4,
-    title: 'You Get What You Give - Finding Love is an Unusual Place',
-    landmarkIndex: 6,
+    title: 'You Get What You Give - Finding Love in an Unusual Place',
+    landmarkIndex: 7,
   },
 ];
 
@@ -515,17 +515,28 @@ let game;
 document.addEventListener('DOMContentLoaded', () => {
   game = new TransplantTrail();
 
-  // Dev shortcut: ?scene=bodega skips straight to the mini-game
+  // Dev shortcuts: ?scene=bodega or ?scene=cannon
   const params = new URLSearchParams(window.location.search);
-  if (params.get('scene') === 'bodega') {
+  const scene  = params.get('scene');
+
+  if (scene === 'bodega' || scene === 'cannon') {
     const char = getCharacter('remote-worker');
     game.state.selectedCharacter = char;
-    game.state.playerName = 'Dev';
-    game.state.checkingAccount = char.checkingAccount;
-    game.state.balances = { ...char.balances };
-    game.state.departureMonth = 'march';
-    game.showScreen('trail-screen');
-    trailGame = new TrailGame(game.state);
-    trailGame.startBodegaGame();
+    game.state.playerName        = 'Dev';
+    game.state.checkingAccount   = char.checkingAccount;
+    game.state.balances          = { ...char.balances };
+    game.state.departureMonth    = 'march';
+
+    if (scene === 'bodega') {
+      game.showScreen('trail-screen');
+      trailGame = new TrailGame(game.state);
+      trailGame.startBodegaGame();
+    } else {
+      game.showScreen('cannon-game');
+      cannonGame = new CannonGame(game.state, () => {
+        alert('Cannon game complete! (dev mode)');
+      });
+      cannonGame.init();
+    }
   }
 });

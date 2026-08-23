@@ -891,3 +891,543 @@ body {
     opacity: 0.7;
   }
 }
+
+/* ============================================
+   CANNON GAME (Washington Square Park)
+   ============================================ */
+
+#cannon-game {
+  width: 100%;
+  height: 100vh;
+  display: none;
+  background: #000;
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+}
+
+#cannon-game.active {
+  display: block;
+}
+
+.game-container:has(#cannon-game.active) {
+  padding: 0;
+  align-items: stretch;
+}
+
+#cannon-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+/* Overlays sit on top of canvas */
+.cannon-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.86);
+  z-index: 5;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.cannon-overlay.hidden {
+  display: none;
+}
+
+/* Aim overlay — transparent so canvas shows through, clicks pass through */
+.cannon-overlay-aim {
+  background: transparent;
+  pointer-events: none;
+  align-items: flex-start;
+  justify-content: center;
+  z-index: 4;
+  padding: 0;
+}
+
+.cannon-aim-hud {
+  margin-top: 10px;
+  background: rgba(0, 0, 0, 0.62);
+  padding: 8px 22px;
+  text-align: center;
+  font-family: 'VT323', monospace;
+  font-size: 22px;
+  color: #fff;
+  line-height: 1.5;
+}
+
+.cannon-aim-hud p {
+  margin: 0;
+}
+
+/* Splash panel base */
+.cannon-splash {
+  background: #000;
+  border: 3px solid #d4a574;
+  padding: 28px 32px;
+  max-width: min(480px, 94vw);
+  text-align: center;
+  font-family: 'VT323', monospace;
+  color: #d4a574;
+}
+
+.cannon-splash-wide {
+  max-width: min(820px, 96vw);
+}
+
+.cannon-splash-title {
+  font-size: 42px;
+  letter-spacing: 3px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.cannon-splash-sub {
+  font-size: 20px;
+  color: #777;
+  margin-bottom: 18px;
+}
+
+.cannon-splash-img {
+  width: 100%;
+  max-width: 760px;
+  height: auto;
+  display: block;
+  margin: 0 auto 18px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border: 2px solid #3a3a6a;
+}
+
+/* Wisemen grid */
+.cannon-wisemen-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 14px 0;
+  text-align: left;
+}
+
+.cannon-wiseman {
+  border: 2px solid #3a3a6a;
+  padding: 10px;
+  background: #080818;
+}
+
+.cannon-wiseman-portrait {
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 8px;
+  border: 2px solid #555;
+}
+
+.cannon-wiseman-portrait.nj-italian     { background: #7a1a1a; }
+.cannon-wiseman-portrait.queens-bengali { background: #1a5a1a; }
+.cannon-wiseman-portrait.coney-russian  { background: #1a1a7a; }
+
+.cannon-wiseman-name {
+  font-size: 18px;
+  color: #d4a574;
+}
+
+.cannon-wiseman-origin {
+  font-size: 14px;
+  color: #555;
+  margin-bottom: 6px;
+}
+
+.cannon-wiseman-line {
+  font-size: 14px;
+  color: #999;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.cannon-wiseman-message {
+  font-size: 18px;
+  color: #777;
+  margin: 14px 0 0;
+  padding: 10px;
+  border: 1px solid #222;
+  line-height: 1.5;
+}
+
+/* Shop panel */
+.cannon-shop-panel {
+  max-width: min(560px, 96vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 22px 26px;
+}
+
+.cannon-shop-bucks-display {
+  font-size: 38px;
+  color: #2ecc71;
+  margin: 4px 0;
+}
+
+.cannon-shop-turn-label {
+  font-size: 18px;
+  color: #666;
+  margin-bottom: 14px;
+}
+
+.cannon-shop-upgrades {
+  text-align: left;
+}
+
+.cannon-shop-section {
+  border: 1px solid #1e1e2e;
+  padding: 10px 12px;
+  margin: 8px 0;
+}
+
+.cannon-shop-cat {
+  font-size: 15px;
+  letter-spacing: 2px;
+  color: #555;
+  margin-bottom: 4px;
+}
+
+.cannon-shop-owned {
+  font-size: 18px;
+  color: #2ecc71;
+  margin-bottom: 6px;
+}
+
+.cannon-shop-maxed {
+  font-size: 16px;
+  color: #333;
+}
+
+.cannon-shop-desc {
+  font-size: 14px;
+  color: #666;
+}
+
+/* Override hover state for locked/selected shop items */
+button.menu-option.cannon-shop-locked,
+button.menu-option.cannon-shop-locked:hover {
+  opacity: 0.32;
+  background: none;
+  color: #d4a574;
+  padding-left: 20px;
+  cursor: not-allowed;
+}
+
+button.menu-option.cannon-selected,
+button.menu-option.cannon-selected:hover {
+  border-left: 4px solid #2ecc71;
+  color: #2ecc71;
+  background: rgba(46, 204, 113, 0.08);
+  padding-left: 20px;
+}
+
+/* Stat lines in results / final */
+.cannon-stat {
+  font-size: 22px;
+  margin: 8px 0;
+}
+
+.cannon-stat-total {
+  font-size: 28px;
+  margin-top: 16px;
+  color: #d4a574;
+}
+
+.cannon-final-flavor {
+  font-size: 18px;
+  line-height: 1.55;
+  color: #e0c47c;
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px solid #333;
+}
+
+/* Boost button (shown during flight when rocket available) */
+.cannon-flight-hud {
+  position: absolute;
+  bottom: 24px;
+  right: 20px;
+  z-index: 3;
+}
+
+.cannon-boost-btn {
+  font-family: 'VT323', monospace;
+  font-size: 28px;
+  background: rgba(192, 48, 32, 0.88);
+  color: #fff;
+  border: 3px solid #e74c3c;
+  padding: 14px 24px;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.cannon-boost-btn:active {
+  transform: scale(0.95);
+  background: rgba(231, 76, 60, 0.95);
+}
+
+/* ============================================
+   FEATURES SCREEN & PROGRESS BARS
+   ============================================ */
+
+.cannon-features-btns {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+.cannon-feat-bars {
+  margin: 14px 0;
+  text-align: left;
+}
+
+.cannon-feat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 7px 0;
+}
+
+.cannon-feat-label {
+  font-size: 16px;
+  color: #d4a574;
+  width: 130px;
+  flex-shrink: 0;
+}
+
+.cannon-feat-bar-wrap {
+  flex: 1;
+  height: 14px;
+  background: #1a1a2e;
+  border: 1px solid #333;
+}
+
+.cannon-feat-bar {
+  height: 100%;
+  background: #2ecc71;
+  transition: width 0.3s;
+}
+
+.cannon-feat-tier {
+  font-size: 14px;
+  color: #777;
+  width: 120px;
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.cannon-feat-stats {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  padding: 10px;
+  border-top: 1px solid #222;
+}
+
+.cannon-feat-stat {
+  font-size: 17px;
+  color: #777;
+}
+
+.cannon-feat-val {
+  color: #2ecc71;
+}
+
+/* Progress bars inside shop (same bar style, smaller container) */
+.cannon-shop-bars {
+  margin: 0 0 10px 0;
+  padding: 8px 10px;
+  border: 1px solid #1a1a2e;
+  background: #050510;
+}
+
+.cannon-shop-bars .cannon-feat-label {
+  width: 80px;
+  font-size: 14px;
+}
+
+.cannon-shop-bars .cannon-feat-tier { display: none; }
+
+/* ============================================
+   INSTRUCTIONS PANEL
+   ============================================ */
+
+.cannon-instructions-panel {
+  max-width: min(700px, 96vw);
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 22px 26px;
+  text-align: left;
+}
+
+.cannon-instructions-panel h2 {
+  text-align: center;
+}
+
+.cannon-instr-sections {
+  margin: 14px 0;
+}
+
+.cannon-instr-section {
+  border-left: 3px solid #1e1e3e;
+  padding: 8px 0 8px 12px;
+  margin: 10px 0;
+}
+
+.cannon-instr-heading {
+  font-size: 16px;
+  letter-spacing: 2px;
+  color: #777;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+
+.cannon-instr-body {
+  font-size: 17px;
+  color: #999;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.cannon-instr-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.cannon-instr-list li {
+  font-size: 16px;
+  color: #888;
+  line-height: 1.55;
+  padding: 1px 0;
+}
+
+.cannon-instr-list li::before {
+  content: '— ';
+  color: #444;
+}
+
+.cannon-instr-key {
+  color: #d4a574;
+}
+
+/* Borough unlock reveal in results screen */
+.cannon-results-unlock {
+  margin: 18px 0 0;
+  padding: 14px;
+  border: 2px solid #d4a574;
+  background: #060612;
+  text-align: left;
+}
+
+.cannon-results-unlock.hidden { display: none; }
+
+.cannon-unlock-borough {
+  font-size: 22px;
+  font-weight: bold;
+  letter-spacing: 1px;
+  border-left: 4px solid currentColor;
+  padding-left: 10px;
+  margin-bottom: 6px;
+}
+
+.cannon-unlock-title {
+  font-size: 18px;
+  color: #d4a574;
+  margin-bottom: 8px;
+}
+
+.cannon-unlock-text {
+  font-size: 16px;
+  color: #999;
+  line-height: 1.55;
+}
+
+/* Shop button row */
+.cannon-shop-btns {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+
+.cannon-shop-btns .menu-option { flex: 1; text-align: center; }
+
+button.menu-option.cannon-shop-exit-btn,
+button.menu-option.cannon-shop-exit-btn:hover {
+  color: #777;
+  border-left-color: #333;
+}
+
+/* Collected items in features screen */
+.cannon-feat-unlocks {
+  margin: 14px 0;
+  padding: 10px;
+  border: 1px solid #1a1a2e;
+  text-align: left;
+}
+
+.cannon-feat-unlocks-title {
+  font-size: 14px;
+  letter-spacing: 2px;
+  color: #555;
+  margin-bottom: 6px;
+}
+
+.cannon-feat-unlock-entry {
+  font-size: 15px;
+  color: #888;
+  border-left: 3px solid #333;
+  padding-left: 8px;
+  margin: 5px 0;
+  line-height: 1.4;
+}
+
+/* Map overlay — higher z-index so it appears on top of features */
+.cannon-map-overlay {
+  z-index: 10;
+}
+
+.cannon-map-canvas {
+  display: block;
+  margin: 12px auto 0;
+  max-width: 100%;
+  image-rendering: pixelated;
+}
+
+/* Mobile: stack wisemen vertically */
+@media (max-width: 600px) {
+  .cannon-wisemen-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .cannon-wiseman {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .cannon-wiseman-portrait {
+    flex-shrink: 0;
+    margin: 0;
+  }
+
+  .cannon-splash-title {
+    font-size: 32px;
+  }
+}
