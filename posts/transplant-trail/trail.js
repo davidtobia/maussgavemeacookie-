@@ -702,6 +702,26 @@ class TrailGame {
   // THE WISE ERICS' MONEY-MAKING SCHEME
   // ============================================
 
+  startHeistGame() {
+    this.stop();
+    game.showScreen('heist-game');
+    heistGame = new HeistGame(this.gameState, (result) => {
+      // Whatever survived the arrest is real money, same as the cannon game's
+      // Borough Bucks.
+      if (result && result.heistCash) {
+        this.gameState.checkingAccount += result.heistCash;
+      }
+      this.gameState.heistDone = true;
+      if (result) this.gameState.heistAssignments = result.assignments;
+      game.showScreen('trail-screen');
+      this.showEvent(
+        `You are out on your own recognizance with $${result ? result.heistCash : 0} you should not have. Act 3 is coming soon.`,
+        () => this.start()
+      );
+    });
+    heistGame.init();
+  }
+
   showWiseEricsPitch() {
     this.showEvent(
       '[The Wise Erics notice how broke you are and pitch an idea — dialogue to be written]',
@@ -716,8 +736,7 @@ class TrailGame {
     const proceed = () => {
       box.classList.add('hidden');
       this.state.paused = false;
-      // TODO: this is the entry point into the next mini-game once it's built.
-      this.showEvent('[The Wise Erics\' hustle — next mini-game to be built]', () => this.start());
+      this.startHeistGame();
     };
     document.getElementById('wise-erics-yes').onclick = proceed;
     document.getElementById('wise-erics-ofcourse').onclick = proceed;

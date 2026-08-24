@@ -521,11 +521,11 @@ let game;
 document.addEventListener('DOMContentLoaded', () => {
   game = new TransplantTrail();
 
-  // Dev shortcuts: ?scene=bodega or ?scene=cannon
+  // Dev shortcuts: ?scene=bodega, ?scene=cannon or ?scene=heist
   const params = new URLSearchParams(window.location.search);
   const scene  = params.get('scene');
 
-  if (scene === 'bodega' || scene === 'cannon') {
+  if (scene === 'bodega' || scene === 'cannon' || scene === 'heist') {
     const char = getCharacter('remote-worker');
     game.state.selectedCharacter = char;
     game.state.playerName        = 'Dev';
@@ -537,6 +537,14 @@ document.addEventListener('DOMContentLoaded', () => {
       game.showScreen('trail-screen');
       trailGame = new TrailGame(game.state);
       trailGame.startBodegaGame();
+    } else if (scene === 'heist') {
+      // Jump straight into Act 2 through the same entry point the trail uses,
+      // so the dev shortcut exercises the real wiring and not a parallel path.
+      game.state.wisemenJoined   = true;
+      game.state.wiseEricsPitched = true;
+      game.showScreen('trail-screen');
+      trailGame = new TrailGame(game.state);
+      trailGame.startHeistGame();
     } else {
       game.showScreen('cannon-game');
       cannonGame = new CannonGame(game.state, () => {
