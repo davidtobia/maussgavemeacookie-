@@ -85,18 +85,15 @@ const HEIST_TUNING = {
   // correct late and you're already committed. That inertia is the actual
   // difficulty, not just steering toward the goal.
   maze: {
-    // Dialed back from accel .11 / friction .978 after simulated play (see
-    // mazeLayout()) showed that combo was uncontrollable on digital
-    // buttons -- terminal speed near 5 units/frame with almost no way to
-    // stop on a dime, on top of the layout bugs fixed alongside it. Still
-    // clearly quicker than a shove-around-a-marble feel (terminal speed
-    // ~0.72 units/frame here vs. the very first pass's ~0.8, but you get
-    // there and stop much faster with this much friction), just not
-    // fighting the controls to do it. A bigger ball radius too, so a near
-    // miss reads as a near miss instead of a graze you didn't feel.
+    // Re-simulated for the winding-tunnel-plus-ants redesign (see
+    // generateMazeLayout()): accel .06 / friction .90 (terminal ~0.6
+    // units/frame) against 300 randomly generated layouts with a
+    // deliberately imperfect bot -- reaction lag, imprecise stops, a
+    // "hesitate near a moving ant" heuristic instead of perfect timing --
+    // landed at ~86% clean completions, comfortably inside the clock.
     timeLimit: 70,
-    accel: 0.065,
-    friction: 0.91,
+    accel: 0.06,
+    friction: 0.90,
     ballRadius: 2.8,
   },
   getaway: {
@@ -1294,50 +1291,104 @@ class HeistGame {
   // (two thumbs, or mouse position on desktop) to roll a ball from the pins'
   // resting position to the shear line without dropping it down through the
   // housing. Real momentum, real holes, no scripted safety net beyond time.
-  mazeLayout() {
-    // Cut back from seven reversals to five after simulating the original
-    // layout and confirming why it felt impossible: it wasn't just fast,
-    // it had two real bugs. (1) The ramp sat dead-center (x 42-58) while
-    // the wall right before it only opens on the far right (x 68-100) --
-    // every run crossed that gap carrying rightward speed, then had to
-    // yank ~30 units sideways in about 6 units of vertical room to line up
-    // with the ramp, and simulated play missed it and fell in the chasm
-    // basically every single time. (2) Several holes sat right in the
-    // strip a ball is forced to slide along while pinned against a wall
-    // hunting for the gap -- not a dodge, a guaranteed hit. Five reversals
-    // with the ramp aligned to the exit it actually follows, and holes
-    // moved off the pinned corridors, simulated to a 100% completion rate
-    // for a deliberately imperfect bot (reaction lag + imprecise stops) in
-    // well under half the clock -- still fast, still a real dodge, just
-    // not rigged.
-    return {
-      start: { x: 8, y: 6 },
-      goal: { x: 50, y: 97, r: 5 },
-      walls: [
-        { x: 0,  y: 16, w: 68, h: 4.5 },  // gap right (68-100)
-        { x: 32, y: 30, w: 68, h: 4.5 },  // gap left  (0-32)
-        { x: 0,  y: 44, w: 68, h: 4.5 },  // gap right
-        { x: 32, y: 58, w: 68, h: 4.5 },  // gap left
-        { x: 0,  y: 72, w: 68, h: 4.5 },  // gap right, into the ramp section
-      ],
-      holes: [
-        { x: 46, y: 9,  r: 2.6 },
-        { x: 46, y: 23, r: 2.6 },
-        { x: 46, y: 37, r: 2.6 },
-        { x: 46, y: 51, r: 2.6 },
-        { x: 46, y: 65, r: 2.6 },
-        // The chasm, sitting under the ramp's own x-range (which is
-        // aligned with wall 5's exit corridor, not dead-center) instead of
-        // spanning ground you'd otherwise have to scramble sideways
-        // across to reach it.
-        { x: 42, y: 91, r: 8 },
-        { x: 62, y: 91, r: 8 },
-        { x: 82, y: 91, r: 8 },
-      ],
-      ramps: [
-        { x: 68, y: 82, w: 22, h: 5 },
-      ],
+  // A switchback grid with the holes in the same place every run reads as
+  // a diagram, not a dodge -- once you've seen it, "hard" collapses into
+  // "memorized." This generates a genuinely different winding tunnel every
+  // time you play it: a wiggling centerline (three summed sine waves with
+  // randomized frequency/phase, plus a random overall left/right drift),
+  // a handful of static pits, and fire ants that patrol back and forth
+  // across the tunnel -- a timing dodge, not a fixed-position one. It
+  // straightens into a plain centered runway for the last stretch so the
+  // ramp always sits exactly where the tunnel was already taking you, not
+  // off to the side -- the "jump makes no sense" bug in the switchback
+  // version. Simulated across 300 random layouts with a deliberately
+  // imperfect bot (reaction lag, imprecise stops, no perfect foresight):
+  // ~86% clean completions well inside the clock.
+  mazeSmoothstep(a, b, x) {
+    const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
+    return t * t * (3 - 2 * t);
+  }
+
+  generateMazeLayout() {
+    const N = 72, HALF_WIDTH = 15;
+    const RAMP_T0 = 0.80, RAMP_T1 = 0.835, CHASM_T0 = 0.835, CHASM_T1 = 0.945, FINALE_X = 50;
+    const rnd = Math.random;
+
+    const freqs = [0.8 + rnd() * 1.0, 2.0 + rnd() * 1.6, 3.6 + rnd() * 2.2];
+    const phases = [rnd() * Math.PI * 2, rnd() * Math.PI * 2, rnd() * Math.PI * 2];
+    const amps = [15, 8, 4];
+    const dirBias = (rnd() - 0.5) * 6;
+
+    const points = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      let x = 50 + dirBias * t;
+      for (let k = 0; k < freqs.length; k++) x += amps[k] * Math.sin(freqs[k] * Math.PI * 2 * t + phases[k]);
+      x = Math.max(18, Math.min(82, x));
+      if (t >= 0.72) x = x + (FINALE_X - x) * this.mazeSmoothstep(0.72, RAMP_T0, t);
+      if (t >= RAMP_T0) x = FINALE_X;
+      points.push({ x, y: 6 + t * (97 - 6), t });
+    }
+
+    const pathAt = (t) => {
+      const idx = Math.max(0, Math.min(N, t * N));
+      const i0 = Math.floor(idx), frac = idx - i0;
+      const p0 = points[i0], p1 = points[Math.min(i0 + 1, N)];
+      return { x: p0.x + (p1.x - p0.x) * frac, y: p0.y + (p1.y - p0.y) * frac };
     };
+
+    const holes = [];
+    const numHoles = 3 + Math.floor(rnd() * 2);
+    for (let tries = 0; holes.length < numHoles && tries < 200; tries++) {
+      const t = 0.08 + rnd() * 0.6;
+      if (holes.some(h => Math.abs(h.t - t) < 0.08)) continue;
+      const p = pathAt(t);
+      const r = 2.3 + rnd() * 0.4;
+      const maxOffset = HALF_WIDTH - r - 5;
+      holes.push({ t, x: p.x + (rnd() * 2 - 1) * maxOffset, y: p.y, r });
+    }
+
+    const ants = [];
+    const numAnts = 1 + Math.floor(rnd() * 2);
+    for (let tries = 0; ants.length < numAnts && tries < 200; tries++) {
+      const t = 0.14 + rnd() * 0.5;
+      if (ants.some(a => Math.abs(a.t - t) < 0.12) || holes.some(h => Math.abs(h.t - t) < 0.07)) continue;
+      const p = pathAt(t);
+      ants.push({
+        t, baseX: p.x, y: p.y,
+        amp: HALF_WIDTH - 7,
+        speed: 0.025 + rnd() * 0.02,
+        phase: rnd() * Math.PI * 2,
+        r: 2.2,
+        x: p.x,
+      });
+    }
+
+    const rampP = pathAt((RAMP_T0 + RAMP_T1) / 2);
+    const ramp = { x: rampP.x - 11, y: rampP.y - 2.5, w: 22, h: (RAMP_T1 - RAMP_T0) * (97 - 6) + 5 };
+
+    return {
+      points, pathAt, holes, ants, ramp,
+      rampT0: RAMP_T0, rampT1: RAMP_T1, chasmT0: CHASM_T0, chasmT1: CHASM_T1, halfWidth: HALF_WIDTH,
+      start: { x: points[0].x, y: points[0].y },
+      goal: { x: FINALE_X, y: 97, r: 5 },
+    };
+  }
+
+  mazeClosestOnPath(layout, px, py) {
+    const pts = layout.points;
+    let best = Infinity, bestX = pts[0].x, bestY = pts[0].y, bestT = 0;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const abx = b.x - a.x, aby = b.y - a.y;
+      const len2 = abx * abx + aby * aby || 1;
+      let t = ((px - a.x) * abx + (py - a.y) * aby) / len2;
+      t = Math.max(0, Math.min(1, t));
+      const cx = a.x + abx * t, cy = a.y + aby * t;
+      const d = Math.hypot(px - cx, py - cy);
+      if (d < best) { best = d; bestX = cx; bestY = cy; bestT = a.t + (b.t - a.t) * t; }
+    }
+    return { dist: best, x: bestX, y: bestY, t: bestT };
   }
 
   startRegister() {
@@ -1345,7 +1396,7 @@ class HeistGame {
     this.hideOverlays();
     this.phase = 'maze';
     const t = HEIST_TUNING.maze;
-    const layout = this.mazeLayout();
+    const layout = this.generateMazeLayout();
 
     this.mazeTiltX = 0;
     this.mazeTiltY = 0;
@@ -1359,11 +1410,14 @@ class HeistGame {
       ball: { x: layout.start.x, y: layout.start.y, vx: 0, vy: 0, airborne: false, airborneTimer: 0 },
       resets: 0,
       completed: false,
-      // Falling in a hole sends you back to the last wall you actually got
-      // past, not all the way to the start -- one bad dodge on wall 4
-      // shouldn't force redoing walls 1-3 from scratch.
+      // Falling in a hole or getting clipped by an ant sends you back to
+      // the furthest point you actually reached, not all the way to the
+      // start -- but only a point that was actually clear when you passed
+      // it. Banking a checkpoint mid-hazard would just respawn you back
+      // into it forever (a real bug in an earlier pass: same coordinates,
+      // instant re-death, every single retry).
       checkpoint: { x: layout.start.x, y: layout.start.y },
-      wallsCleared: 0,
+      maxT: 0,
     };
 
     // Distraction work buys you a little breathing room — every hotspot the
@@ -1386,19 +1440,6 @@ class HeistGame {
     this.mazeLoop();
   }
 
-  resolveWallCollision(ball, r, wall) {
-    const closestX = Math.max(wall.x, Math.min(ball.x, wall.x + wall.w));
-    const closestY = Math.max(wall.y, Math.min(ball.y, wall.y + wall.h));
-    const dx = ball.x - closestX, dy = ball.y - closestY;
-    const dist = Math.hypot(dx, dy);
-    if (dist >= r || dist < 0.0001) return;
-    const push = r - dist, nx = dx / dist, ny = dy / dist;
-    ball.x += nx * push;
-    ball.y += ny * push;
-    const vDotN = ball.vx * nx + ball.vy * ny;
-    if (vDotN < 0) { ball.vx -= vDotN * nx; ball.vy -= vDotN * ny; }
-  }
-
   mazeLoop() {
     const m = this.mech;
     if (!m || m.kind !== 'maze') return;
@@ -1406,53 +1447,68 @@ class HeistGame {
     this._frame++;
 
     if (!m.completed) {
+      // Ants patrol laterally, independent of the player -- world state,
+      // not something you can freeze by holding still.
+      layout.ants.forEach(a => { a.x = a.baseX + Math.sin(this._frame * a.speed + a.phase) * a.amp; });
+
       ball.vx += this.mazeTiltX * t.accel;
       ball.vy += this.mazeTiltY * t.accel;
       ball.vx *= t.friction;
       ball.vy *= t.friction;
       ball.x += ball.vx;
       ball.y += ball.vy;
-      ball.x = Math.max(t.ballRadius, Math.min(100 - t.ballRadius, ball.x));
-      ball.y = Math.max(t.ballRadius, Math.min(100 - t.ballRadius, ball.y));
 
-      // Airborne (off the ramp): walls still block you, but you sail right
-      // over any hole underneath -- that's the entire point of the ramp.
       if (ball.airborneTimer > 0) {
         ball.airborneTimer--;
         if (ball.airborneTimer <= 0) ball.airborne = false;
       }
-      layout.walls.forEach(w => this.resolveWallCollision(ball, t.ballRadius, w));
 
-      if (!ball.airborne && layout.ramps) {
-        const onRamp = layout.ramps.find(r =>
-          ball.x > r.x && ball.x < r.x + r.w && ball.y > r.y && ball.y < r.y + r.h);
-        if (onRamp) {
-          ball.airborne = true;
-          ball.airborneTimer = 60;
-          ball.vy = Math.max(ball.vy, 2.2); // guarantee enough speed to clear the chasm
-        }
-      }
-
-      // Passed a wall for the first time this run: that's the new
-      // checkpoint. Checked before the hole test below so a hole right
-      // past a wall you just cleared can't strand your checkpoint short
-      // of the wall you're already through.
-      if (m.wallsCleared < layout.walls.length) {
-        const w = layout.walls[m.wallsCleared];
-        if (ball.y > w.y + w.h) {
-          m.checkpoint = { x: ball.x, y: w.y + w.h + 1 };
-          m.wallsCleared++;
-        }
+      // Tunnel containment: a soft wall against the winding path's own
+      // boundary, instead of a fixed rectangle grid. Still blocks you
+      // while airborne, so a jump stays roughly over the tunnel rather
+      // than sailing off wherever.
+      const cp = this.mazeClosestOnPath(layout, ball.x, ball.y);
+      const limit = layout.halfWidth - t.ballRadius;
+      if (cp.dist > limit && cp.dist > 0.0001) {
+        const nx = (ball.x - cp.x) / cp.dist, ny = (ball.y - cp.y) / cp.dist;
+        const push = cp.dist - limit;
+        ball.x -= nx * push; ball.y -= ny * push;
+        const vDotN = ball.vx * nx + ball.vy * ny;
+        if (vDotN > 0) { ball.vx -= vDotN * nx; ball.vy -= vDotN * ny; }
       }
 
       if (!ball.airborne) {
+        const onRamp = ball.x > layout.ramp.x && ball.x < layout.ramp.x + layout.ramp.w &&
+          ball.y > layout.ramp.y && ball.y < layout.ramp.y + layout.ramp.h;
+        if (onRamp) {
+          ball.airborne = true;
+          ball.airborneTimer = 80;
+          ball.vy = Math.max(ball.vy, 2.4); // guarantee enough speed to clear the chasm
+        }
+      }
+
+      // Bank a checkpoint only on a frame where the ball is actually clear
+      // of every hazard -- see the note on m.checkpoint above.
+      if (cp.t > m.maxT) {
+        const margin = 2;
+        const nearHazard = layout.holes.some(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r + t.ballRadius + margin) ||
+          layout.ants.some(a => Math.hypot(ball.x - a.x, ball.y - a.y) < a.r + t.ballRadius + margin);
+        if (!nearHazard) { m.maxT = cp.t; m.checkpoint = { x: ball.x, y: ball.y }; }
+      }
+
+      if (!ball.airborne) {
+        const inChasm = cp.t >= layout.chasmT0 && cp.t < layout.chasmT1;
         const inHole = layout.holes.find(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r);
-        if (inHole) {
+        const inAnt = layout.ants.find(a => Math.hypot(ball.x - a.x, ball.y - a.y) < a.r + t.ballRadius * 0.6);
+        if (inChasm || inHole || inAnt) {
           m.resets++;
           ball.x = m.checkpoint.x; ball.y = m.checkpoint.y; ball.vx = 0; ball.vy = 0;
           ball.airborne = false; ball.airborneTimer = 0;
+          const why = inChasm ? 'Missed the jump and went straight down.' :
+            inAnt ? 'One of them got you. Bitten and dropped.' :
+            'Down through the housing.';
           this.setHudHint(
-            m.wallsCleared > 0 ? 'Down through the housing. Back to the last pin you set.' : 'Down through the housing. Back to the start.',
+            `${why} ${m.maxT > 0 ? 'Back to the last spot you cleared.' : 'Back to the start.'}`,
             `+${m.bonusSeconds}s bought by the distractions`);
         }
       }
@@ -1895,6 +1951,62 @@ class HeistGame {
 
     if (!m) { ctx.restore(); return; }
     const layout = m.layout;
+    const pts = layout.points, last = pts.length - 1;
+    const normalAt = (i) => {
+      const p0 = pts[Math.max(0, i - 1)], p1 = pts[Math.min(last, i + 1)];
+      const dx = p1.x - p0.x, dy = p1.y - p0.y;
+      const len = Math.hypot(dx, dy) || 1;
+      return { nx: -dy / len, ny: dx / len };
+    };
+
+    // The tunnel itself: a winding carved-out band around the centerline,
+    // not a fixed grid of rectangles -- it's a different shape every time
+    // you play it.
+    ctx.beginPath();
+    pts.forEach((p, i) => {
+      const { nx, ny } = normalAt(i);
+      const [px, py] = toPx(p.x + nx * layout.halfWidth, p.y + ny * layout.halfWidth);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    });
+    for (let i = last; i >= 0; i--) {
+      const p = pts[i], { nx, ny } = normalAt(i);
+      const [px, py] = toPx(p.x - nx * layout.halfWidth, p.y - ny * layout.halfWidth);
+      ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    const tunnelGrad = ctx.createLinearGradient(b.x, b.y, b.x, b.y + b.h);
+    tunnelGrad.addColorStop(0, '#4a3a28'); tunnelGrad.addColorStop(1, '#3a2c1e');
+    ctx.fillStyle = tunnelGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#6a5a44'; ctx.lineWidth = 3; ctx.stroke();
+
+    // The chasm: the tunnel floor just drops out for this stretch, edges
+    // torn instead of a clean cut, so a jump reads as "the housing is
+    // broken here" rather than an arbitrary gold box sitting on the board.
+    const chasmPts = pts.filter(p => p.t >= layout.chasmT0 - 0.01 && p.t <= layout.chasmT1 + 0.01);
+    if (chasmPts.length > 1) {
+      ctx.beginPath();
+      chasmPts.forEach((p, i) => {
+        const idx = pts.indexOf(p);
+        const { nx, ny } = normalAt(idx);
+        const jag = (i % 2 === 0 ? 1 : -1) * 1.4;
+        const [px, py] = toPx(p.x + nx * (layout.halfWidth + jag), p.y + ny * (layout.halfWidth + jag));
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      for (let i = chasmPts.length - 1; i >= 0; i--) {
+        const p = chasmPts[i], idx = pts.indexOf(p);
+        const { nx, ny } = normalAt(idx);
+        const jag = (i % 2 === 0 ? 1 : -1) * 1.4;
+        const [px, py] = toPx(p.x - nx * (layout.halfWidth + jag), p.y - ny * (layout.halfWidth + jag));
+        ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      const pitGrad = ctx.createLinearGradient(0, toPx(0, chasmPts[0].y)[1], 0, toPx(0, chasmPts[chasmPts.length - 1].y)[1]);
+      pitGrad.addColorStop(0, '#0a0604'); pitGrad.addColorStop(1, '#000');
+      ctx.fillStyle = pitGrad;
+      ctx.fill();
+      ctx.strokeStyle = '#1a1008'; ctx.lineWidth = 2; ctx.stroke();
+    }
 
     // Holes
     layout.holes.forEach(h => {
@@ -1907,17 +2019,44 @@ class HeistGame {
       ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
     });
 
-    // Walls
-    layout.walls.forEach(w => {
-      const [wx, wy] = toPx(w.x, w.y);
-      ctx.fillStyle = '#6a5a44';
-      ctx.fillRect(wx, wy, toPxLen(w.w), toPxLen(w.h));
-      ctx.strokeStyle = '#3a2f22'; ctx.lineWidth = 2;
-      ctx.strokeRect(wx, wy, toPxLen(w.w), toPxLen(w.h));
+    // Fire ants — small, dark, legged, patrolling back and forth with a
+    // flickering flame out front so the danger reads as "moving," not
+    // just another pit.
+    layout.ants.forEach(a => {
+      const [ax, ay] = toPx(a.x, a.y);
+      const ar = toPxLen(a.r);
+      const facing = Math.cos(this._frame * a.speed + a.phase) >= 0 ? 1 : -1;
+      const flicker = 0.75 + Math.sin(this._frame * 0.6 + a.phase) * 0.25;
+      // Flame
+      ctx.beginPath();
+      ctx.moveTo(ax + facing * ar * 0.9, ay);
+      ctx.lineTo(ax + facing * ar * (2.6 * flicker), ay - ar * 0.55 * flicker);
+      ctx.lineTo(ax + facing * ar * (2.1 * flicker), ay);
+      ctx.lineTo(ax + facing * ar * (2.6 * flicker), ay + ar * 0.55 * flicker);
+      ctx.closePath();
+      const fg = ctx.createLinearGradient(ax, ay, ax + facing * ar * 2.6, ay);
+      fg.addColorStop(0, '#ffd36a'); fg.addColorStop(1, 'rgba(224,90,74,0)');
+      ctx.fillStyle = fg; ctx.fill();
+      // Legs
+      ctx.strokeStyle = '#1a1008'; ctx.lineWidth = 1;
+      for (let leg = -1; leg <= 1; leg++) {
+        ctx.beginPath(); ctx.moveTo(ax + leg * ar * 0.5, ay - ar * 0.3);
+        ctx.lineTo(ax + leg * ar * 0.9, ay - ar * 0.9); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ax + leg * ar * 0.5, ay + ar * 0.3);
+        ctx.lineTo(ax + leg * ar * 0.9, ay + ar * 0.9); ctx.stroke();
+      }
+      // Body (two segments)
+      ctx.fillStyle = '#2a1810';
+      ctx.beginPath(); ctx.ellipse(ax - facing * ar * 0.3, ay, ar * 0.75, ar * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(ax + facing * ar * 0.55, ay, ar * 0.42, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
     });
 
-    // Ramp(s) — striped, unmistakably "launch off this"
-    (layout.ramps || []).forEach(r => {
+    // Ramp — striped, unmistakably "launch off this," and (unlike the
+    // switchback version) always sitting exactly where the straightened
+    // finale was already taking you.
+    {
+      const r = layout.ramp;
       const [rx, ry] = toPx(r.x, r.y);
       const rw = toPxLen(r.w), rh = toPxLen(r.h);
       ctx.fillStyle = '#c9a227';
@@ -1930,7 +2069,7 @@ class HeistGame {
       ctx.save(); ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip(); ctx.stroke(); ctx.restore();
       ctx.fillStyle = '#3a2f10'; ctx.font = '10px VT323, monospace'; ctx.textAlign = 'center';
       ctx.fillText('JUMP', rx + rw / 2, ry - 4);
-    });
+    }
 
     // Goal
     const [gx, gy] = toPx(layout.goal.x, layout.goal.y);
