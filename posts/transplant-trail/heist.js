@@ -124,7 +124,7 @@ class HeistGame {
     this.phase = 'idle';
     this.cash = 0;
     this.assign = { distractionA: null, distractionB: null, lookout: null };
-    this.selectedCrew = null;
+    this.openRoleId = null;
     this.crashes = 0;
     this.bestFlips = 0;
     this.mazeCompleted = false;
@@ -443,7 +443,7 @@ class HeistGame {
   showRoleAssign() {
     this.phase = 'roles';
     this.showOverlay('heist-roles');
-    this.selectedCrew = null;
+    this.openRoleId = null;
     this.assign = { distractionA: null, distractionB: null, lookout: null };
     this.renderRoleUI();
 
@@ -455,7 +455,7 @@ class HeistGame {
     document.getElementById('heist-roles-clear').onclick = () => {
       if (this.phase !== 'roles') return;
       this.assign = { distractionA: null, distractionB: null, lookout: null };
-      this.selectedCrew = null;
+      this.openRoleId = null;
       this.renderRoleUI();
     };
   }
@@ -469,35 +469,9 @@ class HeistGame {
   }
 
   renderRoleUI() {
-    const crewRow = document.getElementById('heist-crew-row');
-    crewRow.innerHTML = '';
-    HEIST_CREW.forEach(c => {
-      const role = this.assignedRoleOf(c.id);
-      const card = document.createElement('button');
-      card.className = 'heist-crew-card';
-      if (this.selectedCrew === c.id) card.classList.add('selected');
-      if (role) card.classList.add('assigned');
-      card.style.borderColor = c.color;
-      card.innerHTML = `
-        <div class="heist-crew-name" style="color:${c.color}">${c.name}</div>
-        <div class="heist-crew-origin">${c.origin}</div>
-        <div class="heist-crew-verb">Plays on: ${c.verb}</div>
-        <div class="heist-crew-slotline">${role ? role.name : 'Unassigned'}</div>`;
-      // Tap still works exactly as before (pick up, then tap a slot) as a
-      // fallback, but dragging the card straight onto a slot is the primary
-      // interaction now — one gesture instead of two taps.
-      card.onclick = () => {
-        if (this._dragJustHappened) return;
-        if (role) this.assign[role.id] = null;
-        this.selectedCrew = this.selectedCrew === c.id ? null : c.id;
-        this.renderRoleUI();
-      };
-      card.addEventListener('pointerdown', (e) => this.startCrewDrag(e, c, card));
-      crewRow.appendChild(card);
-    });
-
     const roleRow = document.getElementById('heist-role-row');
     roleRow.innerHTML = '';
+
     // The player's own fixed role, shown but not assignable.
     const thief = document.createElement('div');
     thief.className = 'heist-role-slot heist-role-fixed';
@@ -509,112 +483,70 @@ class HeistGame {
 
     HEIST_ROLES.forEach(r => {
       const occupant = this.assign[r.id] ? getHeistCrew(this.assign[r.id]) : null;
-      const slot = document.createElement('button');
-      slot.className = 'heist-role-slot';
-      slot.dataset.roleId = r.id;
-      if (occupant) slot.classList.add('filled');
-      slot.innerHTML = `
+      const wrap = document.createElement('div');
+      wrap.className = 'heist-role-slot';
+      if (occupant) wrap.classList.add('filled');
+
+      const btn = document.createElement('button');
+      btn.className = 'heist-role-btn';
+      btn.innerHTML = `
         <div class="heist-role-name">${r.name}</div>
         <div class="heist-role-sub">${r.sub}</div>
         <div class="heist-role-filled" style="${occupant ? `color:${occupant.color}` : ''}">
-          ${occupant ? occupant.name : '— empty —'}
+          ${occupant ? occupant.name : 'Tap to assign'}
         </div>`;
-      slot.onclick = () => {
-        if (this._dragJustHappened) return;
-        if (occupant && !this.selectedCrew) {
-          // Tap a filled slot with nobody picked up: empty it.
+      btn.onclick = () => {
+        if (occupant) {
+          // Tap a filled job again to clear it back out.
           this.assign[r.id] = null;
+          this.openRoleId = null;
           this.renderRoleUI();
           return;
         }
-        if (!this.selectedCrew) return;
-        const prev = this.assignedRoleOf(this.selectedCrew);
-        if (prev) this.assign[prev.id] = null;
-        this.assign[r.id] = this.selectedCrew;
-        this.selectedCrew = null;
+        this.openRoleId = this.openRoleId === r.id ? null : r.id;
         this.renderRoleUI();
       };
-      roleRow.appendChild(slot);
+      wrap.appendChild(btn);
+
+      if (this.openRoleId === r.id) {
+        const picker = document.createElement('div');
+        picker.className = 'heist-crew-picker';
+        const available = HEIST_CREW.filter(c => !this.assignedRoleOf(c.id));
+        if (available.length === 0) {
+          picker.innerHTML = `<div class="heist-crew-picker-empty">Everyone already has a job — clear one first.</div>`;
+        } else {
+          available.forEach(c => {
+            const opt = document.createElement('button');
+            opt.className = 'heist-crew-option';
+            opt.style.borderColor = c.color;
+            opt.innerHTML = `
+              <div class="heist-crew-option-name" style="color:${c.color}">${c.name}</div>
+              <div class="heist-crew-option-origin">${c.origin}</div>
+              <div class="heist-crew-option-verb">Plays on: ${c.verb}</div>`;
+            opt.onclick = (ev) => {
+              ev.stopPropagation();
+              this.assign[r.id] = c.id;
+              this.openRoleId = null;
+              this.renderRoleUI();
+            };
+            picker.appendChild(opt);
+          });
+        }
+        wrap.appendChild(picker);
+      }
+
+      roleRow.appendChild(wrap);
     });
 
     const hint = document.getElementById('heist-roles-hint');
     if (this.assignmentComplete()) {
       hint.textContent = 'Everyone has a job. Who you put where changes how their part of the job actually plays.';
-    } else if (this.selectedCrew) {
-      hint.textContent = `${getHeistCrew(this.selectedCrew).name} is picked up. Now choose a slot.`;
+    } else if (this.openRoleId) {
+      hint.textContent = 'Pick who fills this job.';
     } else {
-      hint.textContent = 'Drag a name onto a slot — or tap a name, then tap a slot.';
+      hint.textContent = 'Tap an open job to fill it. Tap a filled job to clear it.';
     }
     document.getElementById('heist-roles-confirm').disabled = !this.assignmentComplete();
-  }
-
-  // A real drag: pick up a crew card, a ghost follows the pointer/finger,
-  // whichever slot it's over highlights, and letting go over a slot
-  // assigns them there in one motion. A small movement threshold before
-  // the ghost appears means a plain tap still falls through to the
-  // existing click handler untouched — nothing about tap-to-pick-up,
-  // tap-to-place breaks, this is just a faster path to the same result.
-  startCrewDrag(e, crew, cardEl) {
-    if (this.phase !== 'roles') return;
-    const startX = e.clientX, startY = e.clientY;
-    let dragging = false, ghost = null;
-
-    const onMove = (ev) => {
-      const dx = ev.clientX - startX, dy = ev.clientY - startY;
-      if (!dragging) {
-        if (Math.hypot(dx, dy) < 8) return;
-        dragging = true;
-        this._dragJustHappened = true;
-        ev.preventDefault();
-        const rect = cardEl.getBoundingClientRect();
-        cardEl.classList.add('dragging');
-        ghost = cardEl.cloneNode(true);
-        // Reset the clone's classes entirely rather than inheriting
-        // whatever the live card had (assigned/selected/dragging) -- those
-        // were fighting the ghost's own opacity via CSS specificity, which
-        // is why the dragged card was barely visible. And match its actual
-        // on-screen size instead of the CSS default, so it doesn't visibly
-        // shrink the instant you pick it up.
-        ghost.className = 'heist-crew-card heist-crew-ghost';
-        ghost.style.width = rect.width + 'px';
-        ghost.style.borderColor = crew.color;
-        document.body.appendChild(ghost);
-      }
-      ev.preventDefault();
-      ghost.style.left = ev.clientX + 'px';
-      ghost.style.top = ev.clientY + 'px';
-      document.querySelectorAll('.heist-role-slot').forEach(s => s.classList.remove('drag-over'));
-      const under = document.elementFromPoint(ev.clientX, ev.clientY);
-      const slotEl = under && under.closest('.heist-role-slot[data-role-id]');
-      if (slotEl) slotEl.classList.add('drag-over');
-    };
-
-    const onUp = (ev) => {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      document.querySelectorAll('.heist-role-slot').forEach(s => s.classList.remove('drag-over'));
-      if (!dragging) return;
-      cardEl.classList.remove('dragging');
-      if (ghost) ghost.remove();
-
-      const under = document.elementFromPoint(ev.clientX, ev.clientY);
-      const slotEl = under && under.closest('.heist-role-slot[data-role-id]');
-      if (slotEl) {
-        const roleId = slotEl.dataset.roleId;
-        const prev = this.assignedRoleOf(crew.id);
-        if (prev) this.assign[prev.id] = null;
-        this.assign[roleId] = crew.id;
-      }
-      // Dropped somewhere that isn't a slot: nothing changes, card just
-      // stays exactly where it already was -- no accidental unassign from
-      // an imprecise drop.
-      this.selectedCrew = null;
-      this.renderRoleUI();
-      setTimeout(() => { this._dragJustHappened = false; }, 60);
-    };
-
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
   }
 
   // ------------------------------------------------
