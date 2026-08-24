@@ -1658,6 +1658,11 @@ button.menu-option.cannon-shop-exit-btn:hover {
   -webkit-tap-highlight-color: transparent;
   touch-action: none;
   user-select: none;
+  -webkit-user-select: none;
+  /* iOS Safari's long-press "copy/select" callout ignores user-select --
+     this is the property that actually suppresses it. Holding an arrow was
+     triggering a text-selection highlight without this. */
+  -webkit-touch-callout: none;
 }
 
 .heist-pad-btn:active,

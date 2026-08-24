@@ -85,10 +85,15 @@ const HEIST_TUNING = {
   // correct late and you're already committed. That inertia is the actual
   // difficulty, not just steering toward the goal.
   maze: {
-    timeLimit: 55,
-    accel: 0.028,
-    friction: 0.965,
-    ballRadius: 3.0,
+    // Cranked up hard on purpose: the point is fast and a little out of
+    // control, not a precise puzzle. accel up ~4x, friction closer to 1
+    // (slipperier, more momentum carries through) -- terminal speed goes
+    // from ~0.8 units/frame to ~4.5, and it's genuinely hard to stop on a
+    // dime. That's the intent.
+    timeLimit: 70,
+    accel: 0.11,
+    friction: 0.978,
+    ballRadius: 2.6,
   },
   getaway: {
     // Whichever Eric ended up on Lookout is the one behind the wheel. Distance
@@ -140,7 +145,46 @@ class HeistGame {
     window.addEventListener('resize', this._resizeHandler);
     this.bindInput();
     this.bindMazeInput();
+    this.bindGetawayInput();
     this.showIntro();
+  }
+
+  // A real swipe up/down changes lanes, not just a tap on the top/bottom
+  // half of the screen (that still works too, as a fallback for a press
+  // that doesn't move far enough to register as a swipe).
+  bindGetawayInput() {
+    let startY = null, triggered = false;
+    const threshold = 36;
+
+    const localY = (clientY) => clientY - this.canvas.getBoundingClientRect().top;
+
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (this.phase !== 'getaway') return;
+      startY = localY(e.clientY);
+      triggered = false;
+    });
+
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (this.phase !== 'getaway' || startY === null || triggered) return;
+      const g = this.mech;
+      if (!g || g.kind !== 'getaway') return;
+      const dy = localY(e.clientY) - startY;
+      if (dy < -threshold) { g.laneUp(); triggered = true; }
+      else if (dy > threshold) { g.laneDown(); triggered = true; }
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      if (this.phase !== 'getaway' || startY === null) return;
+      if (!triggered) {
+        // Didn't move far enough to count as a swipe -- fall back to a
+        // plain tap on the top/bottom half, same as before.
+        const g = this.mech;
+        if (g && g.kind === 'getaway') {
+          if (localY(e.clientY) < this.canvas.height / 2) g.laneUp(); else g.laneDown();
+        }
+      }
+      startY = null;
+    });
   }
 
   // Two real, simultaneous fingers: left thumb (wherever it lands on the
@@ -1288,26 +1332,46 @@ class HeistGame {
   // resting position to the shear line without dropping it down through the
   // housing. Real momentum, real holes, no scripted safety net beyond time.
   mazeLayout() {
-    // A tighter, longer serpentine — four bands instead of two, so it's a
-    // real four-reversal traverse, plus a hole guarding nearly every turn
-    // (and a couple mid-straightaway ones for anyone drifting carelessly).
+    // Roughly quadrupled from the first pass: seven reversals instead of
+    // four, about twice the holes, and a dedicated ramp + chasm section
+    // right before the goal that can't be crossed by rolling at all -- you
+    // have to actually launch off the ramp. Fun and chaos over fairness;
+    // it barely matters how anyone does.
     return {
-      start: { x: 8, y: 8 },
-      goal: { x: 50, y: 92, r: 5.5 },
+      start: { x: 8, y: 6 },
+      goal: { x: 50, y: 97, r: 5 },
       walls: [
-        { x: 0,  y: 16, w: 68, h: 5 },  // gap on the right
-        { x: 32, y: 34, w: 68, h: 5 },  // gap on the left
-        { x: 0,  y: 52, w: 68, h: 5 },  // gap on the right
-        { x: 32, y: 70, w: 68, h: 5 },  // gap on the left
+        { x: 0,  y: 13, w: 68, h: 4.5 },  // gap right
+        { x: 32, y: 24, w: 68, h: 4.5 },  // gap left
+        { x: 0,  y: 35, w: 68, h: 4.5 },  // gap right
+        { x: 32, y: 46, w: 68, h: 4.5 },  // gap left
+        { x: 0,  y: 57, w: 68, h: 4.5 },  // gap right
+        { x: 32, y: 68, w: 68, h: 4.5 },  // gap left
+        { x: 0,  y: 79, w: 68, h: 4.5 },  // gap right, into the ramp section
       ],
       holes: [
-        { x: 50, y: 10, r: 3.6 },
-        { x: 76, y: 25, r: 3.8 },
-        { x: 15, y: 34, r: 3.6 },
-        { x: 24, y: 43, r: 3.8 },
-        { x: 76, y: 61, r: 3.8 },
-        { x: 24, y: 79, r: 3.8 },
-        { x: 62, y: 88, r: 3.6 },
+        { x: 74, y: 18, r: 3.4 },
+        { x: 18, y: 20, r: 3.2 },
+        { x: 26, y: 29, r: 3.4 },
+        { x: 74, y: 31, r: 3.2 },
+        { x: 74, y: 40, r: 3.4 },
+        { x: 18, y: 42, r: 3.2 },
+        { x: 26, y: 51, r: 3.4 },
+        { x: 74, y: 53, r: 3.2 },
+        { x: 74, y: 62, r: 3.4 },
+        { x: 18, y: 64, r: 3.2 },
+        { x: 26, y: 73, r: 3.4 },
+        { x: 74, y: 75, r: 3.2 },
+        { x: 50, y: 44, r: 3.4 },
+        // The chasm: three overlapping big holes forming one wide gap
+        // spanning almost the full width. Rolling into any of these fails
+        // the same as any other hole -- only the ramp gets you across.
+        { x: 28, y: 90, r: 8 },
+        { x: 50, y: 90, r: 8 },
+        { x: 72, y: 90, r: 8 },
+      ],
+      ramps: [
+        { x: 42, y: 84, w: 16, h: 5 },
       ],
     };
   }
@@ -1328,7 +1392,7 @@ class HeistGame {
     this.mech = {
       kind: 'maze',
       layout,
-      ball: { x: layout.start.x, y: layout.start.y, vx: 0, vy: 0 },
+      ball: { x: layout.start.x, y: layout.start.y, vx: 0, vy: 0, airborne: false, airborneTimer: 0 },
       resets: 0,
       completed: false,
     };
@@ -1381,14 +1445,34 @@ class HeistGame {
       ball.y += ball.vy;
       ball.x = Math.max(t.ballRadius, Math.min(100 - t.ballRadius, ball.x));
       ball.y = Math.max(t.ballRadius, Math.min(100 - t.ballRadius, ball.y));
+
+      // Airborne (off the ramp): walls still block you, but you sail right
+      // over any hole underneath -- that's the entire point of the ramp.
+      if (ball.airborneTimer > 0) {
+        ball.airborneTimer--;
+        if (ball.airborneTimer <= 0) ball.airborne = false;
+      }
       layout.walls.forEach(w => this.resolveWallCollision(ball, t.ballRadius, w));
 
-      const inHole = layout.holes.find(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r);
-      if (inHole) {
-        m.resets++;
-        ball.x = layout.start.x; ball.y = layout.start.y; ball.vx = 0; ball.vy = 0;
-        this.setHudHint('Down through the housing. Back to the start.',
-          `+${m.bonusSeconds}s bought by the distractions`);
+      if (!ball.airborne && layout.ramps) {
+        const onRamp = layout.ramps.find(r =>
+          ball.x > r.x && ball.x < r.x + r.w && ball.y > r.y && ball.y < r.y + r.h);
+        if (onRamp) {
+          ball.airborne = true;
+          ball.airborneTimer = 60;
+          ball.vy = Math.max(ball.vy, 2.2); // guarantee enough speed to clear the chasm
+        }
+      }
+
+      if (!ball.airborne) {
+        const inHole = layout.holes.find(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r);
+        if (inHole) {
+          m.resets++;
+          ball.x = layout.start.x; ball.y = layout.start.y; ball.vx = 0; ball.vy = 0;
+          ball.airborne = false; ball.airborneTimer = 0;
+          this.setHudHint('Down through the housing. Back to the start.',
+            `+${m.bonusSeconds}s bought by the distractions`);
+        }
       }
 
       if (Math.hypot(ball.x - layout.goal.x, ball.y - layout.goal.y) < layout.goal.r) {
@@ -1473,15 +1557,11 @@ class HeistGame {
 
     this.showHud(
       `Getaway — ${driver.name} driving`,
-      'Tap the top or bottom of the screen (or arrow keys) to change lanes.',
+      'Swipe up or down to change lanes (or tap the top/bottom half, or arrow keys).',
       cfg.label
     );
-    this.input.onDown = (x, y) => {
-      const g = this.mech;
-      if (!g || g.kind !== 'getaway') return;
-      if (y < this.canvas.height / 2) g.laneUp();
-      else g.laneDown();
-    };
+    this.input.onDown = null;
+    this.input.onUp = null;
     this.getawayLoop();
   }
 
@@ -1826,6 +1906,22 @@ class HeistGame {
       ctx.strokeRect(wx, wy, toPxLen(w.w), toPxLen(w.h));
     });
 
+    // Ramp(s) — striped, unmistakably "launch off this"
+    (layout.ramps || []).forEach(r => {
+      const [rx, ry] = toPx(r.x, r.y);
+      const rw = toPxLen(r.w), rh = toPxLen(r.h);
+      ctx.fillStyle = '#c9a227';
+      ctx.fillRect(rx, ry, rw, rh);
+      ctx.strokeStyle = '#5a4a30'; ctx.lineWidth = 4;
+      ctx.beginPath();
+      for (let i = -1; i * 6 < rw + rh; i++) {
+        ctx.moveTo(rx + i * 6, ry + rh); ctx.lineTo(rx + i * 6 + rh, ry);
+      }
+      ctx.save(); ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip(); ctx.stroke(); ctx.restore();
+      ctx.fillStyle = '#3a2f10'; ctx.font = '10px VT323, monospace'; ctx.textAlign = 'center';
+      ctx.fillText('JUMP', rx + rw / 2, ry - 4);
+    });
+
     // Goal
     const [gx, gy] = toPx(layout.goal.x, layout.goal.y);
     const gr = toPxLen(layout.goal.r);
@@ -1838,16 +1934,30 @@ class HeistGame {
     ctx.font = '11px VT323, monospace'; ctx.textAlign = 'center';
     ctx.fillText('SHEAR LINE', gx, gy + gr + 16);
 
-    // Ball
+    // Ball — bigger with a drop shadow while airborne, so clearing the
+    // chasm off the ramp actually reads as "in the air," not just immune.
     const [bx2, by2] = toPx(m.ball.x, m.ball.y);
-    const br = toPxLen(HEIST_TUNING.maze.ballRadius);
-    ctx.beginPath();
-    ctx.arc(bx2, by2, br, 0, Math.PI * 2);
-    const ballGrad = ctx.createRadialGradient(bx2 - br * 0.3, by2 - br * 0.3, br * 0.1, bx2, by2, br);
-    ballGrad.addColorStop(0, '#f0e8d8'); ballGrad.addColorStop(1, '#a89878');
-    ctx.fillStyle = ballGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#5a4a30'; ctx.lineWidth = 1.5; ctx.stroke();
+    const baseBr = toPxLen(HEIST_TUNING.maze.ballRadius);
+    if (m.ball.airborne) {
+      const hop = Math.sin((m.ball.airborneTimer / 60) * Math.PI) * baseBr * 1.4;
+      ctx.beginPath();
+      ctx.ellipse(bx2, by2, baseBr * 1.1, baseBr * 0.5, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fill();
+      const br = baseBr * 1.35;
+      ctx.beginPath(); ctx.arc(bx2, by2 - hop, br, 0, Math.PI * 2);
+      const g2 = ctx.createRadialGradient(bx2 - br * 0.3, by2 - hop - br * 0.3, br * 0.1, bx2, by2 - hop, br);
+      g2.addColorStop(0, '#fff4dc'); g2.addColorStop(1, '#c8a878');
+      ctx.fillStyle = g2; ctx.fill();
+      ctx.strokeStyle = '#5a4a30'; ctx.lineWidth = 1.5; ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(bx2, by2, baseBr, 0, Math.PI * 2);
+      const ballGrad = ctx.createRadialGradient(bx2 - baseBr * 0.3, by2 - baseBr * 0.3, baseBr * 0.1, bx2, by2, baseBr);
+      ballGrad.addColorStop(0, '#f0e8d8'); ballGrad.addColorStop(1, '#a89878');
+      ctx.fillStyle = ballGrad;
+      ctx.fill();
+      ctx.strokeStyle = '#5a4a30'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
 
     ctx.restore();
 
