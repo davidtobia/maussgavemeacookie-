@@ -1122,6 +1122,29 @@ button.menu-option.cannon-shop-locked:hover {
   cursor: not-allowed;
 }
 
+/* Location select — pick-a-borough buttons */
+.cannon-location-list {
+  text-align: left;
+  margin-top: 10px;
+}
+
+button.cannon-location-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-left: 4px solid #444;
+  font-size: 22px;
+}
+
+.cannon-location-sub {
+  font-size: 15px;
+  color: #666;
+}
+
+button.cannon-location-btn:hover .cannon-location-sub {
+  color: #333;
+}
+
 button.menu-option.cannon-selected,
 button.menu-option.cannon-selected:hover {
   border-left: 4px solid #2ecc71;

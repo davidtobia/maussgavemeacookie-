@@ -374,14 +374,14 @@
 
             <div class="cannon-instr-section">
               <div class="cannon-instr-heading">Aiming</div>
-              <p class="cannon-instr-body">A spinning arrow shows your direction. <strong>Tap once</strong> to lock your aim — if you're pointed at a borough it'll lock on. <strong>Tap again</strong> to fire. The longer you wait after locking, the more power you build.</p>
+              <p class="cannon-instr-body"><strong>Pick a borough</strong> to target first. Then a needle sweeps up and down through the launch angle — <strong>tap once</strong> to lock it in. A power meter swings next — <strong>tap again</strong> near the top to fire at full power.</p>
             </div>
 
             <div class="cannon-instr-section">
               <div class="cannon-instr-heading">Upgrades (buy in the shop after each turn)</div>
               <ul class="cannon-instr-list">
                 <li><span class="cannon-instr-key">Cannon Strength</span> — how far you launch</li>
-                <li><span class="cannon-instr-key">Cannon Accuracy</span> — slower spin, wider aim window</li>
+                <li><span class="cannon-instr-key">Cannon Accuracy</span> — slower angle sweep, easier to time</li>
                 <li><span class="cannon-instr-key">Flight Suit</span> — tap to flap; better suit = more flaps</li>
                 <li><span class="cannon-instr-key">Rocket Power</span> — one big mid-air boost</li>
                 <li><span class="cannon-instr-key">Special Bonus</span> — coin magnet, bouncy legs, or rat whisperer</li>
@@ -464,6 +464,14 @@
         </div>
       </div>
 
+      <!-- Location select overlay — explicit click, replaces the old spinning-needle aim -->
+      <div id="cannon-location" class="cannon-overlay hidden">
+        <div class="cannon-splash cannon-shop-panel">
+          <h2 class="cannon-splash-title">Pick A Borough</h2>
+          <div id="cannon-location-list" class="cannon-location-list"></div>
+        </div>
+      </div>
+
       <!-- Aim overlay (transparent, pointer-events: none — just HUD labels) -->
       <div id="cannon-aim" class="cannon-overlay cannon-overlay-aim hidden">
         <div class="cannon-aim-hud">
@@ -525,7 +533,7 @@
   <script src="trail-data.js?v=3"></script>
   <script src="trail.js?v=3"></script>
   <script src="bodega.js?v=1"></script>
-  <script src="cannon.js?v=6"></script>
+  <script src="cannon.js?v=7"></script>
   <script src="game.js?v=3"></script>
 
   <!-- GoatCounter Analytics -->

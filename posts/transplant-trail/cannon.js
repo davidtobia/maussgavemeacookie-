@@ -5,21 +5,21 @@
 
 const CANNON_UPGRADES = {
   strength: [
-    { id: 'standard',   label: 'Standard Cannon',  cost: 0,    velocity: 6,  desc: 'Gets you there... maybe' },
-    { id: 'reinforced', label: 'Reinforced Cannon', cost: 350,  velocity: 9,  desc: 'More oomph' },
-    { id: 'industrial', label: 'Industrial Cannon', cost: 900,  velocity: 12, desc: 'Serious hardware' },
-    { id: 'nuclear',    label: 'Nuclear Option',    cost: 2000, velocity: 15, desc: 'Unregulated' },
+    { id: 'standard',   label: 'Standard Cannon',  cost: 0,    velocity: 4,  desc: 'Gets you there... maybe' },
+    { id: 'reinforced', label: 'Reinforced Cannon', cost: 350,  velocity: 6,  desc: 'More oomph' },
+    { id: 'industrial', label: 'Industrial Cannon', cost: 900,  velocity: 8,  desc: 'Serious hardware' },
+    { id: 'nuclear',    label: 'Nuclear Option',    cost: 2000, velocity: 10, desc: 'Unregulated' },
   ],
   accuracy: [
-    { id: 'untrained', label: 'Wild Guess',    cost: 0,    swingSpeed: 3.5, tolerance: 22, desc: 'Needle goes brrr' },
-    { id: 'practiced', label: 'Practiced Eye', cost: 250,  swingSpeed: 2.2, tolerance: 30, desc: 'Slightly less chaotic' },
-    { id: 'precise',   label: 'Laser Focus',  cost: 650,  swingSpeed: 1.1, tolerance: 40, desc: 'You read Sun Tzu' },
-    { id: 'surgical',  label: 'Surgical Aim', cost: 1400, swingSpeed: 0.5, tolerance: 50, desc: 'Touch grass later' },
+    { id: 'untrained', label: 'Wild Guess',    cost: 0,    swingSpeed: 0.60, desc: 'Needle goes brrr' },
+    { id: 'practiced', label: 'Practiced Eye', cost: 250,  swingSpeed: 0.40, desc: 'Slightly less chaotic' },
+    { id: 'precise',   label: 'Laser Focus',  cost: 650,  swingSpeed: 0.24, desc: 'You read Sun Tzu' },
+    { id: 'surgical',  label: 'Surgical Aim', cost: 1400, swingSpeed: 0.13, desc: 'Touch grass later' },
   ],
   suit: [
     { id: 'naked',   label: 'Just Vibes',   cost: 0,    flapForce: 2.5, cooldownFrames: 62, drag: 0.24, desc: 'Barely works. One weak flap/sec. You will land.' },
-    { id: 'pigeon',  label: 'Pigeon Wings', cost: 250,  flapForce: 4.5, cooldownFrames: 42, drag: 0.14, desc: 'Real lift, still comes down eventually.' },
-    { id: 'eagle',   label: 'Eagle Suit',   cost: 600,  flapForce: 6.5, cooldownFrames: 26, drag: 0.07, desc: 'Enough lift to stay up as long as you dodge everything.' },
+    { id: 'pigeon',  label: 'Pigeon Wings', cost: 250,  flapForce: 4,   cooldownFrames: 40, drag: 0.14, desc: 'Real lift — stay up much longer.' },
+    { id: 'eagle',   label: 'Eagle Suit',   cost: 600,  flapForce: 6,   cooldownFrames: 22, drag: 0.07, desc: 'Strong, sustained lift. Built for endurance flights.' },
     { id: 'jetpack', label: 'Jetpack',      cost: 1200, flapForce: 15,  cooldownFrames: 6,  drag: 0.03, desc: 'Near-infinite flight. Only damage stops you.' },
   ],
   rocket: [
@@ -96,7 +96,7 @@ class CannonGame {
       strength: 0, accuracy: 0, suit: 0, rocket: 0, bonus: 0,
     };
 
-    this.aim = { active: false, angle: 0, dir: 1, phase: 'swing', power: 0, powerDir: 1, aimed: null };
+    this.aim = { active: false, angle: 15, dir: 1, phase: 'angle', power: 0, powerDir: 1 };
     this.flight      = null;
     this._aimAF      = null;
     this._flightAF   = null;
@@ -178,7 +178,7 @@ class CannonGame {
     document.getElementById('cannon-features-map-btn').onclick    = () => this.showMapOverlay();
     document.getElementById('cannon-features-launch-btn').onclick = () => {
       if (this.ts.currentTurn === 0) this.ts.currentTurn = 1;
-      this.startAimPhase();
+      this.showLocationSelect();
     };
   }
 
@@ -247,60 +247,74 @@ class CannonGame {
   }
 
   // ============================================
-  // AIM PHASE — PENDULUM ON MAP CANVAS
+  // LOCATION SELECT — explicit click, not a spinner
   // ============================================
 
-  startAimPhase() {
+  showLocationSelect() {
+    this.hideOverlays();
+    this.showOverlay('cannon-location');
+    const list = document.getElementById('cannon-location-list');
+    list.innerHTML = '';
+    TARGET_BOROUGHS.forEach(b => {
+      const got = this.ts.unlocks.includes(b.id);
+      const hs  = this.ts.highScores[b.id];
+      const btn = document.createElement('button');
+      btn.className = 'menu-option cannon-location-btn';
+      btn.style.borderLeftColor = b.color;
+      btn.innerHTML = `<span style="color:${b.color}">${got ? '✓ ' : ''}${b.name}</span>` +
+        `<span class="cannon-location-sub">${b.minBlocks} blocks${hs ? ' · best ' + hs : ''}</span>`;
+      btn.onclick = () => {
+        this.ts.targetBorough = b.id;
+        this.startAnglePhase();
+      };
+      list.appendChild(btn);
+    });
+  }
+
+  // ============================================
+  // ANGLE PHASE — pick launch elevation, then power
+  // ============================================
+
+  static get MIN_ANGLE() { return 15; }
+  static get MAX_ANGLE() { return 70; }
+
+  startAnglePhase() {
     if (this._aimAF)    { cancelAnimationFrame(this._aimAF);    this._aimAF    = null; }
     if (this._flightAF) { cancelAnimationFrame(this._flightAF); this._flightAF = null; }
-    this.aim.active = true; this.aim.angle = 0; this.aim.dir = 1;
-    this.aim.phase = 'swing'; this.aim.power = 0; this.aim.powerDir = 1; this.aim.aimed = null;
+    this.aim.active = true; this.aim.angle = CannonGame.MIN_ANGLE; this.aim.dir = 1;
+    this.aim.phase = 'angle'; this.aim.power = 0; this.aim.powerDir = 1;
     this.hideOverlays();
     document.getElementById('cannon-aim').classList.remove('hidden');
     document.getElementById('cannon-aim-turn').textContent = `Turn ${this.ts.currentTurn}`;
-    document.getElementById('cannon-aim-hint').textContent = 'Tap to lock direction';
+    const target = TARGET_BOROUGHS.find(b => b.id === this.ts.targetBorough);
+    document.getElementById('cannon-aim-hint').textContent =
+      `Target: ${target ? target.name : '?'} — Tap to lock launch angle`;
     this._tapHandler = () => this.handleAimTap();
     this.aimLoop();
   }
 
   handleAimTap() {
-    if (this.aim.phase === 'swing') {
+    if (this.aim.phase === 'angle') {
       this.aim.phase = 'power';
       this.aim.power = 0;
       this.aim.powerDir = 1;
-      const acc = CANNON_UPGRADES.accuracy[this.ts.accuracy];
-      this.aim.aimed = this.getAimedBorough(this.aim.angle, acc.tolerance);
-      document.getElementById('cannon-aim-hint').textContent =
-        this.aim.aimed
-          ? `Aimed at ${this.aim.aimed.name} — Tap at full power!`
-          : 'No target locked — Tap anyway (no borough credit)';
+      document.getElementById('cannon-aim-hint').textContent = `Angle locked: ${Math.round(this.aim.angle)}° — Tap at full power!`;
     } else if (this.aim.phase === 'power') {
       this.aim.active = false; this.aim.phase = 'done';
       this._tapHandler = null;
       cancelAnimationFrame(this._aimAF);
       document.getElementById('cannon-aim').classList.add('hidden');
-      // No lock = no borough credit, rather than silently reusing last turn's target.
-      this.ts.targetBorough = this.aim.aimed ? this.aim.aimed.id : null;
-      this.launchFlight(this.aim.power);
+      this.launchFlight(this.aim.power, this.aim.angle);
     }
-  }
-
-  getAimedBorough(angle, tolerance) {
-    let best = null, bestDiff = Infinity;
-    TARGET_BOROUGHS.forEach(b => {
-      let d = Math.abs(angle - b.angle); if (d > 180) d = 360 - d;
-      if (d < tolerance && d < bestDiff) { best = b; bestDiff = d; }
-    });
-    return best;
   }
 
   aimLoop() {
     if (!this.aim.active) return;
     const acc = CANNON_UPGRADES.accuracy[this.ts.accuracy];
-    if (this.aim.phase === 'swing') {
+    if (this.aim.phase === 'angle') {
       this.aim.angle += acc.swingSpeed * this.aim.dir;
-      if (this.aim.angle >= 360) { this.aim.angle = 360; this.aim.dir = -1; }
-      if (this.aim.angle <= 0)   { this.aim.angle = 0;   this.aim.dir =  1; }
+      if (this.aim.angle >= CannonGame.MAX_ANGLE) { this.aim.angle = CannonGame.MAX_ANGLE; this.aim.dir = -1; }
+      if (this.aim.angle <= CannonGame.MIN_ANGLE) { this.aim.angle = CannonGame.MIN_ANGLE; this.aim.dir =  1; }
     } else if (this.aim.phase === 'power') {
       // Oscillates instead of holding at 100 — waiting forever is no longer free;
       // you have to time the tap near the top of the swing.
@@ -313,81 +327,61 @@ class CannonGame {
   }
 
   drawAimCanvas(W, H) {
-    const ctx = this.ctx, cx = W / 2, cy = H / 2;
-    const acc = CANNON_UPGRADES.accuracy[this.ts.accuracy];
+    const ctx = this.ctx;
+    const target = TARGET_BOROUGHS.find(b => b.id === this.ts.targetBorough);
+    const color = target ? target.color : '#d4a574';
 
-    // Map background
+    // Sky-ish backdrop
     ctx.fillStyle = '#080820'; ctx.fillRect(0, 0, W, H);
     ctx.strokeStyle = '#1a1a3a'; ctx.lineWidth = 1;
     for (let x = 0; x < W; x += 32) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
     for (let y = 0; y < H; y += 32) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
 
-    const reach = Math.min(W, H) * 0.42;
+    // Ground + cannon pivot, bottom-left corner (side view)
+    const gy = H * 0.82, px = W * 0.16;
+    ctx.fillStyle = '#141e14'; ctx.fillRect(0, gy, W, H - gy);
+    ctx.fillStyle = '#3a6a3a'; ctx.fillRect(px - 14, gy - 6, 28, 10);
 
-    // Borough targets
-    TARGET_BOROUGHS.forEach(b => {
-      const rad = ((b.angle - 90) * Math.PI) / 180;
-      const tx = cx + Math.cos(rad) * reach, ty = cy + Math.sin(rad) * reach;
-      let diff = Math.abs(this.aim.angle - b.angle); if (diff > 180) diff = 360 - diff;
-      const near = diff < acc.tolerance;
-      const got  = this.ts.unlocks.includes(b.id);
-      const hs   = this.ts.highScores[b.id];
+    // Elevation arc from MIN_ANGLE to MAX_ANGLE
+    const R = Math.min(W, H) * 0.34;
+    const toRad = (deg) => ((-deg) * Math.PI) / 180;
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(px, gy, R, toRad(CannonGame.MAX_ANGLE), toRad(CannonGame.MIN_ANGLE));
+    ctx.stroke();
 
-      ctx.setLineDash([6, 6]);
-      ctx.strokeStyle = near ? b.color : b.color + '2a'; ctx.lineWidth = near ? 2 : 1;
-      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tx, ty); ctx.stroke();
-      ctx.setLineDash([]);
-
-      if (near) ctx.shadowColor = b.color, ctx.shadowBlur = 10;
-      ctx.fillStyle = near ? b.color : b.color + '44';
-      ctx.beginPath(); ctx.arc(tx, ty, near ? 9 : 5, 0, Math.PI * 2); ctx.fill();
-      ctx.shadowBlur = 0;
-
-      if (got) {
-        ctx.fillStyle = '#000'; ctx.font = 'bold 12px VT323'; ctx.textAlign = 'center';
-        ctx.fillText('✓', tx, ty + 4);
-      }
-
-      const lx = cx + Math.cos(rad) * reach * 0.65, ly = cy + Math.sin(rad) * reach * 0.65;
-      ctx.fillStyle = near ? b.color : b.color + '44';
-      ctx.font = `${near ? 20 : 15}px VT323`; ctx.textAlign = 'center';
-      ctx.fillText(b.name + (got ? ' ✓' : ''), lx, ly);
-      ctx.font = '12px VT323'; ctx.fillStyle = near ? '#aaa' : '#2a2a2a';
-      const subLabel = got ? ('best: ' + (hs || '?') + ' blk') : (b.minBlocks + ' blocks');
-      ctx.fillText(subLabel, lx, ly + 15);
-    });
-
-    // WSP center
-    ctx.strokeStyle = '#3a6a3a'; ctx.lineWidth = 2;
-    ctx.strokeRect(cx - 26, cy - 26, 52, 52);
-    ctx.fillStyle = 'rgba(74,124,63,0.12)'; ctx.fillRect(cx - 26, cy - 26, 52, 52);
-    ctx.fillStyle = '#2d6a4f'; ctx.font = '13px VT323'; ctx.textAlign = 'center'; ctx.fillText('WSP', cx, cy + 5);
-
-    // Aim needle
-    const ar = ((this.aim.angle - 90) * Math.PI) / 180;
-    const ax = cx + Math.cos(ar) * 82, ay = cy + Math.sin(ar) * 82;
+    // Barrel needle at current/locked angle
+    const barrelDeg = this.aim.angle;
+    const br = toRad(barrelDeg);
+    const bx = px + Math.cos(br) * R, by = gy + Math.sin(br) * R;
     const nc = this.aim.phase === 'power' ? '#e74c3c' : '#f1c40f';
     ctx.shadowColor = nc; ctx.shadowBlur = 14;
-    ctx.strokeStyle = nc; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(ax, ay); ctx.stroke();
+    ctx.strokeStyle = nc; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(px, gy); ctx.lineTo(bx, by); ctx.stroke();
     ctx.shadowBlur = 0;
-    const ha = Math.atan2(ay - cy, ax - cx);
-    ctx.fillStyle = nc; ctx.beginPath();
-    ctx.moveTo(ax, ay);
-    ctx.lineTo(ax - Math.cos(ha - 0.4) * 15, ay - Math.sin(ha - 0.4) * 15);
-    ctx.lineTo(ax - Math.cos(ha + 0.4) * 15, ay - Math.sin(ha + 0.4) * 15);
-    ctx.closePath(); ctx.fill();
+
+    ctx.fillStyle = nc; ctx.font = '20px VT323'; ctx.textAlign = 'left';
+    ctx.fillText(Math.round(barrelDeg) + '°', px + R * 0.5, gy - R * 0.55);
+
+    // Target label up top
+    if (target) {
+      ctx.fillStyle = color; ctx.font = '22px VT323'; ctx.textAlign = 'center';
+      ctx.fillText(target.name, W / 2, H * 0.14);
+      ctx.fillStyle = '#888'; ctx.font = '14px VT323';
+      ctx.fillText(target.minBlocks + ' blocks to unlock', W / 2, H * 0.14 + 22);
+    }
 
     // Power bar
     if (this.aim.phase === 'power') {
       const pct = this.aim.power / 100;
-      const bw = 220, bh = 24, bx = cx - bw / 2, by = cy + 68;
-      ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(bx - 3, by - 3, bw + 6, bh + 6);
+      const bw = 220, bh = 24, bcx = W / 2, bby = H * 0.62;
+      const bbx = bcx - bw / 2;
+      ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(bbx - 3, bby - 3, bw + 6, bh + 6);
       const pc = pct < 0.4 ? '#2ecc71' : pct < 0.75 ? '#f39c12' : '#e74c3c';
-      ctx.fillStyle = pc; ctx.fillRect(bx, by, bw * pct, bh);
-      ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.strokeRect(bx, by, bw, bh);
+      ctx.fillStyle = pc; ctx.fillRect(bbx, bby, bw * pct, bh);
+      ctx.strokeStyle = '#555'; ctx.lineWidth = 1; ctx.strokeRect(bbx, bby, bw, bh);
       ctx.fillStyle = '#fff'; ctx.font = '20px VT323'; ctx.textAlign = 'center';
-      ctx.fillText('POWER: ' + Math.round(this.aim.power) + '%', cx, by + bh - 2);
+      ctx.fillText('POWER: ' + Math.round(this.aim.power) + '%', bcx, bby + bh - 2);
     }
   }
 
@@ -395,13 +389,13 @@ class CannonGame {
   // FLIGHT
   // ============================================
 
-  launchFlight(power) {
+  launchFlight(power, angleDeg) {
     const str = CANNON_UPGRADES.strength[this.ts.strength];
     const sut = CANNON_UPGRADES.suit[this.ts.suit];
     const rkt = CANNON_UPGRADES.rocket[this.ts.rocket];
     const bon = CANNON_UPGRADES.bonus[this.ts.bonus];
     const speed = str.velocity * (0.5 + (power / 100) * 0.5);
-    const launchAngle = (42 * Math.PI) / 180;
+    const launchAngle = ((angleDeg != null ? angleDeg : 45) * Math.PI) / 180;
     const targetB = TARGET_BOROUGHS.find(b => b.id === this.ts.targetBorough);
 
     this.flight = {
@@ -409,7 +403,7 @@ class CannonGame {
       vy: speed * Math.sin(launchAngle),  // world space: positive = upward
       worldY: 25,                          // 0=ground, positive=up
       cameraY: 0,                          // scrolled camera offset
-      gravity: 0.28,
+      gravity: 0.075,
       drag: sut.drag,
       flapForce: sut.flapForce,
       flapCooldown: 0,
@@ -529,10 +523,12 @@ class CannonGame {
     }
 
     // ---- AIRBORNE ----
-    // Fatigue: past ~40s of flight, a gentle extra pull kicks in and grows slowly.
-    // Backstops the endurance suits (eagle/jetpack) so a flight can't run forever
-    // even with perfect play and good luck — it just takes a long time to bite.
-    const fatigue = this._frame > 2400 ? Math.min(0.06, (this._frame - 2400) / 20000) : 0;
+    // Fatigue: past ~40s of flight, a gentle extra pull kicks in and ramps up over
+    // the next minute or so. Backstops naked/pigeon/eagle so a flight can't run
+    // forever even with perfect play and good luck. Jetpack's lift is strong enough
+    // to outlast even this — by design, it's the one tier where only a hazard hit
+    // ends the flight.
+    const fatigue = this._frame > 2400 ? Math.min(0.30, (this._frame - 2400) / 10000) : 0;
     f.vy -= f.gravity + fatigue;
     f.vx *= (1 - f.drag * 0.018);
     f.worldY += f.vy;
@@ -575,11 +571,13 @@ class CannonGame {
     if (f.vx < 0.2 && f.worldY < 10) { f.worldY = 0; f.landed = true; return; }
 
     f.spawnTimer++;
-    // Spawn rate ramps up with distance — a long endurance flight gets busier, not calmer.
-    const skyInterval = Math.max(28, 68 - Math.floor(f.distance / 200));
-    const groundInterval = Math.max(50, 112 - Math.floor(f.distance / 200));
-    if (f.spawnTimer % skyInterval === 0 && f.distance > 20) this.spawnSky();
-    if (f.spawnTimer % groundInterval === 0 && f.distance > 40) this.spawnGround();
+    // Spawn rate ramps up with distance — a long endurance flight gets busier, not
+    // calmer — but starts dense and generous right out of the cannon (no more
+    // barren first few seconds before anything shows up).
+    const skyInterval = Math.max(22, 42 - Math.floor(f.distance / 250));
+    const groundInterval = Math.max(40, 70 - Math.floor(f.distance / 250));
+    if (f.spawnTimer % skyInterval === 0) this.spawnSky();
+    if (f.spawnTimer % groundInterval === 0 && f.distance > 15) this.spawnGround();
     this.updateLaunchersAndArcs();
     f.entities = f.entities.filter(e => {
       e.x -= dx * 0.85 + 1.5;
@@ -614,17 +612,19 @@ class CannonGame {
 
   spawnSky() {
     const W = this.canvas.width, r = Math.random();
+    // Front-loaded generous: mostly coins/powerups, only a small slice of hazards
+    // right out of the cannon. Danger grows the longer a flight runs (below).
     let type;
-    if      (r < 0.17) type = 'coin';
-    else if (r < 0.28) type = 'ring';
-    else if (r < 0.39) type = 'light_cloud';
-    else if (r < 0.50) type = 'dark_cloud';
-    else if (r < 0.56) type = 'rainbow_cloud';
-    else if (r < 0.63) type = 'pretzel';
+    if      (r < 0.30) type = 'coin';
+    else if (r < 0.42) type = 'ring';
+    else if (r < 0.54) type = 'light_cloud';
+    else if (r < 0.62) type = 'pretzel';
     else if (r < 0.70) type = 'pigeon_flock';
-    else if (r < 0.80) type = 'pigeon_obs';
-    else if (r < 0.90) type = 'helicopter';
-    else               type = 'updraft';
+    else if (r < 0.75) type = 'rainbow_cloud';
+    else if (r < 0.85) type = 'updraft';
+    else if (r < 0.92) type = 'dark_cloud';
+    else if (r < 0.96) type = 'pigeon_obs';
+    else               type = 'helicopter';
 
     // Long flights get meaner: occasionally upgrade a benign pickup into a hazard,
     // scaling with distance. Keeps endurance suits (eagle/jetpack) from being a free ride.
@@ -1433,7 +1433,7 @@ class CannonGame {
       container.appendChild(uSec);
     }
 
-    document.getElementById('cannon-shop-continue').onclick = () => this.startAimPhase();
+    document.getElementById('cannon-shop-continue').onclick = () => this.showLocationSelect();
     document.getElementById('cannon-shop-continue').textContent = 'Keep flying';
     const exitBtn = document.getElementById('cannon-shop-exit');
     if (exitBtn) exitBtn.onclick = () => this.onComplete({
