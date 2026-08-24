@@ -1772,6 +1772,18 @@ button.menu-option.cannon-shop-exit-btn:hover {
   background: rgba(224, 120, 42, 0.85);
   color: #1f0d02;
   border-color: #5a2f10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+}
+
+.heist-gun-icon {
+  width: 34px;
+  height: auto;
+  display: block;
+  pointer-events: none;
 }
 
 .heist-fire-btn:active,

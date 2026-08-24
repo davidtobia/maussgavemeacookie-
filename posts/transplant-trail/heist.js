@@ -333,12 +333,15 @@ class HeistGame {
   // Gun only, now -- rockets go through startGetawayAim()/confirmGetawayAim()
   // instead, since a straight-down-the-lane shot could never reliably
   // reach either target (see the aim mechanic above for why).
+  // Fires backward, out the rear window -- the actual threat (the
+  // pursuing cop) comes from behind now, not ahead of you, so a forward
+  // shot could never reach it.
   triggerGetawayFire() {
     const g = this.mech;
     if (!g || g.kind !== 'getaway' || g.aiming || g.gunAmmo <= 0) return;
     g.gunAmmo--;
     const px = this.canvas.width * 0.22;
-    g.shots.push({ x: px + 44, y: g.laneY, lane: g.lane, kind: 'bullet', vx: 24 });
+    g.shots.push({ x: px - 44, y: g.laneY, lane: g.lane, kind: 'bullet', vx: -26 });
   }
 
   // Only available for the bridge half of the run -- an alternate exit
@@ -1787,7 +1790,7 @@ class HeistGame {
 
     this.showHud(
       `Getaway — ${driver.name} driving`,
-      'Swipe up/down for lanes. FIRE once you have a gun. ROCKET drags a reticle -- line it up and let go.',
+      'Swipe up/down for lanes. FIRE shoots backward at whoever\'s chasing you. ROCKET drags a reticle -- line it up and let go.',
       cfg.label
     );
     this.input.onDown = null;
@@ -1910,6 +1913,18 @@ class HeistGame {
         g.obstacles.push({ kind: 'pickup', type, lane: Math.floor(Math.random() * 3), x: this.canvas.width + 80, hit: false });
         g.nextGuaranteedAt += g.durationFrames * 0.20;
       }
+
+      // The actual pursuit: only one active chaser at a time -- once it's
+      // shot down or gives up (drives past and off), another one picks up
+      // the chase after a beat.
+      const chaserActive = g.obstacles.some(o => o.kind === 'cop' && !o.destroyed);
+      if (!chaserActive) {
+        g.copSpawnTimer--;
+        if (g.copSpawnTimer <= 0) {
+          g.copSpawnTimer = 200 + Math.floor(Math.random() * 160);
+          this.spawnGetawayCop();
+        }
+      }
     }
 
     // The helicopter shows up once the heat's high enough and stays for
@@ -1920,7 +1935,7 @@ class HeistGame {
     // Bullets down cop cars. Rockets are resolved instantly at
     // confirmGetawayAim() instead of flying as a projectile -- see the aim
     // mechanic above.
-    g.shots.forEach(s => { s.x += (s.vx + g.speed) * slow; });
+    g.shots.forEach(s => { s.x += s.vx * slow; });
     g.shots.forEach(s => {
       if (s.dead) return;
       g.obstacles.forEach(o => {
@@ -1933,14 +1948,17 @@ class HeistGame {
         }
       });
     });
-    g.shots = g.shots.filter(s => !s.dead && s.x < this.canvas.width + 200);
+    g.shots = g.shots.filter(s => !s.dead && s.x > -200 && s.x < this.canvas.width + 200);
 
     g.particles.forEach(p => { p.x += p.vx * slow; p.y += p.vy * slow; p.vy += 0.25 * slow; p.life -= slow; });
     g.particles = g.particles.filter(p => p.life > 0);
 
     const px = this.canvas.width * 0.22;
     g.obstacles.forEach(o => {
-      o.x -= g.speed * slow;
+      // The chaser closes in from behind on its own clock, independent of
+      // the world-scroll speed everything ahead of you moves at.
+      if (o.kind === 'cop' && !o.destroyed) o.x += o.chaseSpeed * slow;
+      else o.x -= g.speed * slow;
       if (o.destroyed) return;
       if (g.aiming) return; // attention's on the reticle, not the road
       if (o.hit || g.airborne) return; // jumped clean over it
@@ -1956,12 +1974,20 @@ class HeistGame {
           g.invuln = 45;
           g.hitFlash = 22;
           g.crashes++;
-          g.heat = Math.min(100, g.heat + HEIST_TUNING.getaway.heat.crashAdd);
+          const extra = o.type === 'spikes' ? HEIST_TUNING.getaway.heat.crashAdd * 0.75 : 0;
+          g.heat = Math.min(100, g.heat + HEIST_TUNING.getaway.heat.crashAdd + extra);
           this.cash = Math.max(this.bagFloor, this.cash - HEIST_TUNING.cashLostPerCrash);
+          if (o.type === 'spikes') this.setHudHint('Spike strip. That one’s going to slow you down.', g.cfg.label);
         }
       }
     });
-    g.obstacles = g.obstacles.filter(o => o.x > -120 && !(o.destroyed && o.x < px - 40));
+    g.obstacles = g.obstacles.filter(o => {
+      // A chaser that overtook you without getting shot down just gives
+      // up and peels off eventually, instead of drifting rightward
+      // forever off the edge of the world.
+      if (o.kind === 'cop' && !o.destroyed) return o.x < px + 260;
+      return o.x > -120 && !(o.destroyed && o.x < px - 40);
+    });
 
     const where = g.sirens < 0.5 ? 'across the Brooklyn Bridge' : 'through Chinatown';
     document.getElementById('heist-hud-meta').textContent =
@@ -1986,7 +2012,11 @@ class HeistGame {
   }
 
   spawnGetawayObstacle() {
-    const hazardKinds = ['cab', 'cart', 'pothole', 'dumpster', 'cones', 'cones', 'cab', 'cop'];
+    // Cop cars used to be mixed in here, approaching from ahead like
+    // everything else -- but the actual pursuit is supposed to be coming
+    // from BEHIND you, and that's a separate spawn/movement system now
+    // (spawnGetawayCop()). This list is only the ahead-of-you road hazards.
+    const hazardKinds = ['cab', 'cart', 'pothole', 'dumpster', 'cones', 'cones', 'cab', 'spikes'];
     const roll = Math.random();
     const lane = Math.floor(Math.random() * 3);
     const W = this.canvas.width;
@@ -1998,7 +2028,7 @@ class HeistGame {
       return;
     }
     const type = hazardKinds[Math.floor(Math.random() * hazardKinds.length)];
-    this.mech.obstacles.push({ kind: type === 'cop' ? 'cop' : 'hazard', type, lane, x: W + 80, hit: false, destroyed: false });
+    this.mech.obstacles.push({ kind: 'hazard', type, lane, x: W + 80, hit: false, destroyed: false });
     // A second obstacle sometimes, but never filling every lane — there is
     // always a gap to steer into.
     if (Math.random() < 0.35) {
@@ -2006,10 +2036,24 @@ class HeistGame {
       if (other === lane) other = (lane + 1) % 3;
       const type2 = hazardKinds[Math.floor(Math.random() * hazardKinds.length)];
       this.mech.obstacles.push({
-        kind: type2 === 'cop' ? 'cop' : 'hazard', type: type2,
+        kind: 'hazard', type: type2,
         lane: other, x: W + 80 + 40 + Math.random() * 90, hit: false, destroyed: false,
       });
     }
+  }
+
+  // The actual pursuit car -- comes from BEHIND (off-screen left) and
+  // closes in, independent of the world-scroll speed everything else
+  // moves at. This is the real, hittable thing the flashing lights
+  // belong to now; the old version was a decorative glow with no object
+  // behind it at all, which is why shooting "the car chasing you" used
+  // to do nothing.
+  spawnGetawayCop() {
+    const lane = Math.floor(Math.random() * 3);
+    this.mech.obstacles.push({
+      kind: 'cop', type: 'cop', lane, x: -70, hit: false, destroyed: false,
+      chaseSpeed: 2.2 + Math.random() * 1.3,
+    });
   }
 
   // Cop car destroyed by gunfire doesn't just vanish -- radio traffic, and
@@ -2542,18 +2586,22 @@ class HeistGame {
     const shake = g.hitFlash > 0 ? (Math.random() - 0.5) * 8 : 0;
     this.drawGetawayCar(px + shake, g.laneY + shake, g);
 
-    // Sirens chasing from the left, closing as the run goes on
-    const sx = -60 + g.sirens * (W * 0.16);
-    const blue = Math.floor(this._frame / 8) % 2 === 0;
-    ctx.fillStyle = '#151821';
-    ctx.fillRect(sx, this.laneCenterY(1) - 16, 70, 30);
-    ctx.fillStyle = blue ? '#4a7bd8' : '#d84a4a';
-    ctx.fillRect(sx + 22, this.laneCenterY(1) - 24, 26, 8);
-    const glow = ctx.createRadialGradient(sx + 35, this.laneCenterY(1) - 20, 4, sx + 35, this.laneCenterY(1) - 20, 130);
-    glow.addColorStop(0, blue ? 'rgba(74,123,216,0.30)' : 'rgba(216,74,74,0.30)');
-    glow.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(sx - 100, this.laneCenterY(1) - 150, 300, 300);
+    // Light-bar glow around the real pursuing cop car -- it used to be a
+    // fixed decorative car-shape with no object behind it at all (which
+    // is exactly why shooting "the car chasing you" did nothing). Now the
+    // glow just follows whichever obstacle is actually the live chaser,
+    // and there's nothing drawn here at all when there isn't one --
+    // that gap is the beat before the next one picks up the chase.
+    const chaser = g.obstacles.find(o => o.kind === 'cop' && !o.destroyed);
+    if (chaser) {
+      const cy = this.laneCenterY(chaser.lane);
+      const blue = Math.floor(this._frame / 6) % 2 === 0;
+      const glow = ctx.createRadialGradient(chaser.x, cy - 20, 4, chaser.x, cy - 20, 130);
+      glow.addColorStop(0, blue ? 'rgba(74,123,216,0.30)' : 'rgba(216,74,74,0.30)');
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(chaser.x - 150, cy - 170, 300, 300);
+    }
 
     // Heat bar -- not "how far to the finish," how close to caught. Always
     // drifting up; good play buys it back down, never stops it outright.
@@ -2788,6 +2836,21 @@ class HeistGame {
         ctx.fillRect(x - 30, y - 18, 60, 34);
         ctx.fillStyle = '#2e5135';
         ctx.fillRect(x - 32, y - 22, 64, 7);
+        break;
+      case 'spikes':
+        ctx.fillStyle = '#c8402f';
+        ctx.fillRect(x - 34, y - 4, 68, 8);
+        for (let i = -4; i <= 4; i++) {
+          ctx.fillStyle = '#d8d8d0';
+          ctx.beginPath();
+          ctx.moveTo(x + i * 8 - 3, y - 4);
+          ctx.lineTo(x + i * 8 + 3, y - 4);
+          ctx.lineTo(x + i * 8, y - 18);
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.fillStyle = '#8a2a20';
+        ctx.fillRect(x - 34, y + 4, 68, 5);
         break;
       case 'cones':
       default:

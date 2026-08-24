@@ -626,7 +626,17 @@
       <div id="heist-getaway-controls" class="heist-getaway-controls hidden">
         <button id="heist-nitro-btn" class="heist-getaway-btn heist-nitro-btn" disabled>NITRO<br><span id="heist-nitro-count">0</span></button>
         <button id="heist-jump-btn" class="heist-getaway-btn heist-jump-btn">JUMP<br><span>hold to flip</span></button>
-        <button id="heist-fire-btn" class="heist-getaway-btn heist-fire-btn hidden">FIRE<br><span id="heist-fire-count">0</span></button>
+        <button id="heist-fire-btn" class="heist-getaway-btn heist-fire-btn hidden">
+          <svg viewBox="0 0 64 32" class="heist-gun-icon" aria-hidden="true">
+            <rect x="4" y="15" width="38" height="5" fill="currentColor"/>
+            <rect x="40" y="12" width="18" height="4" fill="currentColor"/>
+            <rect x="10" y="10" width="14" height="5" fill="currentColor"/>
+            <path d="M18 20 Q13 32 6 29 Q14 25 18 20 Z" fill="currentColor"/>
+            <rect x="2" y="18" width="7" height="9" fill="currentColor"/>
+            <rect x="-2" y="20" width="9" height="12" fill="currentColor" transform="rotate(18 2 26)"/>
+          </svg>
+          <span id="heist-fire-count">0</span>
+        </button>
         <button id="heist-rocket-btn" class="heist-getaway-btn heist-rocket-btn hidden">ROCKET<br><span id="heist-rocket-count">0</span></button>
       </div>
       <!-- Only shown for the bridge half of the chase -->
@@ -703,7 +713,7 @@
   <script src="trail.js?v=6"></script>
   <script src="bodega.js?v=1"></script>
   <script src="cannon.js?v=13"></script>
-  <script src="heist.js?v=18"></script>
+  <script src="heist.js?v=19"></script>
   <script src="game.js?v=7"></script>
 
   <!-- GoatCounter Analytics -->
