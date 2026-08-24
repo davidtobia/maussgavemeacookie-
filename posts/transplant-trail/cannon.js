@@ -37,32 +37,32 @@ const CANNON_UPGRADES = {
 
 const TARGET_BOROUGHS = [
   {
-    id: 'hoboken', name: 'Hoboken, NJ', angle: 290, minBlocks: 350, color: '#e67e22',
-    river: { name: 'Hudson River', atBlock: 120, width: 220, bridge: 'sully' },
+    id: 'hoboken', name: 'Hoboken, NJ', angle: 290, minBlocks: 550, color: '#e67e22',
+    river: { name: 'Hudson River', atBlock: 180, width: 340, bridge: 'sully' },
     unlock: {
       title: 'Giant Cannoli + MAGA Girlfriend',
       text: 'Dom hands you a cannoli the size of a pool noodle and says "this is what freedom tastes like." He also introduces you to your new MAGA Girlfriend. She has strong opinions about the PATH train and refers to Manhattan as "the city."',
     },
   },
   {
-    id: 'brooklyn-heights', name: 'Brooklyn Heights', angle: 145, minBlocks: 650, color: '#3498db',
-    river: { name: 'East River', atBlock: 320, width: 230, bridge: 'brooklyn_bridge' },
+    id: 'brooklyn-heights', name: 'Brooklyn Heights', angle: 145, minBlocks: 975, color: '#3498db',
+    river: { name: 'East River', atBlock: 480, width: 345, bridge: 'brooklyn_bridge' },
     unlock: {
       title: 'Park Slope Food Co-op + Legal Summons',
       text: 'You receive a Park Slope Food Co-op membership ($25 initiation, 2.75 hrs/month mandatory). You also receive a Summons to Appear Before the High Court of Bisexuals in Monogamous Cis Partnerships to Discuss Whether Sabra Hummus Is Ethical. Attendance is mandatory.',
     },
   },
   {
-    id: 'bushwick', name: 'Bushwick', angle: 110, minBlocks: 1300, color: '#9b59b6',
-    river: { name: 'East River', atBlock: 320, width: 230, bridge: 'brooklyn_bridge' },
+    id: 'bushwick', name: 'Bushwick', angle: 110, minBlocks: 1950, color: '#9b59b6',
+    river: { name: 'East River', atBlock: 480, width: 345, bridge: 'brooklyn_bridge' },
     unlock: {
       title: 'Septum Piercing + ENM Marriage Reshuffle Goodybag',
       text: 'Someone pierces your septum before you even land. The goodybag contains one Tarot Card Gift Set, a laminated ENM Marriage Reshuffle Worksheet, two oat milk espresso coupons, and a zine called "Who Even Owns Feelings." You are now legally polyam-adjacent.',
     },
   },
   {
-    id: 'astoria', name: 'Astoria, Queens', angle: 35, minBlocks: 1900, color: '#2ecc71',
-    river: { name: 'East River', atBlock: 400, width: 270, bridge: 'queensboro' },
+    id: 'astoria', name: 'Astoria, Queens', angle: 35, minBlocks: 2850, color: '#2ecc71',
+    river: { name: 'East River', atBlock: 600, width: 405, bridge: 'queensboro' },
     unlock: {
       title: 'Reasonable Rent + Boring Personality',
       text: 'Your new apartment is $1,150/month for a two-bedroom with a real kitchen. In exchange, you receive a Boring Personality. You own a cast iron pan. You go to bed at 10:30. You are at peace. A Greek grandfather hands you a beer before you even knock.',
@@ -210,7 +210,7 @@ class CannonGame {
 
     TARGET_BOROUGHS.forEach(b => {
       const rad  = ((b.angle - 90) * Math.PI) / 180;
-      const dist = Math.min(80 + b.minBlocks / 25, 155);
+      const dist = Math.min(80 + b.minBlocks / 33, 155);
       const tx = cx + Math.cos(rad) * dist, ty = cy + Math.sin(rad) * dist;
       const got = this.ts.unlocks.includes(b.id);
       const hs  = this.ts.highScores[b.id];
@@ -406,6 +406,45 @@ class CannonGame {
       ctx.fillText(target.name, W / 2, H * 0.14);
       ctx.fillStyle = '#888'; ctx.font = '14px VT323';
       ctx.fillText(target.minBlocks + ' blocks to unlock', W / 2, H * 0.14 + 22);
+    }
+
+    // Distance strip — where the river actually sits relative to the finish
+    // line, plus your best previous attempt, so aiming is informed instead
+    // of a guess. This is the whole point of picking an angle deliberately.
+    if (target && target.river) {
+      const stripY = H * 0.22, stripX = W * 0.12, stripW = W * 0.76, stripH = 16;
+      const maxD = target.minBlocks * 1.15;
+      const toX = (d) => stripX + Math.min(1, d / maxD) * stripW;
+
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      ctx.fillRect(stripX - 4, stripY - 4, stripW + 8, stripH + 8);
+      ctx.fillStyle = '#4a7c3f'; ctx.fillRect(stripX, stripY, stripW, stripH);
+
+      const riverX0 = toX(target.river.atBlock), riverX1 = toX(target.river.atBlock + target.river.width);
+      ctx.fillStyle = '#3a6ea8';
+      ctx.fillRect(riverX0, stripY, riverX1 - riverX0, stripH);
+
+      const finishX = toX(target.minBlocks);
+      ctx.strokeStyle = color; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(finishX, stripY - 7); ctx.lineTo(finishX, stripY + stripH + 7); ctx.stroke();
+
+      const hs = this.ts.highScores[target.id];
+      if (hs) {
+        const hsX = toX(hs);
+        ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(hsX, stripY - 5); ctx.lineTo(hsX, stripY + stripH + 5); ctx.stroke();
+      }
+
+      ctx.fillStyle = '#7ec8e3'; ctx.font = '13px VT323'; ctx.textAlign = 'center';
+      ctx.fillText(`${target.river.name}: blocks ${target.river.atBlock}-${target.river.atBlock + target.river.width}`, W / 2, stripY - 10);
+      ctx.fillStyle = '#aaa'; ctx.font = '12px VT323'; ctx.textAlign = 'left';
+      ctx.fillText('0', stripX, stripY + stripH + 16);
+      ctx.textAlign = 'right';
+      ctx.fillText(Math.round(maxD) + ' blk', stripX + stripW, stripY + stripH + 16);
+      if (hs) {
+        ctx.fillStyle = '#f1c40f'; ctx.textAlign = 'center';
+        ctx.fillText('best: ' + hs, toX(hs), stripY + stripH + 16);
+      }
     }
 
     // Power bar
