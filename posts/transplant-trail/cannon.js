@@ -5,64 +5,64 @@
 
 const CANNON_UPGRADES = {
   strength: [
-    { id: 'standard',   label: 'Standard Cannon',  cost: 0,    velocity: 4,  desc: 'Gets you there... maybe' },
-    { id: 'reinforced', label: 'Reinforced Cannon', cost: 350,  velocity: 6,  desc: 'More oomph' },
-    { id: 'industrial', label: 'Industrial Cannon', cost: 900,  velocity: 8,  desc: 'Serious hardware' },
-    { id: 'nuclear',    label: 'Nuclear Option',    cost: 2000, velocity: 10, desc: 'Unregulated' },
+    { id: 'standard',   label: 'Standard Cannon',  cost: 0,    velocity: 8,  desc: 'Gets you there... maybe' },
+    { id: 'reinforced', label: 'Reinforced Cannon', cost: 300,  velocity: 12, desc: 'More oomph' },
+    { id: 'industrial', label: 'Industrial Cannon', cost: 1200, velocity: 16, desc: 'Serious hardware' },
+    { id: 'nuclear',    label: 'Nuclear Option',    cost: 3000, velocity: 20, desc: 'Unregulated' },
   ],
   accuracy: [
     { id: 'untrained', label: 'Wild Guess',    cost: 0,    swingSpeed: 0.60, desc: 'Needle goes brrr' },
     { id: 'practiced', label: 'Practiced Eye', cost: 250,  swingSpeed: 0.40, desc: 'Slightly less chaotic' },
-    { id: 'precise',   label: 'Laser Focus',  cost: 650,  swingSpeed: 0.24, desc: 'You read Sun Tzu' },
-    { id: 'surgical',  label: 'Surgical Aim', cost: 1400, swingSpeed: 0.13, desc: 'Touch grass later' },
+    { id: 'precise',   label: 'Laser Focus',  cost: 900,  swingSpeed: 0.24, desc: 'You read Sun Tzu' },
+    { id: 'surgical',  label: 'Surgical Aim', cost: 2200, swingSpeed: 0.13, desc: 'Touch grass later' },
   ],
   suit: [
     { id: 'naked',   label: 'Just Vibes',   cost: 0,    flapForce: 2.5, cooldownFrames: 62, drag: 0.24, desc: 'Barely works. One weak flap/sec. You will land.' },
     { id: 'pigeon',  label: 'Pigeon Wings', cost: 250,  flapForce: 4,   cooldownFrames: 40, drag: 0.14, desc: 'Real lift — stay up much longer.' },
-    { id: 'eagle',   label: 'Eagle Suit',   cost: 600,  flapForce: 6,   cooldownFrames: 22, drag: 0.07, desc: 'Strong, sustained lift. Built for endurance flights.' },
-    { id: 'jetpack', label: 'Jetpack',      cost: 1200, flapForce: 15,  cooldownFrames: 6,  drag: 0.03, desc: 'Near-infinite flight. Only damage stops you.' },
+    { id: 'eagle',   label: 'Eagle Suit',   cost: 900,  flapForce: 6,   cooldownFrames: 22, drag: 0.07, desc: 'Strong, sustained lift. Built for endurance flights.' },
+    { id: 'jetpack', label: 'Jetpack',      cost: 2000, flapForce: 15,  cooldownFrames: 6,  drag: 0.03, desc: 'Near-infinite flight. Only damage stops you.' },
   ],
   rocket: [
     { id: 'none',  label: 'No Rocket',    cost: 0,   boost: 0  },
-    { id: 'small', label: 'Small Rocket', cost: 350, boost: 10 },
-    { id: 'big',   label: 'Big Rocket',   cost: 900, boost: 22 },
+    { id: 'small', label: 'Small Rocket', cost: 300,  boost: 10 },
+    { id: 'big',   label: 'Big Rocket',   cost: 1200, boost: 22 },
   ],
   bonus: [
     { id: 'none',        label: 'No Bonus',      cost: 0,    desc: 'Flying free' },
-    { id: 'coin_magnet', label: 'Coin Magnet',   cost: 300,  desc: 'Auto-collect nearby coins' },
-    { id: 'bouncy_legs', label: 'Bouncy Legs',   cost: 600,  desc: 'Bounces go further and higher' },
-    { id: 'rat_whisp',   label: 'Rat Whisperer', cost: 1000, desc: 'Rat mode is faster and longer' },
+    { id: 'coin_magnet', label: 'Coin Magnet',   cost: 280,  desc: 'Auto-collect nearby coins' },
+    { id: 'bouncy_legs', label: 'Bouncy Legs',   cost: 900,  desc: 'Bounces go further and higher' },
+    { id: 'rat_whisp',   label: 'Rat Whisperer', cost: 1600, desc: 'Rat mode is faster and longer' },
   ],
 };
 
 const TARGET_BOROUGHS = [
   {
-    id: 'hoboken', name: 'Hoboken, NJ', angle: 290, minBlocks: 150, color: '#e67e22',
-    river: { name: 'Hudson River', atBlock: 55, width: 80, bridge: 'sully' },
+    id: 'hoboken', name: 'Hoboken, NJ', angle: 290, minBlocks: 350, color: '#e67e22',
+    river: { name: 'Hudson River', atBlock: 120, width: 220, bridge: 'sully' },
     unlock: {
       title: 'Giant Cannoli + MAGA Girlfriend',
       text: 'Dom hands you a cannoli the size of a pool noodle and says "this is what freedom tastes like." He also introduces you to your new MAGA Girlfriend. She has strong opinions about the PATH train and refers to Manhattan as "the city."',
     },
   },
   {
-    id: 'brooklyn-heights', name: 'Brooklyn Heights', angle: 145, minBlocks: 300, color: '#3498db',
-    river: { name: 'East River', atBlock: 130, width: 95, bridge: 'brooklyn_bridge' },
+    id: 'brooklyn-heights', name: 'Brooklyn Heights', angle: 145, minBlocks: 650, color: '#3498db',
+    river: { name: 'East River', atBlock: 320, width: 230, bridge: 'brooklyn_bridge' },
     unlock: {
       title: 'Park Slope Food Co-op + Legal Summons',
       text: 'You receive a Park Slope Food Co-op membership ($25 initiation, 2.75 hrs/month mandatory). You also receive a Summons to Appear Before the High Court of Bisexuals in Monogamous Cis Partnerships to Discuss Whether Sabra Hummus Is Ethical. Attendance is mandatory.',
     },
   },
   {
-    id: 'bushwick', name: 'Bushwick', angle: 110, minBlocks: 550, color: '#9b59b6',
-    river: { name: 'East River', atBlock: 130, width: 95, bridge: 'brooklyn_bridge' },
+    id: 'bushwick', name: 'Bushwick', angle: 110, minBlocks: 1300, color: '#9b59b6',
+    river: { name: 'East River', atBlock: 320, width: 230, bridge: 'brooklyn_bridge' },
     unlock: {
       title: 'Septum Piercing + ENM Marriage Reshuffle Goodybag',
       text: 'Someone pierces your septum before you even land. The goodybag contains one Tarot Card Gift Set, a laminated ENM Marriage Reshuffle Worksheet, two oat milk espresso coupons, and a zine called "Who Even Owns Feelings." You are now legally polyam-adjacent.',
     },
   },
   {
-    id: 'astoria', name: 'Astoria, Queens', angle: 35, minBlocks: 800, color: '#2ecc71',
-    river: { name: 'East River', atBlock: 160, width: 110, bridge: 'queensboro' },
+    id: 'astoria', name: 'Astoria, Queens', angle: 35, minBlocks: 1900, color: '#2ecc71',
+    river: { name: 'East River', atBlock: 400, width: 270, bridge: 'queensboro' },
     unlock: {
       title: 'Reasonable Rent + Boring Personality',
       text: 'Your new apartment is $1,150/month for a two-bedroom with a real kitchen. In exchange, you receive a Boring Personality. You own a cast iron pan. You go to bed at 10:30. You are at peace. A Greek grandfather hands you a beer before you even knock.',
@@ -210,7 +210,7 @@ class CannonGame {
 
     TARGET_BOROUGHS.forEach(b => {
       const rad  = ((b.angle - 90) * Math.PI) / 180;
-      const dist = Math.min(80 + b.minBlocks / 13, 155);
+      const dist = Math.min(80 + b.minBlocks / 25, 155);
       const tx = cx + Math.cos(rad) * dist, ty = cy + Math.sin(rad) * dist;
       const got = this.ts.unlocks.includes(b.id);
       const hs  = this.ts.highScores[b.id];
@@ -1440,7 +1440,7 @@ class CannonGame {
     const splashed = this.flight.splashed;
     // A splash still earns Borough Bucks for the distance you did cover — the
     // failure is not reaching the borough, not the attempt being worthless.
-    const earned   = Math.floor(distance * 0.8);
+    const earned   = Math.floor(distance * 1.2);
     this.ts.boroughBucks  += earned;
     this.ts.totalDistance += distance;
 
