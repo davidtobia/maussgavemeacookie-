@@ -524,6 +524,11 @@ class HeistGame {
     this.floorHeatGain = 1.15;
     this.floorHeatDecay = 0.55;
 
+    // Purely cosmetic chaos — nothing here touches heat, guards, or cash.
+    // Just the store falling apart a little in the background.
+    this.floorAmbient = [];
+    this.floorAmbientTimer = 150;
+
     this.buildFloorRosterDOM();
     document.getElementById('heist-floor-hud').classList.remove('hidden');
     document.getElementById('heist-floor-hint').textContent =
@@ -656,9 +661,33 @@ class HeistGame {
     }
   }
 
+  spawnAmbient() {
+    const zones = this.floorZones();
+    const z = zones[Math.floor(Math.random() * zones.length)];
+    const type = Math.random() < 0.55 ? 'tomato' : 'carts';
+    this.floorAmbient.push({
+      type,
+      x: z.x + (Math.random() - 0.5) * 14,
+      y: z.y + (Math.random() - 0.5) * 14,
+      rollX: (Math.random() - 0.5) * 18,
+      rollY: (Math.random() - 0.5) * 18,
+      t: 0,
+      duration: type === 'tomato' ? 110 : 170,
+    });
+    this.floorAmbientTimer = 260 + Math.random() * 260;
+  }
+
+  updateAmbient() {
+    this.floorAmbientTimer--;
+    if (this.floorAmbientTimer <= 0) this.spawnAmbient();
+    this.floorAmbient.forEach(a => a.t++);
+    this.floorAmbient = this.floorAmbient.filter(a => a.t < a.duration);
+  }
+
   floorLoop() {
     if (this.phase !== 'floor') return;
     this._frame++;
+    this.updateAmbient();
 
     // Move every present, un-pulled character toward its own target.
     this.floorChars.forEach(ch => {
@@ -836,6 +865,8 @@ class HeistGame {
       ctx.stroke();
     });
 
+    this.floorAmbient.forEach(a => this.drawAmbientEvent(a, toPx));
+
     this.floorGuards.forEach(g => {
       const [gx, gy] = toPx(g.x, g.y);
       ctx.beginPath();
@@ -865,6 +896,67 @@ class HeistGame {
       ctx.lineWidth = 1.5;
       ctx.stroke();
     });
+  }
+
+  // Purely cosmetic — a tomato that rolls off a display and squishes, or a
+  // shopping-cart pile-up that materializes with a CRASH. Nothing here
+  // affects heat, guards, or cash; it's just the store falling apart a bit.
+  drawAmbientEvent(a, toPx) {
+    const ctx = this.ctx;
+    const p = a.t / a.duration;
+
+    if (a.type === 'tomato') {
+      const rollP = Math.min(1, p / 0.55);
+      const x = a.x + a.rollX * rollP, y = a.y + a.rollY * rollP;
+      const [px, py] = toPx(x, y);
+      if (p < 0.55) {
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(a.t * 0.35);
+        ctx.fillStyle = '#c0392b';
+        ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#4a7c3f';
+        ctx.fillRect(-1.5, -8, 3, 3);
+        ctx.restore();
+      } else {
+        const splatP = (p - 0.55) / 0.45;
+        ctx.globalAlpha = Math.max(0, 1 - splatP * 0.8);
+        ctx.fillStyle = '#c0392b';
+        ctx.beginPath();
+        ctx.ellipse(px, py, 9 + splatP * 5, 4 + splatP * 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#8e2a20'; ctx.lineWidth = 1;
+        for (let i = 0; i < 5; i++) {
+          const ang = (i / 5) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px + Math.cos(ang) * (10 + splatP * 8), py + Math.sin(ang) * (5 + splatP * 4));
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+      }
+    } else {
+      const [px, py] = toPx(a.x, a.y);
+      const settleWobble = a.t < 20 ? Math.sin(a.t * 1.4) * (20 - a.t) * 0.15 : 0;
+      ctx.save();
+      ctx.translate(px, py);
+      [-14, 0, 14, 7].forEach((ox, i) => {
+        ctx.save();
+        ctx.rotate((i % 2 === 0 ? 1 : -1) * 0.3 + settleWobble * 0.02);
+        ctx.strokeStyle = '#8a9aac'; ctx.lineWidth = 2;
+        ctx.strokeRect(ox - 9, -7 + (i > 2 ? 6 : 0), 18, 14);
+        ctx.restore();
+      });
+      ctx.restore();
+
+      const textP = p < 0.15 ? p / 0.15 : p > 0.75 ? Math.max(0, 1 - (p - 0.75) / 0.25) : 1;
+      ctx.globalAlpha = textP;
+      ctx.fillStyle = '#f1c40f';
+      ctx.font = 'bold 16px VT323, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('CRASH', px, py - 26);
+      ctx.globalAlpha = 1;
+    }
   }
 
   showResult(cfg) {
