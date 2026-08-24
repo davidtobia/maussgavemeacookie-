@@ -326,21 +326,58 @@ class CannonGame {
     this._aimAF = requestAnimationFrame(() => this.aimLoop());
   }
 
+  // You're aiming FROM Washington Square Park's concrete plaza, out over the
+  // rooftops toward wherever you're targeting — not a disconnected menu screen.
+  drawAimBackdrop(W, H, gy, px, color) {
+    const ctx = this.ctx;
+
+    // Daytime sky
+    const sky = ctx.createLinearGradient(0, 0, 0, gy);
+    sky.addColorStop(0, '#4a86c8'); sky.addColorStop(1, '#cfe9f7');
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, gy);
+
+    // Distant skyline receding toward the target, tinted by its color
+    for (let i = 0; i < 11; i++) {
+      const bw = W * 0.78 / 11;
+      const bx = W * 0.28 + i * bw;
+      const bh = 34 + ((i * 47) % 90);
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(58,68,96,0.55)' : 'rgba(58,68,96,0.4)';
+      ctx.fillRect(bx, gy - bh, bw - 5, bh);
+    }
+    ctx.fillStyle = color + '33';
+    ctx.fillRect(W * 0.28, gy - 6, W * 0.72, 6);
+
+    // River band between the park and the far shore
+    ctx.fillStyle = 'rgba(70,120,190,0.55)';
+    ctx.fillRect(W * 0.55, gy - 3, W * 0.45, 3);
+
+    // WSP concrete plaza, foreground
+    ctx.fillStyle = '#8f8c81'; ctx.fillRect(0, gy, W * 0.34, H - gy);
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)'; ctx.lineWidth = 1;
+    for (let x = 0; x < W * 0.34; x += 22) { ctx.beginPath(); ctx.moveTo(x, gy); ctx.lineTo(x, H); ctx.stroke(); }
+    ctx.fillStyle = '#3a6a3a'; ctx.fillRect(W * 0.34, gy, W * 0.06, H - gy); // grass strip at plaza edge
+
+    // Washington Square Arch, sitting right behind the cannon
+    const aw = 100, ax = px - aw * 0.35, ay = gy - 128;
+    ctx.fillStyle = '#d8d3c2';
+    ctx.fillRect(ax, ay + 50, 18, 78);
+    ctx.fillRect(ax + aw - 18, ay + 50, 18, 78);
+    ctx.beginPath(); ctx.arc(ax + aw / 2, ay + 50, aw / 2, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = sky;
+    ctx.fillRect(ax + 18, ay + 50, aw - 36, 78);
+    ctx.beginPath(); ctx.arc(ax + aw / 2, ay + 50, aw / 2 - 18, Math.PI, 0); ctx.fill();
+
+    // Cannon platform
+    ctx.fillStyle = '#3a3a3a'; ctx.fillRect(px - 16, gy - 6, 32, 10);
+  }
+
   drawAimCanvas(W, H) {
     const ctx = this.ctx;
     const target = TARGET_BOROUGHS.find(b => b.id === this.ts.targetBorough);
     const color = target ? target.color : '#d4a574';
+    const gy = H * 0.82, px = W * 0.15;
 
-    // Sky-ish backdrop
-    ctx.fillStyle = '#080820'; ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = '#1a1a3a'; ctx.lineWidth = 1;
-    for (let x = 0; x < W; x += 32) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-    for (let y = 0; y < H; y += 32) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-
-    // Ground + cannon pivot, bottom-left corner (side view)
-    const gy = H * 0.82, px = W * 0.16;
-    ctx.fillStyle = '#141e14'; ctx.fillRect(0, gy, W, H - gy);
-    ctx.fillStyle = '#3a6a3a'; ctx.fillRect(px - 14, gy - 6, 28, 10);
+    this.drawAimBackdrop(W, H, gy, px, color);
 
     // Elevation arc from MIN_ANGLE to MAX_ANGLE
     const R = Math.min(W, H) * 0.34;
@@ -614,16 +651,20 @@ class CannonGame {
     const W = this.canvas.width, r = Math.random();
     // Front-loaded generous: mostly coins/powerups, only a small slice of hazards
     // right out of the cannon. Danger grows the longer a flight runs (below).
+    // Currency/utility pickups are frequent (reward, no effect on how far a shot
+    // goes); movement-boost pickups (ring/light_cloud/pigeon_flock/updraft) are
+    // kept rarer on purpose — they used to be common enough that one incidental
+    // hit alone covered the gap a bad shot left, making skill/power irrelevant.
     let type;
-    if      (r < 0.30) type = 'coin';
-    else if (r < 0.42) type = 'ring';
-    else if (r < 0.54) type = 'light_cloud';
-    else if (r < 0.62) type = 'pretzel';
-    else if (r < 0.70) type = 'pigeon_flock';
-    else if (r < 0.75) type = 'rainbow_cloud';
-    else if (r < 0.85) type = 'updraft';
-    else if (r < 0.92) type = 'dark_cloud';
-    else if (r < 0.96) type = 'pigeon_obs';
+    if      (r < 0.42) type = 'coin';
+    else if (r < 0.52) type = 'pretzel';
+    else if (r < 0.58) type = 'rainbow_cloud';
+    else if (r < 0.65) type = 'ring';
+    else if (r < 0.72) type = 'light_cloud';
+    else if (r < 0.77) type = 'pigeon_flock';
+    else if (r < 0.83) type = 'updraft';
+    else if (r < 0.90) type = 'dark_cloud';
+    else if (r < 0.95) type = 'pigeon_obs';
     else               type = 'helicopter';
 
     // Long flights get meaner: occasionally upgrade a benign pickup into a hazard,
