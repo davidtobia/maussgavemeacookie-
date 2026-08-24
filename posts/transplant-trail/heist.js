@@ -79,22 +79,16 @@ function getHeistCrew(id) {
 // ============================================
 
 const HEIST_TUNING = {
-  tony: { rounds: 3, speed: 2.4, zone: 24, roundTime: 5.0 },
-  ruhul: {
-    rounds: 4,
-    rate: 1.0,
-    bands: [[58, 94], [60, 92], [62, 90], [64, 88]],
-  },
-  dmitri: { thrust: 0.26, grav: 0.17, damp: 0.90, zoneH: 22, duration: 14, target: 5.5 },
-  register: {
-    timeLimit: 25,
-    missPenalty: 3,
-    tumblers: [
-      { speed: 1.7, width: 28 },
-      { speed: 2.1, width: 24 },
-      { speed: 2.5, width: 20 },
-      { speed: 2.9, width: 18 },
-    ],
+  // The board tilts on two independent axes (left thumb -> X, right thumb ->
+  // Y, or mouse position on desktop -> both at once). accel/friction give it
+  // real momentum on purpose: push too hard and you carry into a hole,
+  // correct late and you're already committed. That inertia is the actual
+  // difficulty, not just steering toward the goal.
+  maze: {
+    timeLimit: 35,
+    accel: 0.028,
+    friction: 0.965,
+    ballRadius: 3.0,
   },
   getaway: {
     // Whichever Eric ended up on Lookout is the one behind the wheel. Distance
@@ -105,9 +99,8 @@ const HEIST_TUNING = {
     ruhul:  { speed: 7.4, spawn: 44, distance: 9000,  label: 'Ruhul knows a shortcut.' },
     dmitri: { speed: 6.6, spawn: 56, distance: 10500, label: 'Dmitri drives. Dmitri always drives like this.' },
   },
-  cashPerDistractionPoint: 1.5,   // 0-100 score => up to $150 each
-  cashPerTumbler: 120,
-  cashPerSecondLeft: 8,
+  cashMazeComplete: 420,
+  cashPerSecondLeft: 10,
   cashLostPerCrash: 40,
 };
 
@@ -128,7 +121,7 @@ class HeistGame {
     this.assign = { distractionA: null, distractionB: null, lookout: null };
     this.selectedCrew = null;
     this.crashes = 0;
-    this.tumblersSet = 0;
+    this.mazeCompleted = false;
 
     this.mech = null;      // active mini-encounter state
     this._af = null;       // active RAF handle
@@ -146,7 +139,69 @@ class HeistGame {
     this._resizeHandler = () => this.resize();
     window.addEventListener('resize', this._resizeHandler);
     this.bindInput();
+    this.bindMazeInput();
     this.showIntro();
+  }
+
+  // Two real, simultaneous fingers: left thumb (wherever it lands on the
+  // left half of the screen) sets X-tilt from its vertical position, right
+  // thumb sets Y-tilt the same way on the right half — like turning both
+  // knobs on a wooden labyrinth toy. Only does anything during 'maze'.
+  // Mouse position is the desktop fallback: it drives both axes at once.
+  bindMazeInput() {
+    this.mazeTiltX = 0;
+    this.mazeTiltY = 0;
+    this._mazeTouches = {}; // identifier -> { side: 'left'|'right' }
+
+    const setFromTouch = (t) => {
+      const r = this.canvas.getBoundingClientRect();
+      const side = this._mazeTouches[t.identifier];
+      if (!side) return;
+      const ny = ((t.clientY - r.top) / r.height - 0.5) * 2.4;
+      const clamped = Math.max(-1, Math.min(1, ny));
+      if (side.side === 'left') this.mazeTiltX = clamped;
+      else this.mazeTiltY = clamped;
+    };
+
+    this.canvas.addEventListener('touchstart', (e) => {
+      if (this.phase !== 'maze') return;
+      e.preventDefault();
+      const r = this.canvas.getBoundingClientRect();
+      Array.from(e.changedTouches).forEach(t => {
+        const side = (t.clientX - r.left) < r.width / 2 ? 'left' : 'right';
+        this._mazeTouches[t.identifier] = { side };
+        setFromTouch(t);
+      });
+    }, { passive: false });
+
+    this.canvas.addEventListener('touchmove', (e) => {
+      if (this.phase !== 'maze') return;
+      e.preventDefault();
+      Array.from(e.changedTouches).forEach(t => {
+        if (this._mazeTouches[t.identifier]) setFromTouch(t);
+      });
+    }, { passive: false });
+
+    const endTouch = (e) => {
+      if (this.phase !== 'maze') return;
+      Array.from(e.changedTouches).forEach(t => {
+        const side = this._mazeTouches[t.identifier];
+        delete this._mazeTouches[t.identifier];
+        if (side && side.side === 'left') this.mazeTiltX = 0;
+        else if (side) this.mazeTiltY = 0;
+      });
+    };
+    this.canvas.addEventListener('touchend', endTouch);
+    this.canvas.addEventListener('touchcancel', endTouch);
+
+    // Desktop fallback — single cursor drives both axes at once.
+    this.canvas.addEventListener('mousemove', (e) => {
+      if (this.phase !== 'maze') return;
+      if (Object.keys(this._mazeTouches).length > 0) return; // real touch wins
+      const r = this.canvas.getBoundingClientRect();
+      this.mazeTiltX = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width - 0.5) * 2.4));
+      this.mazeTiltY = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height - 0.5) * 2.4));
+    });
   }
 
   resize() {
@@ -379,7 +434,7 @@ class HeistGame {
 
     const rows = [
       { label: 'Thief', who: this.gameState.playerName || 'You', color: '#d4a574',
-        text: 'Four tumblers on the register drawer. Set them all before anyone counts the seconds.' },
+        text: 'Two thumbs on the register lock. Roll it to the shear line before anyone counts the seconds.' },
     ];
     HEIST_ROLES.forEach(r => {
       const c = getHeistCrew(this.assign[r.id]);
@@ -1007,118 +1062,144 @@ class HeistGame {
   // PHASE 2 — THE REGISTER (lockpick)
   // ------------------------------------------------
 
+  // The lock, reimagined as a labyrinth: tilt the board on two axes at once
+  // (two thumbs, or mouse position on desktop) to roll a ball from the pins'
+  // resting position to the shear line without dropping it down through the
+  // housing. Real momentum, real holes, no scripted safety net beyond time.
+  mazeLayout() {
+    return {
+      start: { x: 8, y: 12 },
+      goal: { x: 50, y: 90, r: 6 },
+      walls: [
+        { x: 0,  y: 20, w: 70, h: 6 },  // gap on the right
+        { x: 30, y: 46, w: 70, h: 6 },  // gap on the left
+        { x: 0,  y: 72, w: 70, h: 6 },  // gap on the right
+      ],
+      holes: [
+        { x: 78, y: 33, r: 4.2 },
+        { x: 18, y: 59, r: 4.2 },
+      ],
+    };
+  }
+
   startRegister() {
     this.stopLoop();
     this.hideOverlays();
-    this.phase = 'register';
-    const t = HEIST_TUNING.register;
+    this.phase = 'maze';
+    const t = HEIST_TUNING.maze;
+    const layout = this.mazeLayout();
+
+    this.mazeTiltX = 0;
+    this.mazeTiltY = 0;
+    this._mazeTouches = {};
 
     this.mech = {
-      kind: 'register',
-      index: 0,
-      tumblers: t.tumblers.map((tb, i) => ({
-        ...tb,
-        pos: Math.random() * 100,
-        dir: Math.random() < 0.5 ? 1 : -1,
-        center: 25 + Math.random() * 50,
-        set: false,
-      })),
-      timeLeft: t.timeLimit * 60,
-      flash: 0, flashGood: false, doneTimer: 0, failed: false,
+      kind: 'maze',
+      layout,
+      ball: { x: layout.start.x, y: layout.start.y, vx: 0, vy: 0 },
+      resets: 0,
+      completed: false,
     };
 
-    // Distraction work buys you a little breathing room on the register —
-    // every hotspot the Erics actually triggered on the floor is worth a
-    // second before anyone looks over at the counter.
+    // Distraction work buys you a little breathing room — every hotspot the
+    // Erics actually triggered on the floor is worth a second before anyone
+    // looks over at the counter.
     const triggeredCount = (this.floorHotspots || []).filter(h => h.triggered).length;
     const bonusSeconds = Math.min(10, triggeredCount);
-    this.mech.timeLeft += bonusSeconds * 60;
+    this.mech.timeLeft = (t.timeLimit + bonusSeconds) * 60;
     this.mech.bonusSeconds = bonusSeconds;
 
     this.showHud(
-      'The register — four tumblers',
-      'TAP to set each tumbler when the pin crosses the lit band.',
+      'The lock — roll it to the shear line',
+      'Two thumbs: left tilts left/right, right tilts up/down. (Mouse on desktop.)',
       `+${bonusSeconds}s bought by the distractions`
     );
-    this.input.onDown = () => this.registerTap();
-    this.registerLoop();
+    this.input.onDown = null;
+    this.input.onUp = null;
+    this.mazeLoop();
   }
 
-  registerTap() {
-    const m = this.mech;
-    if (!m || m.kind !== 'register' || m.doneTimer > 0) return;
-    const tb = m.tumblers[m.index];
-    if (!tb) return;
-    const hit = Math.abs(tb.pos - tb.center) < tb.width / 2;
-    m.flash = 16;
-    m.flashGood = hit;
-    if (hit) {
-      tb.set = true;
-      m.index++;
-      if (m.index >= m.tumblers.length) {
-        m.doneTimer = 40;
-      } else {
-        this.setHudHint(`Tumbler ${m.index} set. ${m.tumblers.length - m.index} to go.`);
-      }
-    } else {
-      // A miss costs seconds, not the run. There is no dead end here.
-      m.timeLeft -= HEIST_TUNING.register.missPenalty * 60;
-      tb.center = 22 + Math.random() * 56;
-      this.setHudHint(`Slipped. -${HEIST_TUNING.register.missPenalty}s.`);
-    }
+  resolveWallCollision(ball, r, wall) {
+    const closestX = Math.max(wall.x, Math.min(ball.x, wall.x + wall.w));
+    const closestY = Math.max(wall.y, Math.min(ball.y, wall.y + wall.h));
+    const dx = ball.x - closestX, dy = ball.y - closestY;
+    const dist = Math.hypot(dx, dy);
+    if (dist >= r || dist < 0.0001) return;
+    const push = r - dist, nx = dx / dist, ny = dy / dist;
+    ball.x += nx * push;
+    ball.y += ny * push;
+    const vDotN = ball.vx * nx + ball.vy * ny;
+    if (vDotN < 0) { ball.vx -= vDotN * nx; ball.vy -= vDotN * ny; }
   }
 
-  registerLoop() {
+  mazeLoop() {
     const m = this.mech;
-    if (!m || m.kind !== 'register') return;
+    if (!m || m.kind !== 'maze') return;
+    const t = HEIST_TUNING.maze, ball = m.ball, layout = m.layout;
     this._frame++;
-    if (m.flash > 0) m.flash--;
 
-    if (m.doneTimer > 0) {
-      m.doneTimer--;
-      if (m.doneTimer === 0) { this.endRegister(); return; }
-    } else {
-      m.timeLeft--;
-      if (m.timeLeft <= 0) { m.timeLeft = 0; m.failed = true; this.endRegister(); return; }
-      const tb = m.tumblers[m.index];
-      if (tb) {
-        tb.pos += tb.speed * tb.dir;
-        if (tb.pos >= 100) { tb.pos = 100; tb.dir = -1; }
-        if (tb.pos <= 0) { tb.pos = 0; tb.dir = 1; }
+    if (!m.completed) {
+      ball.vx += this.mazeTiltX * t.accel;
+      ball.vy += this.mazeTiltY * t.accel;
+      ball.vx *= t.friction;
+      ball.vy *= t.friction;
+      ball.x += ball.vx;
+      ball.y += ball.vy;
+      ball.x = Math.max(t.ballRadius, Math.min(100 - t.ballRadius, ball.x));
+      ball.y = Math.max(t.ballRadius, Math.min(100 - t.ballRadius, ball.y));
+      layout.walls.forEach(w => this.resolveWallCollision(ball, t.ballRadius, w));
+
+      const inHole = layout.holes.find(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r);
+      if (inHole) {
+        m.resets++;
+        ball.x = layout.start.x; ball.y = layout.start.y; ball.vx = 0; ball.vy = 0;
+        this.setHudHint('Down through the housing. Back to the start.',
+          `+${m.bonusSeconds}s bought by the distractions`);
       }
+
+      if (Math.hypot(ball.x - layout.goal.x, ball.y - layout.goal.y) < layout.goal.r) {
+        m.completed = true;
+        m.doneTimer = 40;
+      }
+
+      m.timeLeft--;
+      if (m.timeLeft <= 0) { m.timeLeft = 0; this.endMaze(); return; }
       document.getElementById('heist-hud-meta').textContent =
         `${(m.timeLeft / 60).toFixed(1)}s before somebody looks over`;
+    } else {
+      m.doneTimer--;
+      if (m.doneTimer <= 0) { this.endMaze(); return; }
     }
 
-    this.drawRegisterScene();
-    this._af = requestAnimationFrame(() => this.registerLoop());
+    this.drawMazeScene();
+    this._af = requestAnimationFrame(() => this.mazeLoop());
   }
 
-  endRegister() {
+  endMaze() {
     this.stopLoop();
     this.hideHud();
     const m = this.mech;
-    const set = m.tumblers.filter(t => t.set).length;
     const secondsLeft = Math.max(0, m.timeLeft / 60);
-    const earned = set * HEIST_TUNING.cashPerTumbler +
-      Math.round(secondsLeft * HEIST_TUNING.cashPerSecondLeft);
+    const earned = m.completed
+      ? HEIST_TUNING.cashMazeComplete + Math.round(secondsLeft * HEIST_TUNING.cashPerSecondLeft)
+      : Math.round(HEIST_TUNING.cashMazeComplete * 0.2);
     this.cash += earned;
-    this.tumblersSet = set;
+    this.mazeCompleted = m.completed;
     this.mech = null;
     this.phase = 'register-result';
 
-    const lines = set === m.tumblers.length
-      ? ['The drawer comes open with a sound like a cash register, because it is one.',
+    const lines = m.completed
+      ? ['The ball drops onto the shear line and the whole cylinder turns at once.',
          'You take what fits and leave what does not.']
-      : ['The drawer only ever comes half open. You get an arm in and grab what you can reach.',
+      : ['The ball is still rolling around in there when you run out of time.',
          'Somebody in the back has stopped talking.'];
 
     this.showResult({
-      title: set === m.tumblers.length ? 'Drawer open' : 'Drawer half open',
+      title: m.completed ? 'Drawer open' : 'Out of time',
       who: null,
       lines,
       stats: [
-        ['Tumblers set', `${set} / ${m.tumblers.length}`],
+        ['Dropped down the housing', `${m.resets} ${m.resets === 1 ? 'time' : 'times'}`],
         ['Seconds spare', secondsLeft.toFixed(1)],
         ['Register take', `$${earned}`],
         ['Total in the bag', `$${this.cash}`],
@@ -1296,7 +1377,7 @@ class HeistGame {
     if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
     this.onComplete({
       heistCash: this.cash,
-      tumblersSet: this.tumblersSet,
+      mazeCompleted: this.mazeCompleted,
       crashes: this.crashes,
       assignments: { ...this.assign },
       caught: true,
@@ -1457,90 +1538,105 @@ class HeistGame {
 
 
   // --- the register close-up
-  drawRegisterScene() {
+  mazeBounds() {
+    const W = this.canvas.width, H = this.canvas.height;
+    const side = Math.min(W * 0.86, H * 0.72);
+    return { x: (W - side) / 2, y: H * 0.15, w: side, h: side };
+  }
+
+  drawMazeScene() {
     const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
     const m = this.mech;
+    const b = this.mazeBounds();
+    const toPx = (x, y) => [b.x + (x / 100) * b.w, b.y + (y / 100) * b.h];
+    const toPxLen = (v) => (v / 100) * b.w;
 
     ctx.fillStyle = '#0e1315';
     ctx.fillRect(0, 0, W, H);
 
-    // Counter surface and register body
-    ctx.fillStyle = '#241d18';
-    ctx.fillRect(0, H * 0.62, W, H * 0.38);
-    ctx.fillStyle = '#3c332b';
-    ctx.fillRect(W * 0.14, H * 0.16, W * 0.72, H * 0.50);
-    ctx.fillStyle = '#20282a';
-    ctx.fillRect(W * 0.18, H * 0.20, W * 0.64, H * 0.40);
+    // The board itself — subtly tilted-looking via a gradient, so it reads
+    // as a physical thing you're rocking, not a flat diagram.
+    ctx.save();
+    ctx.translate(b.x + b.w / 2, b.y + b.h / 2);
+    ctx.rotate((this.mazeTiltX - this.mazeTiltY) * 0.02);
+    ctx.translate(-(b.x + b.w / 2), -(b.y + b.h / 2));
+    const boardGrad = ctx.createLinearGradient(b.x, b.y, b.x + b.w, b.y + b.h);
+    boardGrad.addColorStop(0, '#2a2018');
+    boardGrad.addColorStop(1, '#1c150f');
+    ctx.fillStyle = boardGrad;
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = '#4a3a28'; ctx.lineWidth = 6;
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
 
-    // Drawer at the bottom, easing open as tumblers set
-    const openFrac = m ? m.tumblers.filter(t => t.set).length / m.tumblers.length : 0;
-    ctx.fillStyle = '#4a4038';
-    ctx.fillRect(W * 0.22, H * 0.60 - 6, W * 0.56, 22 + openFrac * 26);
-    if (openFrac > 0) {
-      ctx.fillStyle = '#7ec89a';
-      for (let i = 0; i < Math.round(openFrac * 8); i++) {
-        ctx.fillRect(W * 0.26 + i * 24, H * 0.60 + 4, 18, 8 + openFrac * 10);
-      }
-    }
+    if (!m) { ctx.restore(); return; }
+    const layout = m.layout;
 
-    if (!m) return;
-
-    // Tumbler stack
-    const n = m.tumblers.length;
-    const bx = W * 0.22, bw = W * 0.56;
-    const top = H * 0.24, rowH = (H * 0.32) / n;
-    ctx.textAlign = 'left';
-    m.tumblers.forEach((tb, i) => {
-      const by = top + i * rowH, bh = rowH * 0.6;
-      const active = i === m.index;
-      ctx.fillStyle = '#141a1c';
-      ctx.fillRect(bx, by, bw, bh);
-
-      if (tb.set) {
-        ctx.fillStyle = 'rgba(126,200,154,0.30)';
-        ctx.fillRect(bx, by, bw, bh);
-        ctx.strokeStyle = '#7ec89a';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(bx, by, bw, bh);
-        ctx.fillStyle = '#7ec89a';
-        ctx.font = '20px VT323, monospace';
-        ctx.fillText('SET', bx + bw + 12, by + bh * 0.75);
-      } else {
-        const zx = bx + ((tb.center - tb.width / 2) / 100) * bw;
-        const zw = (tb.width / 100) * bw;
-        ctx.fillStyle = active ? 'rgba(212,165,116,0.34)' : 'rgba(120,110,100,0.12)';
-        ctx.fillRect(zx, by, zw, bh);
-        ctx.strokeStyle = active ? '#d4a574' : '#4a4038';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(zx, by, zw, bh);
-        if (active) {
-          const mx = bx + (tb.pos / 100) * bw;
-          ctx.fillStyle = m.flash > 0 ? (m.flashGood ? '#8ef0a0' : '#ff7b6b') : '#ffffff';
-          ctx.fillRect(mx - 3, by - 6, 6, bh + 12);
-        }
-        ctx.strokeStyle = '#3a322c';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(bx, by, bw, bh);
-      }
-      ctx.fillStyle = tb.set ? '#7ec89a' : active ? '#d4a574' : '#5a5048';
-      ctx.font = '20px VT323, monospace';
-      ctx.fillText(`${i + 1}`, bx - 20, by + bh * 0.75);
+    // Holes
+    layout.holes.forEach(h => {
+      const [hx, hy] = toPx(h.x, h.y);
+      const r = toPxLen(h.r);
+      const g = ctx.createRadialGradient(hx, hy, r * 0.1, hx, hy, r);
+      g.addColorStop(0, '#000'); g.addColorStop(1, '#1a1008');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
     });
 
-    // Pressure timer across the top
-    const frac = Math.max(0, m.timeLeft / (HEIST_TUNING.register.timeLimit * 60 + (m.bonusSeconds || 0) * 60));
-    const tw = W * 0.72, tx = W * 0.14, ty = H * 0.10;
-    ctx.fillStyle = '#191919';
-    ctx.fillRect(tx, ty, tw, 16);
-    ctx.fillStyle = frac > 0.45 ? '#7ec89a' : frac > 0.2 ? '#d4a574' : '#e05a4a';
-    ctx.fillRect(tx, ty, tw * frac, 16);
-    ctx.strokeStyle = '#5a4a3a';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(tx, ty, tw, 16);
+    // Walls
+    layout.walls.forEach(w => {
+      const [wx, wy] = toPx(w.x, w.y);
+      ctx.fillStyle = '#6a5a44';
+      ctx.fillRect(wx, wy, toPxLen(w.w), toPxLen(w.h));
+      ctx.strokeStyle = '#3a2f22'; ctx.lineWidth = 2;
+      ctx.strokeRect(wx, wy, toPxLen(w.w), toPxLen(w.h));
+    });
 
-    if (m.flash > 0) {
-      ctx.fillStyle = m.flashGood ? 'rgba(140,240,160,0.10)' : 'rgba(255,110,90,0.12)';
-      ctx.fillRect(0, 0, W, H);
+    // Goal
+    const [gx, gy] = toPx(layout.goal.x, layout.goal.y);
+    const gr = toPxLen(layout.goal.r);
+    ctx.strokeStyle = m.completed ? '#2ecc71' : '#d4a574';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath(); ctx.arc(gx, gy, gr, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = m.completed ? '#2ecc71' : '#8a7a5a';
+    ctx.font = '11px VT323, monospace'; ctx.textAlign = 'center';
+    ctx.fillText('SHEAR LINE', gx, gy + gr + 16);
+
+    // Ball
+    const [bx2, by2] = toPx(m.ball.x, m.ball.y);
+    const br = toPxLen(HEIST_TUNING.maze.ballRadius);
+    ctx.beginPath();
+    ctx.arc(bx2, by2, br, 0, Math.PI * 2);
+    const ballGrad = ctx.createRadialGradient(bx2 - br * 0.3, by2 - br * 0.3, br * 0.1, bx2, by2, br);
+    ballGrad.addColorStop(0, '#f0e8d8'); ballGrad.addColorStop(1, '#a89878');
+    ctx.fillStyle = ballGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#5a4a30'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    ctx.restore();
+
+    // Pressure timer, drawn outside the tilt transform so it stays level
+    const frac = Math.max(0, m.timeLeft / ((HEIST_TUNING.maze.timeLimit + (m.bonusSeconds || 0)) * 60));
+    const tw = W * 0.72, tx = W * 0.14, ty = H * 0.06;
+    ctx.fillStyle = '#191919';
+    ctx.fillRect(tx, ty, tw, 14);
+    ctx.fillStyle = frac > 0.45 ? '#7ec89a' : frac > 0.2 ? '#d4a574' : '#e05a4a';
+    ctx.fillRect(tx, ty, tw * frac, 14);
+    ctx.strokeStyle = '#5a4a3a'; ctx.lineWidth = 2;
+    ctx.strokeRect(tx, ty, tw, 14);
+
+    // Two control zones, faintly marked at the bottom on mobile so the split
+    // is discoverable without reading the hint text.
+    if ('ontouchstart' in window) {
+      ctx.fillStyle = 'rgba(255,255,255,0.05)';
+      ctx.fillRect(0, H * 0.9, W / 2, H * 0.1);
+      ctx.fillRect(W / 2, H * 0.9, W / 2, H * 0.1);
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(W / 2, H * 0.9); ctx.lineTo(W / 2, H); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = '13px VT323, monospace'; ctx.textAlign = 'center';
+      ctx.fillText('LEFT / RIGHT', W * 0.25, H * 0.965);
+      ctx.fillText('UP / DOWN', W * 0.75, H * 0.965);
     }
   }
 
