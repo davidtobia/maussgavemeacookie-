@@ -1554,17 +1554,29 @@ button.menu-option.cannon-shop-exit-btn:hover {
   align-items: center;
   gap: 4px;
   cursor: pointer;
-  opacity: 0.55;
-  transition: opacity 0.15s ease;
+  padding: 8px 10px 6px;
+  border: 2px solid transparent;
+  background: rgba(0, 0, 0, 0.3);
+  opacity: 0.7;
+  transition: opacity 0.15s ease, border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+}
+
+.heist-floor-chip:hover {
+  opacity: 0.9;
 }
 
 .heist-floor-chip.active {
   opacity: 1;
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.14);
+  transform: scale(1.08);
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.35);
 }
 
 .heist-floor-chip.pulled {
-  opacity: 0.25;
+  opacity: 0.3;
   cursor: default;
+  filter: grayscale(1);
 }
 
 .heist-floor-chip-dot {
@@ -1572,6 +1584,10 @@ button.menu-option.cannon-shop-exit-btn:hover {
   height: 26px;
   border-radius: 50%;
   border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.heist-floor-chip.active .heist-floor-chip-dot {
+  border-color: #fff;
 }
 
 .heist-floor-chip-name {
@@ -1592,6 +1608,14 @@ button.menu-option.cannon-shop-exit-btn:hover {
   height: 100%;
   background: #2ecc71;
   transition: width 0.1s linear, background 0.2s ease;
+}
+
+.heist-floor-controlling {
+  margin: 6px 0 0;
+  text-align: center;
+  font-size: 20px;
+  color: #fff;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.9);
 }
 
 .heist-floor-toast {

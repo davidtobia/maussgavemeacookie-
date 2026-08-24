@@ -527,7 +527,7 @@ class HeistGame {
     this.buildFloorRosterDOM();
     document.getElementById('heist-floor-hud').classList.remove('hidden');
     document.getElementById('heist-floor-hint').textContent =
-      'Click a crew member below, then click the floor to send them there. Colored dots are their distractions.';
+      'Tap a crew icon above to take control of them, then tap the floor to send them there.';
 
     this.input.onDown = (x, y) => this.floorClick(x, y);
     this.input.onUp = null;
@@ -571,6 +571,12 @@ class HeistGame {
         fill.style.background = ch.heat > 75 ? '#e74c3c' : ch.heat > 40 ? '#f39c12' : '#2ecc71';
       }
     });
+    const active = this.floorChars.find(c => c.id === this.floorActiveId);
+    const label = document.getElementById('heist-floor-controlling');
+    if (label && active) {
+      label.textContent = `Controlling: ${active.isThief ? 'You (the Thief)' : active.name}`;
+      label.style.color = active.color;
+    }
   }
 
   floorToast(text, ms) {
