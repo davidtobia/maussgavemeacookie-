@@ -175,16 +175,10 @@ class HeistGame {
       else if (dy > threshold) { g.laneDown(); triggered = true; }
     });
 
-    window.addEventListener('pointerup', (e) => {
-      if (this.phase !== 'getaway' || startY === null) return;
-      if (!triggered) {
-        // Didn't move far enough to count as a swipe -- fall back to a
-        // plain tap on the top/bottom half, same as before.
-        const g = this.mech;
-        if (g && g.kind === 'getaway') {
-          if (localY(e.clientY) < this.canvas.height / 2) g.laneUp(); else g.laneDown();
-        }
-      }
+    window.addEventListener('pointerup', () => {
+      // No tap-on-half fallback -- swipe only. Direct feedback: "take out
+      // the tap option, the swiping is much better." Desktop still has
+      // ArrowUp/ArrowDown wired in bindInput().
       startY = null;
     });
 
@@ -204,6 +198,24 @@ class HeistGame {
     jumpBtn.addEventListener('pointerup', release);
     jumpBtn.addEventListener('pointerleave', release);
     jumpBtn.addEventListener('pointercancel', release);
+
+    const wireTap = (id, fn) => {
+      const el = document.getElementById(id);
+      el.addEventListener('pointerdown', (e) => {
+        if (this.phase !== 'getaway') return;
+        e.preventDefault();
+        el.classList.add('pressed');
+        fn();
+      });
+      const up = () => el.classList.remove('pressed');
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointerleave', up);
+      el.addEventListener('pointercancel', up);
+    };
+    wireTap('heist-nitro-btn', () => this.triggerGetawayNitro());
+    wireTap('heist-fire-btn', () => this.triggerGetawayFire('bullet'));
+    wireTap('heist-rocket-btn', () => this.triggerGetawayFire('rocket'));
+    wireTap('heist-jumpout-btn', () => this.jumpOffBridge());
   }
 
   triggerGetawayJump() {
@@ -213,6 +225,74 @@ class HeistGame {
     g.jumpVy = -3.4;
     g.jumpHeight = 0;
     g.flips = 0;
+  }
+
+  // Nitro: a banked charge burns for a few seconds of real speed and a
+  // fire trail. Doesn't touch g.speed directly -- getawayLoop reads
+  // nitroActive as a multiplier so it cleanly wears off instead of
+  // needing to remember and subtract a bonus later.
+  triggerGetawayNitro() {
+    const g = this.mech;
+    if (!g || g.kind !== 'getaway' || g.nitro <= 0 || g.nitroActive > 0) return;
+    g.nitro--;
+    g.nitroActive = 90;
+  }
+
+  // One button fires whatever's currently loaded -- bullets down cop cars,
+  // rockets down the helicopter (and cop cars too, if you'd rather).
+  triggerGetawayFire(kind) {
+    const g = this.mech;
+    if (!g || g.kind !== 'getaway') return;
+    if (kind === 'bullet') { if (g.gunAmmo <= 0) return; g.gunAmmo--; }
+    else { if (g.rocketAmmo <= 0) return; g.rocketAmmo--; }
+    const px = this.canvas.width * 0.22;
+    g.shots.push({ x: px + 44, y: g.laneY, lane: g.lane, kind, vx: kind === 'rocket' ? 15 : 24 });
+  }
+
+  // Only available for the bridge half of the run -- an alternate exit
+  // that skips the rest of the chase outright. Flavor over fairness: it's
+  // there because jumping off the Brooklyn Bridge with a bag of cash is
+  // funnier than not being able to.
+  jumpOffBridge() {
+    const g = this.mech;
+    if (!g || g.kind !== 'getaway' || g.sirens >= 0.5 || g.jumpedOff) return;
+    g.jumpedOff = true;
+    this.jumpedOffBridge = true;
+    this.stopLoop();
+    document.getElementById('heist-getaway-controls').classList.add('hidden');
+    document.getElementById('heist-jumpout-btn').classList.add('hidden');
+    this.setHudHint('Over the rail. Down toward the water.', g.cfg.label);
+    this._bridgeJumpFrame = 0;
+    this.bridgeJumpLoop();
+  }
+
+  // A short freeze-frame animation: the car keeps rolling empty while a
+  // silhouette arcs off the rail toward the river, then straight to the
+  // ending -- no crash risk for the rest of the run, but no flip bonus
+  // either, since there's no more run left to flip in.
+  bridgeJumpLoop() {
+    const g = this.mech;
+    if (!g) return;
+    this._frame++;
+    this._bridgeJumpFrame++;
+    this.drawStreetScene();
+    const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
+    const t = this._bridgeJumpFrame / 50;
+    const px = W * 0.22 + t * 90;
+    const py = g.laneY - Math.sin(Math.min(1, t) * Math.PI) * 70 + t * t * 90;
+    ctx.fillStyle = '#1a1410';
+    ctx.beginPath(); ctx.ellipse(px, py, 9, 13, -0.4, 0, Math.PI * 2); ctx.fill();
+    if (this._bridgeJumpFrame < 55) {
+      this._af = requestAnimationFrame(() => this.bridgeJumpLoop());
+    } else {
+      this.crashes = g.crashes;
+      this.bestFlips = g.bestFlips;
+      this.hideHud();
+      document.getElementById('heist-getaway-controls').classList.add('hidden');
+      document.getElementById('heist-jumpout-btn').classList.add('hidden');
+      this.mech = null;
+      this.showEnding();
+    }
   }
 
   // Two real, simultaneous fingers: left thumb (wherever it lands on the
@@ -1584,11 +1664,19 @@ class HeistGame {
       obstacles: [], spawnTimer: 40, offset: 0, bgOffset: 0,
       hitFlash: 0, invuln: 0, crashes: 0, sirens: 0,
       airborne: false, jumpVy: 0, jumpHeight: 0, flipAngle: 0, flips: 0, bestFlips: 0,
+      // Pickups: nitro charges (burn for a speed burst), stacked permanent
+      // speed bonus from speed powerups (each one also lights the exhaust
+      // for good), gun/rocket ammo, live shots in flight, explosion
+      // particles, the helicopter (null until it shows up), jumped-off flag.
+      nitro: 0, nitroActive: 0, speedBonus: 0, fireTrail: false,
+      gunAmmo: 0, rocketAmmo: 0, shots: [], particles: [],
+      heli: null, heliDone: false, jumpedOff: false,
       laneUp: () => { const g = this.mech; if (g && g.lane > 0) g.lane--; },
       laneDown: () => { const g = this.mech; if (g && g.lane < 2) g.lane++; },
     };
     this.mech.laneY = this.laneCenterY(1);
     this.getawayJumpHeld = false;
+    this.jumpedOffBridge = false;
 
     // The chase can cost you at most 40% of what you walked out with. Losing
     // the entire take to a phase whose ending is scripted anyway would just be
@@ -1597,13 +1685,35 @@ class HeistGame {
 
     this.showHud(
       `Getaway — ${driver.name} driving`,
-      'Swipe up/down for lanes. Hit JUMP to clear obstacles — hold it in the air to flip.',
+      'Swipe up/down for lanes. NITRO for a burst, FIRE/ROCKET once you’ve picked some up.',
       cfg.label
     );
     this.input.onDown = null;
     this.input.onUp = null;
-    document.getElementById('heist-jump-btn').classList.remove('hidden');
+    document.getElementById('heist-getaway-controls').classList.remove('hidden');
+    document.getElementById('heist-jumpout-btn').classList.remove('hidden');
+    this.updateGetawayButtons();
     this.getawayLoop();
+  }
+
+  // Keeps the button row honest about what you're actually carrying:
+  // nitro dims out at 0 charges, fire/rocket are hidden entirely until
+  // you've picked up ammo for them (no point cluttering the screen with a
+  // button that does nothing), and the bridge-only jump-out disappears
+  // the moment you're off the bridge.
+  updateGetawayButtons() {
+    const g = this.mech;
+    if (!g || g.kind !== 'getaway') return;
+    const nitroBtn = document.getElementById('heist-nitro-btn');
+    nitroBtn.disabled = g.nitro <= 0 || g.nitroActive > 0;
+    document.getElementById('heist-nitro-count').textContent = g.nitro;
+    const fireBtn = document.getElementById('heist-fire-btn');
+    fireBtn.classList.toggle('hidden', g.gunAmmo <= 0);
+    document.getElementById('heist-fire-count').textContent = g.gunAmmo;
+    const rocketBtn = document.getElementById('heist-rocket-btn');
+    rocketBtn.classList.toggle('hidden', g.rocketAmmo <= 0);
+    document.getElementById('heist-rocket-count').textContent = g.rocketAmmo;
+    document.getElementById('heist-jumpout-btn').classList.toggle('hidden', g.sirens >= 0.5 || g.jumpedOff);
   }
 
   laneCenterY(lane) {
@@ -1648,17 +1758,61 @@ class HeistGame {
       }
     }
 
+    // Nitro: a fixed-length burn, applied as a speed multiplier rather
+    // than a one-time add, so it cleanly expires on its own.
+    if (g.nitroActive > 0) g.nitroActive--;
+    g.speed = (g.cfg.speed + g.speedBonus) * (g.nitroActive > 0 ? 1.7 : 1);
+
     g.spawnTimer--;
     if (g.spawnTimer <= 0) {
       g.spawnTimer = g.cfg.spawn + Math.floor(Math.random() * 22);
       this.spawnGetawayObstacle();
     }
 
+    // The helicopter shows up once the heat's high enough and stays for
+    // the rest of the run unless you take it down with a rocket.
+    if (!g.heli && !g.heliDone && g.sirens >= 0.5) this.spawnGetawayHeli();
+    if (g.heli) this.updateGetawayHeli();
+
+    // Shots: bullets down cop cars, rockets down cop cars OR the chopper.
+    g.shots.forEach(s => { s.x += s.vx + g.speed; });
+    g.shots.forEach(s => {
+      if (s.dead) return;
+      g.obstacles.forEach(o => {
+        if (o.kind !== 'cop' || o.destroyed) return;
+        if (Math.abs(s.x - o.x) < 30 && o.lane === s.lane) {
+          o.destroyed = true; s.dead = true;
+          this.cash += 25;
+          this.spawnGetawayBurst(o.x, this.laneCenterY(o.lane));
+          this.setHudHint('Cruiser down. Another one’s already rolling.', g.cfg.label);
+        }
+      });
+      if (s.kind === 'rocket' && g.heli && !g.heli.destroyed && !s.dead &&
+          Math.abs(s.x - g.heli.x) < 40 && Math.abs(g.heli.y - s.y) < 60) {
+        g.heli.destroyed = true; s.dead = true;
+        this.cash += 80;
+        this.spawnGetawayBurst(g.heli.x, g.heli.y);
+        this.setHudHint('The helicopter goes down over the water.', g.cfg.label);
+        setTimeout(() => { if (this.mech === g) g.heli = null; }, 500);
+      }
+    });
+    g.shots = g.shots.filter(s => !s.dead && s.x < this.canvas.width + 200);
+
+    g.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.25; p.life--; });
+    g.particles = g.particles.filter(p => p.life > 0);
+
     const px = this.canvas.width * 0.22;
     g.obstacles.forEach(o => {
       o.x -= g.speed;
+      if (o.destroyed) return;
       if (o.hit || g.airborne) return; // jumped clean over it
       if (Math.abs(o.x - px) < 44 && Math.abs(this.laneCenterY(o.lane) - g.laneY) < 34) {
+        if (o.kind === 'pickup') {
+          o.hit = true;
+          this.applyGetawayPickup(o.type);
+          this.updateGetawayButtons();
+          return;
+        }
         o.hit = true;
         if (g.invuln <= 0) {
           g.invuln = 45;
@@ -1668,18 +1822,20 @@ class HeistGame {
         }
       }
     });
-    g.obstacles = g.obstacles.filter(o => o.x > -120);
+    g.obstacles = g.obstacles.filter(o => o.x > -120 && !(o.destroyed && o.x < px - 40));
 
     const where = g.sirens < 0.5 ? 'across the Brooklyn Bridge' : 'through Chinatown';
     document.getElementById('heist-hud-meta').textContent =
       `$${this.cash} in the bag · ${Math.round(g.sirens * 100)}% ${where}`;
+    this.updateGetawayButtons();
 
     if (g.dist >= g.cfg.distance) {
       this.crashes = g.crashes;
       this.bestFlips = g.bestFlips;
       this.stopLoop();
       this.hideHud();
-      document.getElementById('heist-jump-btn').classList.add('hidden');
+      document.getElementById('heist-getaway-controls').classList.add('hidden');
+      document.getElementById('heist-jumpout-btn').classList.add('hidden');
       this.mech = null;
       this.showEnding();
       return;
@@ -1690,19 +1846,83 @@ class HeistGame {
   }
 
   spawnGetawayObstacle() {
-    const kinds = ['cab', 'cart', 'pothole', 'dumpster', 'cones'];
-    const type = kinds[Math.floor(Math.random() * kinds.length)];
+    const hazardKinds = ['cab', 'cart', 'pothole', 'dumpster', 'cones', 'cones', 'cab', 'cop'];
+    const roll = Math.random();
     const lane = Math.floor(Math.random() * 3);
-    this.mech.obstacles.push({ type, lane, x: this.canvas.width + 80, hit: false });
+    const W = this.canvas.width;
+    if (roll < 0.16) {
+      // A pickup instead of a hazard -- nitro most common, rockets rarest.
+      const pickupRoll = Math.random();
+      const type = pickupRoll < 0.35 ? 'nitro' : pickupRoll < 0.6 ? 'speedpwr' : pickupRoll < 0.85 ? 'gun' : 'rocket';
+      this.mech.obstacles.push({ kind: 'pickup', type, lane, x: W + 80, hit: false });
+      return;
+    }
+    const type = hazardKinds[Math.floor(Math.random() * hazardKinds.length)];
+    this.mech.obstacles.push({ kind: type === 'cop' ? 'cop' : 'hazard', type, lane, x: W + 80, hit: false, destroyed: false });
     // A second obstacle sometimes, but never filling every lane — there is
     // always a gap to steer into.
     if (Math.random() < 0.35) {
       let other = Math.floor(Math.random() * 3);
       if (other === lane) other = (lane + 1) % 3;
+      const type2 = hazardKinds[Math.floor(Math.random() * hazardKinds.length)];
       this.mech.obstacles.push({
-        type: kinds[Math.floor(Math.random() * kinds.length)],
-        lane: other, x: this.canvas.width + 80 + 40 + Math.random() * 90, hit: false,
+        kind: type2 === 'cop' ? 'cop' : 'hazard', type: type2,
+        lane: other, x: W + 80 + 40 + Math.random() * 90, hit: false, destroyed: false,
       });
+    }
+  }
+
+  // Cop car destroyed by gunfire doesn't just vanish -- radio traffic, and
+  // another one is already rolling. Force one back into the mix soon.
+  applyGetawayPickup(type) {
+    const g = this.mech;
+    if (type === 'nitro') {
+      g.nitro = Math.min(3, g.nitro + 1);
+      this.setHudHint('Nitro canister. Hit NITRO for a burst.', g.cfg.label);
+    } else if (type === 'speedpwr') {
+      g.speedBonus = Math.min(2.4, g.speedBonus + 0.6);
+      g.fireTrail = true;
+      this.setHudHint('Engine kit. Faster for the rest of the run.', g.cfg.label);
+    } else if (type === 'gun') {
+      g.gunAmmo += 6;
+      this.setHudHint('Picked up a gun. FIRE to take out a cruiser.', g.cfg.label);
+    } else if (type === 'rocket') {
+      g.rocketAmmo += 2;
+      this.setHudHint('Rocket launcher. Save it for the chopper.', g.cfg.label);
+    }
+  }
+
+  spawnGetawayBurst(x, y) {
+    for (let i = 0; i < 14; i++) {
+      const a = Math.random() * Math.PI * 2, speed = 1.5 + Math.random() * 4;
+      this.mech.particles.push({
+        x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed - 1,
+        life: 24 + Math.floor(Math.random() * 12),
+        color: Math.random() < 0.5 ? '#e8b32a' : '#e05a4a',
+      });
+    }
+  }
+
+  spawnGetawayHeli() {
+    const g = this.mech;
+    g.heli = {
+      x: this.canvas.width + 100, y: this.canvas.height * 0.28,
+      destroyed: false, dropTimer: 90,
+    };
+    this.setHudHint('A helicopter joins in. Rockets only.', g.cfg.label);
+  }
+
+  updateGetawayHeli() {
+    const g = this.mech, heli = g.heli;
+    if (heli.destroyed) return;
+    const targetX = this.canvas.width * 0.62;
+    heli.x += (targetX - heli.x) * 0.04;
+    heli.y = this.canvas.height * 0.28 + Math.sin(this._frame / 45) * 22;
+    heli.dropTimer--;
+    if (heli.dropTimer <= 0) {
+      heli.dropTimer = 130 + Math.floor(Math.random() * 60);
+      const lane = Math.floor(Math.random() * 3);
+      g.obstacles.push({ kind: 'hazard', type: 'pothole', lane, x: this.canvas.width * 0.75, hit: false, destroyed: false });
     }
   }
 
@@ -1713,15 +1933,23 @@ class HeistGame {
   showEnding() {
     this.phase = 'ending';
     this.stopLoop();
-    this.bustLoop();
 
     const driver = getHeistCrew(this.assign.lookout);
-    const clean = this.crashes === 0;
-    let flavor = clean
-      ? `${driver.name} drove it clean. Not one scratch on the car. It will be photographed from six angles later tonight.`
-      : `${driver.name} took ${this.crashes} ${this.crashes === 1 ? 'hit' : 'hits'} on the way out. Every one of them is on a doorbell camera.`;
-    if (this.bestFlips > 0) {
-      flavor += ` Somewhere over the East River, the car did a ${this.bestFlips === 1 ? 'full flip' : this.bestFlips + '-flip'}. Nobody asked it to.`;
+    let flavor;
+    if (this.jumpedOffBridge) {
+      // No bust-lights scene here -- going over the rail is the one way
+      // out of the chase entirely, not a capture.
+      this.riverLoop();
+      flavor = `${driver.name} watched the car go on without you. You and the bag went off the rail and into the East River instead -- cold, but nobody follows you in.`;
+    } else {
+      this.bustLoop();
+      const clean = this.crashes === 0;
+      flavor = clean
+        ? `${driver.name} drove it clean. Not one scratch on the car. It will be photographed from six angles later tonight.`
+        : `${driver.name} took ${this.crashes} ${this.crashes === 1 ? 'hit' : 'hits'} on the way out. Every one of them is on a doorbell camera.`;
+      if (this.bestFlips > 0) {
+        flavor += ` Somewhere over the East River, the car did a ${this.bestFlips === 1 ? 'full flip' : this.bestFlips + '-flip'}. Nobody asked it to.`;
+      }
     }
 
     document.getElementById('heist-ending-flavor').textContent = flavor;
@@ -1739,6 +1967,23 @@ class HeistGame {
     this._frame++;
     this.drawBustScene();
     this._af = requestAnimationFrame(() => this.bustLoop());
+  }
+
+  // Dark water, a slow current of ripples, nobody chasing you into it.
+  riverLoop() {
+    this._frame++;
+    const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#0a1424'); sky.addColorStop(1, '#0e2438');
+    ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(150,190,220,0.12)'; ctx.lineWidth = 2;
+    for (let i = 0; i < 7; i++) {
+      const ry = (H * 0.2 + i * 60 + (this._frame * 0.6) % 60) % H;
+      ctx.beginPath();
+      for (let x = 0; x < W; x += 20) ctx.lineTo(x, ry + Math.sin(x * 0.02 + this._frame * 0.03 + i) * 6);
+      ctx.stroke();
+    }
+    this._af = requestAnimationFrame(() => this.riverLoop());
   }
 
   showAct3Stub() {
@@ -2161,6 +2406,31 @@ class HeistGame {
     // Obstacles
     g.obstacles.forEach(o => this.drawObstacle(o));
 
+    // Shots in flight
+    g.shots.forEach(s => {
+      const y = s.y;
+      if (s.kind === 'rocket') {
+        ctx.fillStyle = '#e05a4a';
+        ctx.fillRect(s.x - 12, y - 4, 22, 8);
+        ctx.fillStyle = 'rgba(233,150,74,0.5)';
+        ctx.beginPath(); ctx.moveTo(s.x - 12, y - 6); ctx.lineTo(s.x - 34, y); ctx.lineTo(s.x - 12, y + 6); ctx.fill();
+      } else {
+        ctx.fillStyle = '#ffd36a';
+        ctx.fillRect(s.x - 10, y - 2, 16, 4);
+      }
+    });
+
+    // Explosion particles
+    g.particles.forEach(p => {
+      ctx.globalAlpha = Math.max(0, p.life / 30);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+    });
+    ctx.globalAlpha = 1;
+
+    // Helicopter
+    if (g.heli && !g.heli.destroyed) this.drawHeli(g.heli);
+
     // Getaway car
     const px = W * 0.22;
     const shake = g.hitFlash > 0 ? (Math.random() - 0.5) * 8 : 0;
@@ -2286,11 +2556,56 @@ class HeistGame {
   }
 
   drawObstacle(o) {
+    if (o.destroyed) return; // the burst particles are doing the talking now
     const ctx = this.ctx;
     const y = this.laneCenterY(o.lane);
     const x = o.x;
     ctx.globalAlpha = o.hit ? 0.45 : 1;
     switch (o.type) {
+      case 'cop':
+        ctx.fillStyle = '#1c2430';
+        ctx.fillRect(x - 36, y - 16, 72, 30);
+        ctx.fillStyle = Math.floor(this._frame / 6) % 2 === 0 ? '#4a7bd8' : '#d84a4a';
+        ctx.fillRect(x - 10, y - 24, 20, 8);
+        ctx.fillStyle = '#1b1f24';
+        ctx.fillRect(x - 22, y - 12, 20, 12);
+        ctx.fillRect(x + 4, y - 12, 20, 12);
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px VT323, monospace'; ctx.textAlign = 'center';
+        ctx.fillText('NYPD', x, y + 8);
+        ctx.fillStyle = '#111';
+        ctx.fillRect(x - 28, y + 12, 14, 7);
+        ctx.fillRect(x + 14, y + 12, 14, 7);
+        break;
+      case 'nitro':
+        ctx.fillStyle = '#2f6fae';
+        ctx.fillRect(x - 10, y - 18, 20, 34);
+        ctx.fillStyle = '#8fcfff';
+        ctx.fillRect(x - 6, y - 14, 12, 10);
+        ctx.fillStyle = '#fff';
+        ctx.font = '10px VT323, monospace'; ctx.textAlign = 'center';
+        ctx.fillText('N2O', x, y + 12);
+        break;
+      case 'speedpwr':
+        ctx.fillStyle = '#e8c93a';
+        ctx.beginPath();
+        ctx.moveTo(x - 3, y - 18); ctx.lineTo(x + 9, y - 2); ctx.lineTo(x, y - 2);
+        ctx.lineTo(x + 3, y + 18); ctx.lineTo(x - 9, y + 2); ctx.lineTo(x, y + 2);
+        ctx.closePath(); ctx.fill();
+        break;
+      case 'gun':
+        ctx.fillStyle = '#4a4038';
+        ctx.fillRect(x - 22, y - 4, 40, 8);
+        ctx.fillRect(x - 8, y - 4, 10, 14);
+        break;
+      case 'rocket':
+        ctx.fillStyle = '#8a4a3a';
+        ctx.fillRect(x - 8, y - 20, 16, 34);
+        ctx.fillStyle = '#c8402f';
+        ctx.beginPath(); ctx.moveTo(x - 8, y - 20); ctx.lineTo(x, y - 32); ctx.lineTo(x + 8, y - 20); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#e2622c';
+        ctx.fillRect(x - 10, y + 14, 6, 8); ctx.fillRect(x + 4, y + 14, 6, 8);
+        break;
       case 'cab':
         ctx.fillStyle = '#e8b32a';
         ctx.fillRect(x - 36, y - 16, 72, 30);
@@ -2392,7 +2707,51 @@ class HeistGame {
     hl.addColorStop(1, 'rgba(255,240,200,0)');
     ctx.fillStyle = hl;
     ctx.fillRect(x + 44, cy - 18, 140, 36);
+
+    // Fire out the back — permanent once you've picked up a speed kit,
+    // and bigger/brighter while a nitro burst is actively burning.
+    if (g.fireTrail || g.nitroActive > 0) {
+      const boost = g.nitroActive > 0;
+      const flicker = 0.7 + Math.sin(this._frame * (boost ? 1.4 : 0.7)) * 0.3;
+      const len = (boost ? 70 : 34) * flicker;
+      [-7, 7].forEach(dy => {
+        ctx.beginPath();
+        ctx.moveTo(x - 44, cy + dy - 5);
+        ctx.lineTo(x - 44 - len, cy + dy);
+        ctx.lineTo(x - 44, cy + dy + 5);
+        ctx.closePath();
+        const fg = ctx.createLinearGradient(x - 44, cy, x - 44 - len, cy);
+        fg.addColorStop(0, boost ? '#fff2c0' : '#ffd36a');
+        fg.addColorStop(1, 'rgba(224,90,74,0)');
+        ctx.fillStyle = fg;
+        ctx.fill();
+      });
+    }
     ctx.restore();
+  }
+
+  drawHeli(heli) {
+    const ctx = this.ctx, x = heli.x, y = heli.y;
+    const spin = this._frame * 1.4;
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(x, this.canvas.height * 0.52 - 4, 30, 6, 0, 0, Math.PI * 2); ctx.fill();
+    // Rotor
+    ctx.strokeStyle = 'rgba(20,20,20,0.5)'; ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - Math.cos(spin) * 46, y - 16 - Math.sin(spin) * 6);
+    ctx.lineTo(x + Math.cos(spin) * 46, y - 16 + Math.sin(spin) * 6);
+    ctx.stroke();
+    // Body
+    ctx.fillStyle = '#2a3138';
+    ctx.beginPath(); ctx.ellipse(x, y, 34, 14, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#4a7bd8';
+    ctx.fillRect(x + 8, y - 8, 16, 10);
+    ctx.fillStyle = '#1c2228';
+    ctx.fillRect(x - 6, y + 10, 4, 16); ctx.fillRect(x - 34, y + 20, 44, 4);
+    // Tail
+    ctx.fillStyle = '#2a3138';
+    ctx.fillRect(x - 50, y - 3, 20, 6);
+    ctx.beginPath(); ctx.moveTo(x - 50, y - 10); ctx.lineTo(x - 50, y + 10); ctx.lineTo(x - 60, y); ctx.closePath(); ctx.fill();
   }
 
   // --- the bust: the street, frozen, under police lights

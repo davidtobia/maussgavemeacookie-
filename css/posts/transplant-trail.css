@@ -1670,20 +1670,118 @@ button.menu-option.cannon-shop-exit-btn:hover {
   background: rgba(212, 165, 116, 0.35);
 }
 
-.heist-jump-btn {
+.heist-getaway-controls {
   position: absolute;
-  right: 20px;
-  bottom: 24px;
+  right: 14px;
+  bottom: 20px;
   z-index: 4;
-  width: 84px;
-  height: 84px;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.heist-getaway-controls.hidden {
+  display: none;
+}
+
+.heist-getaway-btn {
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   font-family: 'VT323', monospace;
+  font-size: 15px;
+  line-height: 1.1;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  background: rgba(80, 74, 64, 0.75);
+  color: #cabca6;
+  border: 3px solid #4a4038;
+}
+
+.heist-getaway-btn span {
+  font-size: 12px;
+  opacity: 0.85;
+  display: block;
+}
+
+.heist-getaway-btn:active,
+.heist-getaway-btn.pressed {
+  transform: scale(0.94);
+}
+
+.heist-getaway-btn.hidden {
+  display: none;
+}
+
+.heist-getaway-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.heist-jump-btn {
+  width: 84px;
+  height: 84px;
   font-size: 20px;
-  line-height: 1.15;
   background: rgba(201, 162, 39, 0.85);
   color: #1a1408;
-  border: 3px solid #5a4a10;
+  border-color: #5a4a10;
+}
+
+.heist-jump-btn:active,
+.heist-jump-btn.pressed {
+  background: rgba(231, 194, 74, 0.95);
+}
+
+.heist-nitro-btn {
+  background: rgba(64, 140, 201, 0.8);
+  color: #06131f;
+  border-color: #1a3a5a;
+}
+
+.heist-nitro-btn:active,
+.heist-nitro-btn.pressed {
+  background: rgba(100, 175, 231, 0.95);
+}
+
+.heist-fire-btn {
+  background: rgba(224, 120, 42, 0.85);
+  color: #1f0d02;
+  border-color: #5a2f10;
+}
+
+.heist-fire-btn:active,
+.heist-fire-btn.pressed {
+  background: rgba(240, 150, 74, 0.95);
+}
+
+.heist-rocket-btn {
+  background: rgba(200, 60, 50, 0.85);
+  color: #1f0402;
+  border-color: #5a1410;
+}
+
+.heist-rocket-btn:active,
+.heist-rocket-btn.pressed {
+  background: rgba(224, 90, 74, 0.95);
+}
+
+.heist-jumpout-btn {
+  position: absolute;
+  left: 14px;
+  bottom: 20px;
+  z-index: 4;
+  font-family: 'VT323', monospace;
+  font-size: 15px;
+  line-height: 1.2;
+  padding: 10px 14px;
+  background: rgba(40, 60, 90, 0.8);
+  color: #d8e4f0;
+  border: 2px solid #2a4a6a;
   cursor: pointer;
   touch-action: none;
   user-select: none;
@@ -1692,18 +1790,18 @@ button.menu-option.cannon-shop-exit-btn:hover {
   -webkit-tap-highlight-color: transparent;
 }
 
-.heist-jump-btn span {
+.heist-jumpout-btn span {
   font-size: 11px;
   opacity: 0.75;
+  display: block;
 }
 
-.heist-jump-btn:active,
-.heist-jump-btn.pressed {
-  background: rgba(231, 194, 74, 0.95);
-  transform: scale(0.94);
+.heist-jumpout-btn:active {
+  transform: scale(0.96);
+  background: rgba(60, 85, 120, 0.9);
 }
 
-.heist-jump-btn.hidden {
+.heist-jumpout-btn.hidden {
   display: none;
 }
 

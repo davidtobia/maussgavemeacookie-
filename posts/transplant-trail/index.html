@@ -634,8 +634,17 @@
         </div>
       </div>
 
-      <!-- Getaway jump button — hold it in the air to flip -->
-      <button id="heist-jump-btn" class="heist-jump-btn hidden">JUMP<br><span>hold to flip</span></button>
+      <!-- Getaway controls: jump (hold in the air to flip), nitro burst,
+           gun and rocket fire — the last two only show up once you've
+           actually picked up ammo for them. -->
+      <div id="heist-getaway-controls" class="heist-getaway-controls hidden">
+        <button id="heist-nitro-btn" class="heist-getaway-btn heist-nitro-btn" disabled>NITRO<br><span id="heist-nitro-count">0</span></button>
+        <button id="heist-jump-btn" class="heist-getaway-btn heist-jump-btn">JUMP<br><span>hold to flip</span></button>
+        <button id="heist-fire-btn" class="heist-getaway-btn heist-fire-btn hidden">FIRE<br><span id="heist-fire-count">0</span></button>
+        <button id="heist-rocket-btn" class="heist-getaway-btn heist-rocket-btn hidden">ROCKET<br><span id="heist-rocket-count">0</span></button>
+      </div>
+      <!-- Only shown for the bridge half of the chase -->
+      <button id="heist-jumpout-btn" class="heist-jumpout-btn hidden">JUMP FOR IT<br><span>off the rail, into the river</span></button>
 
       <!-- Shared results panel (after each distraction and after the register) -->
       <div id="heist-result" class="heist-overlay hidden">
@@ -708,7 +717,7 @@
   <script src="trail.js?v=6"></script>
   <script src="bodega.js?v=1"></script>
   <script src="cannon.js?v=13"></script>
-  <script src="heist.js?v=14"></script>
+  <script src="heist.js?v=15"></script>
   <script src="game.js?v=5"></script>
 
   <!-- GoatCounter Analytics -->
