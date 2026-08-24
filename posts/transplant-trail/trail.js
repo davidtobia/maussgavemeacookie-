@@ -545,6 +545,13 @@ class TrailGame {
       this.showEvent(`Your dad just called. "I'm cancelling the card. You need to figure this out yourself." The AMEX is dead.`);
     }
 
+    // The Wise Erics (Big Tony, Ruhul, Dmitri) pitch a way to make cash once
+    // you're actually running low, but only after they've joined you post-cannon.
+    if (this.gameState.wisemenJoined && !this.gameState.wiseEricsPitched && this.gameState.checkingAccount <= 150) {
+      this.gameState.wiseEricsPitched = true;
+      this.showWiseEricsPitch();
+    }
+
     // Change weather occasionally (20% chance)
     if (Math.random() < 0.2) {
       this.state.vibeWeather = this.randomVibeWeather();
@@ -689,6 +696,32 @@ class TrailGame {
       }
     });
     cannonGame.init();
+  }
+
+  // ============================================
+  // THE WISE ERICS' MONEY-MAKING SCHEME
+  // ============================================
+
+  showWiseEricsPitch() {
+    this.showEvent(
+      '[The Wise Erics notice how broke you are and pitch an idea — dialogue to be written]',
+      () => this.showWiseEricsChoice()
+    );
+  }
+
+  showWiseEricsChoice() {
+    const box = document.getElementById('wise-erics-choice');
+    box.classList.remove('hidden');
+    this.state.paused = true;
+    const proceed = () => {
+      box.classList.add('hidden');
+      this.state.paused = false;
+      // TODO: this is the entry point into the next mini-game once it's built.
+      this.showEvent('[The Wise Erics\' hustle — next mini-game to be built]', () => this.start());
+    };
+    document.getElementById('wise-erics-yes').onclick = proceed;
+    document.getElementById('wise-erics-ofcourse').onclick = proceed;
+    document.getElementById('wise-erics-implicitly').onclick = proceed;
   }
 
   getTrailStateSnapshot() {

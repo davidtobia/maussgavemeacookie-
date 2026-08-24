@@ -37,6 +37,8 @@ class TransplantTrail {
       checkingAccount: 0,
       balances: { cash: 0, chaseFreedom: 0, chaseSapphire: 0, dadsAmex: 0, bilt: 0 },
       dadsAmexCancelled: false,
+      wisemenJoined: false,
+      wiseEricsPitched: false,
       aura: 100,
       inventory: {},
       bodegaScore: 0
@@ -404,6 +406,8 @@ class TransplantTrail {
       checkingAccount: this.state.checkingAccount,
       balances: { ...this.state.balances },
       dadsAmexCancelled: this.state.dadsAmexCancelled,
+      wisemenJoined: this.state.wisemenJoined,
+      wiseEricsPitched: this.state.wiseEricsPitched,
       aura: this.state.aura,
       inventory: { ...this.state.inventory },
       bodegaScore: this.state.bodegaScore || 0,
@@ -435,6 +439,8 @@ class TransplantTrail {
     this.state.checkingAccount    = save.checkingAccount;
     this.state.balances           = { ...save.balances };
     this.state.dadsAmexCancelled  = save.dadsAmexCancelled || false;
+    this.state.wisemenJoined      = save.wisemenJoined || false;
+    this.state.wiseEricsPitched   = save.wiseEricsPitched || false;
     this.state.aura               = save.aura;
     this.state.inventory          = { ...save.inventory };
     this.state.bodegaScore        = save.bodegaScore || 0;
