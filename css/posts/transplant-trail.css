@@ -1494,7 +1494,11 @@ button.menu-option.cannon-shop-exit-btn:hover {
   position: absolute;
   inset: 0;
   display: flex;
-  align-items: center;
+  /* flex-start, not center: centering an item taller than the container
+     leaves the top half of the overflow permanently unreachable by
+     scrolling in most browsers (scrollTop can't go negative). This is
+     what was cutting off the top of the role-assignment screen on mobile. */
+  align-items: flex-start;
   justify-content: center;
   background: rgba(0, 0, 0, 0.86);
   z-index: 5;
