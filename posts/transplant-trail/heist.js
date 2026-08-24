@@ -2781,9 +2781,26 @@ class HeistGame {
         ctx.closePath(); ctx.fill();
         break;
       case 'gun':
-        ctx.fillStyle = '#4a4038';
-        ctx.fillRect(x - 22, y - 4, 40, 8);
-        ctx.fillRect(x - 8, y - 4, 10, 14);
+        // Was two flat grey rectangles -- read as a blob on a phone
+        // screen. An actual rifle silhouette instead, curved magazine
+        // included, same as the FIRE button icon.
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.fillStyle = '#3a322a';
+        ctx.fillRect(-26, -3, 38, 6);          // barrel + body
+        ctx.fillRect(10, -5, 5, 10);           // muzzle
+        ctx.fillRect(-32, -1, 10, 5);          // stock
+        ctx.fillRect(-16, -9, 16, 7);          // receiver top / sight
+        ctx.beginPath();                        // pistol grip
+        ctx.moveTo(-15, 3); ctx.lineTo(-8, 3); ctx.lineTo(-10, 15); ctx.lineTo(-17, 15);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#5a4a30';
+        ctx.beginPath();                        // the curved banana magazine
+        ctx.moveTo(-2, 3);
+        ctx.quadraticCurveTo(4, 16, -5, 23);
+        ctx.quadraticCurveTo(-9, 14, -7, 3);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
         break;
       case 'rocket':
         ctx.fillStyle = '#8a4a3a';
