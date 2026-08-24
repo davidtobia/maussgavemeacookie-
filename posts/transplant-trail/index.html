@@ -551,6 +551,111 @@
       </div>
     </div>
 
+    <!-- ============================================
+         ACT 2 — THE HEIST
+         ============================================ -->
+    <div id="heist-game" class="screen">
+      <!-- Canvas (always behind overlays) -->
+      <canvas id="heist-canvas"></canvas>
+
+      <!-- Transparent HUD strip shown during the live mini-encounters -->
+      <div id="heist-hud" class="heist-hud hidden">
+        <p id="heist-hud-title" class="heist-hud-title"></p>
+        <p id="heist-hud-hint" class="heist-hud-hint"></p>
+        <p id="heist-hud-meta" class="heist-hud-meta"></p>
+      </div>
+
+      <!-- Phase 0a — the warehouse hideout -->
+      <div id="heist-intro" class="heist-overlay">
+        <div class="cannon-splash cannon-splash-wide">
+          <h2 class="cannon-splash-title">Act 2: The Heist</h2>
+          <p class="cannon-splash-sub">An old sugar factory on the Williamsburg waterfront</p>
+          <p class="heist-narration">
+            The Erics know a place. Brick the color of dried blood, arched windows four
+            stories tall, and a floor that still smells faintly of sugar. Someone has
+            pinned a store layout to a corkboard under the one working bulb.
+          </p>
+          <p class="heist-narration">
+            The plan is simple in the way plans are simple before anyone runs them.
+            You go in as the Thief. Everyone else needs a job.
+          </p>
+          <p class="cannon-wiseman-message">[The Erics lay out the job — dialogue to be written]</p>
+          <button id="heist-intro-continue" class="menu-option" style="margin-top: 24px;">Get to the corkboard</button>
+        </div>
+      </div>
+
+      <!-- Phase 0b — role assignment -->
+      <div id="heist-roles" class="heist-overlay hidden">
+        <div class="cannon-splash cannon-splash-wide">
+          <h2 class="cannon-splash-title">Assign the crew</h2>
+          <p class="cannon-splash-sub">Who takes which job changes how that job actually plays</p>
+          <div id="heist-crew-row" class="heist-crew-row"></div>
+          <div id="heist-role-row" class="heist-role-row"></div>
+          <p id="heist-roles-hint" class="heist-hint"></p>
+          <div class="cannon-features-btns">
+            <button id="heist-roles-clear" class="menu-option">Start over</button>
+            <button id="heist-roles-confirm" class="menu-option" disabled>Lock in the plan</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase 0c — the briefing -->
+      <div id="heist-briefing" class="heist-overlay hidden">
+        <div class="cannon-splash cannon-splash-wide">
+          <h2 class="cannon-splash-title">The Plan</h2>
+          <p class="cannon-splash-sub">Corkboard, red string, four people who have never done this</p>
+          <div id="heist-plan-list" class="heist-plan-list"></div>
+          <p class="cannon-wiseman-message">[Final word before they go in — dialogue to be written]</p>
+          <button id="heist-briefing-go" class="menu-option" style="margin-top: 20px;">Run it</button>
+        </div>
+      </div>
+
+      <!-- Shared results panel (after each distraction and after the register) -->
+      <div id="heist-result" class="heist-overlay hidden">
+        <div class="cannon-splash">
+          <h2 id="heist-result-title" class="cannon-splash-title"></h2>
+          <p id="heist-result-who" class="cannon-splash-sub"></p>
+          <div id="heist-result-body"></div>
+          <div id="heist-result-stats" class="heist-result-stats"></div>
+          <button id="heist-result-continue" class="menu-option" style="margin-top: 24px;">Continue</button>
+        </div>
+      </div>
+
+      <!-- The ending — scripted, no matter how well it went -->
+      <div id="heist-ending" class="heist-overlay hidden">
+        <div class="cannon-splash cannon-splash-wide">
+          <h2 class="cannon-splash-title">Caught</h2>
+          <p class="cannon-splash-sub">Four blocks from the bridge. Four blocks.</p>
+          <p class="heist-narration">
+            The car stops because the street stops. Red and blue on the brick, on the
+            windshield, on all four of your faces. Somebody's hands go up first and then
+            everybody's hands go up, which is how it always goes.
+          </p>
+          <p id="heist-ending-flavor" class="heist-narration"></p>
+          <p class="heist-narration">
+            An officer counts the bag on the hood of the car, out loud, twice, because the
+            number is somehow funnier the second time.
+          </p>
+          <p class="cannon-stat cannon-stat-total">The take: <span id="heist-ending-take">$0</span></p>
+          <p class="cannon-wiseman-message">[The Erics react to being arrested — dialogue to be written]</p>
+          <button id="heist-ending-continue" class="menu-option" style="margin-top: 24px;">And then?</button>
+        </div>
+      </div>
+
+      <!-- Act 3 stub — nothing here yet, and it says so -->
+      <div id="heist-act3" class="heist-overlay hidden">
+        <div class="cannon-splash">
+          <h2 class="cannon-splash-title">Act 3: The Prison</h2>
+          <p class="heist-coming-soon">Coming soon</p>
+          <p class="heist-narration">
+            Your things go into a manila envelope. The money you managed to keep is still
+            technically yours, which nobody can quite explain.
+          </p>
+          <button id="heist-act3-continue" class="menu-option" style="margin-top: 24px;">Back to the trail</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Apartment Hunt -->
     <div id="apartment-hunt" class="screen">
       <div class="border-decoration top"></div>
@@ -573,10 +678,11 @@
   <script src="characters.js?v=2"></script>
   <script src="store.js?v=2"></script>
   <script src="trail-data.js?v=3"></script>
-  <script src="trail.js?v=5"></script>
+  <script src="trail.js?v=6"></script>
   <script src="bodega.js?v=1"></script>
   <script src="cannon.js?v=13"></script>
-  <script src="game.js?v=4"></script>
+  <script src="heist.js?v=1"></script>
+  <script src="game.js?v=5"></script>
 
   <!-- GoatCounter Analytics -->
   <script data-goatcounter="https://maussgavemeacookie.goatcounter.com/count"
