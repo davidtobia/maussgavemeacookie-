@@ -151,7 +151,9 @@ class HeistGame {
   bindMazeInput() {
     this.mazeTiltX = 0;
     this.mazeTiltY = 0;
+    this.mazeUseTilt = false;
     this._mazeTouches = {}; // identifier -> { side: 'left'|'right' }
+    this._mazeOrientBase = null; // calibration baseline, set on enabling tilt
 
     const setFromTouch = (t) => {
       const r = this.canvas.getBoundingClientRect();
@@ -164,7 +166,7 @@ class HeistGame {
     };
 
     this.canvas.addEventListener('touchstart', (e) => {
-      if (this.phase !== 'maze') return;
+      if (this.phase !== 'maze' || this.mazeUseTilt) return;
       e.preventDefault();
       const r = this.canvas.getBoundingClientRect();
       Array.from(e.changedTouches).forEach(t => {
@@ -175,7 +177,7 @@ class HeistGame {
     }, { passive: false });
 
     this.canvas.addEventListener('touchmove', (e) => {
-      if (this.phase !== 'maze') return;
+      if (this.phase !== 'maze' || this.mazeUseTilt) return;
       e.preventDefault();
       Array.from(e.changedTouches).forEach(t => {
         if (this._mazeTouches[t.identifier]) setFromTouch(t);
@@ -183,7 +185,7 @@ class HeistGame {
     }, { passive: false });
 
     const endTouch = (e) => {
-      if (this.phase !== 'maze') return;
+      if (this.phase !== 'maze' || this.mazeUseTilt) return;
       Array.from(e.changedTouches).forEach(t => {
         const side = this._mazeTouches[t.identifier];
         delete this._mazeTouches[t.identifier];
@@ -196,12 +198,39 @@ class HeistGame {
 
     // Desktop fallback — single cursor drives both axes at once.
     this.canvas.addEventListener('mousemove', (e) => {
-      if (this.phase !== 'maze') return;
+      if (this.phase !== 'maze' || this.mazeUseTilt) return;
       if (Object.keys(this._mazeTouches).length > 0) return; // real touch wins
       const r = this.canvas.getBoundingClientRect();
       this.mazeTiltX = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width - 0.5) * 2.4));
       this.mazeTiltY = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height - 0.5) * 2.4));
     });
+
+    // Real device tilt. Calibrated against whatever angle you're already
+    // holding the phone at when tilt mode turns on — you don't have to hold
+    // it dead flat, wherever it starts becomes "neutral."
+    window.addEventListener('deviceorientation', (e) => {
+      if (this.phase !== 'maze' || !this.mazeUseTilt) return;
+      if (e.beta === null || e.gamma === null) return;
+      if (!this._mazeOrientBase) this._mazeOrientBase = { beta: e.beta, gamma: e.gamma };
+      const dGamma = e.gamma - this._mazeOrientBase.gamma; // left/right
+      const dBeta = e.beta - this._mazeOrientBase.beta;   // front/back
+      this.mazeTiltX = Math.max(-1, Math.min(1, dGamma / 22));
+      this.mazeTiltY = Math.max(-1, Math.min(1, dBeta / 22));
+    });
+  }
+
+  // iOS 13+ gates DeviceOrientationEvent behind an explicit permission
+  // request that MUST be called synchronously from a user gesture — this is
+  // called directly from the "Tilt my phone" button's click handler.
+  requestTiltPermission(onDone) {
+    const DOE = window.DeviceOrientationEvent;
+    if (DOE && typeof DOE.requestPermission === 'function') {
+      DOE.requestPermission().then(state => onDone(state === 'granted')).catch(() => onDone(false));
+    } else if (typeof DOE !== 'undefined') {
+      onDone(true); // Android and older Safari: no permission gate at all
+    } else {
+      onDone(false); // no device orientation support on this device/browser
+    }
   }
 
   resize() {
@@ -567,13 +596,22 @@ class HeistGame {
 
     // Fixed posts, each sweeping its own cone on its own clock so they don't
     // all turn in sync.
+    // Two edge patrols (walking the full height, facing inward) so hugging a
+    // wall isn't a free path anymore, plus one center patrol so the middle
+    // still needs real timing rather than being the obviously-safe route.
     this.floorGuards = [
-      { x: 46, y: 50, baseAngle: 0,      sweep: 0.9, range: 26, halfAngle: 0.5, angle: 0,      seed: 0,
-        attractTo: null, attractTimer: 0, frozen: false, freezeTimer: 0 },
-      { x: 72, y: 34, baseAngle: Math.PI, sweep: 0.7, range: 24, halfAngle: 0.5, angle: Math.PI, seed: 40,
-        attractTo: null, attractTimer: 0, frozen: false, freezeTimer: 0 },
-      { x: 38, y: 66, baseAngle: -0.9,   sweep: 0.8, range: 24, halfAngle: 0.5, angle: -0.9,   seed: 80,
-        attractTo: null, attractTimer: 0, frozen: false, freezeTimer: 0 },
+      { x: 15, y: 14, patrolAxis: 'y', patrolFixed: 15, patrolMin: 14, patrolMax: 86,
+        patrolDir: 1, speed: 0.34, facing: 0, range: 24, halfAngle: 0.55, angle: 0,
+        state: 'patrol', targetX: 0, targetY: 0, pauseTimer: 0, runSpeed: 0,
+        homeX: 15, homeY: 14, frozen: false, freezeTimer: 0 },
+      { x: 85, y: 86, patrolAxis: 'y', patrolFixed: 85, patrolMin: 14, patrolMax: 86,
+        patrolDir: -1, speed: 0.34, facing: Math.PI, range: 24, halfAngle: 0.55, angle: Math.PI,
+        state: 'patrol', targetX: 0, targetY: 0, pauseTimer: 0, runSpeed: 0,
+        homeX: 85, homeY: 86, frozen: false, freezeTimer: 0 },
+      { x: 34, y: 50, patrolAxis: 'x', patrolFixed: 50, patrolMin: 34, patrolMax: 66,
+        patrolDir: 1, speed: 0.26, facing: -Math.PI / 2, range: 24, halfAngle: 0.6, angle: -Math.PI / 2,
+        state: 'patrol', targetX: 0, targetY: 0, pauseTimer: 0, runSpeed: 0,
+        homeX: 34, homeY: 50, frozen: false, freezeTimer: 0 },
     ];
 
     this.floorHeatGain = 1.15;
@@ -686,31 +724,33 @@ class HeistGame {
       .map(g => ({ g, d: Math.hypot(g.x - spot.x, g.y - spot.y) }))
       .sort((a, b) => a.d - b.d);
 
+    // Physically send a guard to investigate: they run over, stop and look
+    // around for a few seconds, then walk back to wherever their patrol got
+    // interrupted. Already-frozen guards (Dmitri's doing) don't get pulled.
+    const sendToInvestigate = (g, pauseFrames) => {
+      if (g.frozen) return;
+      g.homeX = g.x; g.homeY = g.y;
+      g.state = 'investigate';
+      g.targetX = spot.x; g.targetY = spot.y;
+      g.runSpeed = g.speed * 2.6;
+      g.pauseTimer = pauseFrames;
+    };
+
     if (char.id === 'tony') {
-      // Loud: everyone within range snaps toward it, hard and short.
-      nearGuards.filter(({ d }) => d < 42).forEach(({ g }) => {
-        g.attractTo = { x: spot.x, y: spot.y };
-        g.attractTimer = 95;
-        g.frozen = false;
-      });
+      // Loud: everyone within range runs over, hard and short.
+      nearGuards.filter(({ d }) => d < 42).forEach(({ g }) => sendToInvestigate(g, 90));
       this.cash += 70;
     } else if (char.id === 'ruhul') {
-      // Charm: just the nearest one, but for much longer.
-      if (nearGuards[0] && nearGuards[0].d < 55) {
-        const g = nearGuards[0].g;
-        g.attractTo = { x: spot.x, y: spot.y };
-        g.attractTimer = 260;
-        g.frozen = false;
-      }
+      // Charm: just the nearest one, but they stick around much longer.
+      if (nearGuards[0] && nearGuards[0].d < 55) sendToInvestigate(nearGuards[0].g, 260);
       this.cash += 85;
     } else {
-      // The stall: doesn't lure anyone. Freezes the nearest guard's cone
-      // wherever it already happens to be pointing.
+      // The stall: doesn't lure anyone anywhere. Freezes the nearest guard
+      // in place, wherever they currently are — they just stop walking.
       if (nearGuards[0] && nearGuards[0].d < 50) {
         const g = nearGuards[0].g;
         g.frozen = true;
         g.freezeTimer = 320;
-        g.attractTo = null;
       }
       this.cash += 65;
     }
@@ -757,25 +797,54 @@ class HeistGame {
       }
     });
 
-    // Guards: frozen holds its current angle; attracted turns toward the
-    // pull point; otherwise a slow patrol sweep.
+    // Guards actually walk now, not just stand and swivel:
+    //   patrol      — walking their route, facing into the store.
+    //   investigate — running toward a triggered hotspot.
+    //   pause       — stopped there for a few seconds, looking around.
+    //   return      — walking back to wherever they were interrupted.
+    // Frozen (Dmitri's stall) skips all of it — they don't move at all.
     this.floorGuards.forEach(g => {
       if (g.frozen) {
         g.freezeTimer--;
         if (g.freezeTimer <= 0) g.frozen = false;
         return;
       }
-      if (g.attractTo) {
-        g.attractTimer--;
-        const target = Math.atan2(g.attractTo.y - g.y, g.attractTo.x - g.x);
-        let diff = target - g.angle;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        g.angle += diff * 0.12;
-        if (g.attractTimer <= 0) g.attractTo = null;
-        return;
+
+      if (g.state === 'patrol') {
+        g.angle = g.facing;
+        if (g.patrolAxis === 'y') {
+          g.y += g.speed * g.patrolDir;
+          if (g.y >= g.patrolMax) { g.y = g.patrolMax; g.patrolDir = -1; }
+          if (g.y <= g.patrolMin) { g.y = g.patrolMin; g.patrolDir = 1; }
+        } else {
+          g.x += g.speed * g.patrolDir;
+          if (g.x >= g.patrolMax) { g.x = g.patrolMax; g.patrolDir = -1; }
+          if (g.x <= g.patrolMin) { g.x = g.patrolMin; g.patrolDir = 1; }
+        }
+      } else if (g.state === 'investigate') {
+        const dx = g.targetX - g.x, dy = g.targetY - g.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 1.2) {
+          g.angle = Math.atan2(dy, dx);
+          g.x += (dx / dist) * g.runSpeed;
+          g.y += (dy / dist) * g.runSpeed;
+        } else {
+          g.state = 'pause';
+        }
+      } else if (g.state === 'pause') {
+        g.pauseTimer--;
+        if (g.pauseTimer <= 0) g.state = 'return';
+      } else if (g.state === 'return') {
+        const dx = g.homeX - g.x, dy = g.homeY - g.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 1.2) {
+          g.angle = Math.atan2(dy, dx);
+          g.x += (dx / dist) * g.speed;
+          g.y += (dy / dist) * g.speed;
+        } else {
+          g.state = 'patrol';
+        }
       }
-      g.angle = g.baseAngle + g.sweep * Math.sin((this._frame + g.seed) / 85);
     });
 
     // Heat: anyone (present, un-pulled) inside any guard's cone heats up;
@@ -904,7 +973,8 @@ class HeistGame {
       ctx.moveTo(0, 0);
       ctx.arc(0, 0, rangePx, -g.halfAngle, g.halfAngle);
       ctx.closePath();
-      ctx.fillStyle = g.frozen ? 'rgba(120,120,140,0.16)' : g.attractTo ? 'rgba(231,76,60,0.22)' : 'rgba(241,196,15,0.14)';
+      const alert = g.state === 'investigate' || g.state === 'pause';
+      ctx.fillStyle = g.frozen ? 'rgba(120,120,140,0.16)' : alert ? 'rgba(231,76,60,0.22)' : 'rgba(241,196,15,0.14)';
       ctx.fill();
       ctx.restore();
     });
@@ -924,11 +994,21 @@ class HeistGame {
 
     this.floorGuards.forEach(g => {
       const [gx, gy] = toPx(g.x, g.y);
+      if (g.state === 'investigate' || g.state === 'return') {
+        // Motion streak trailing behind the direction of travel — makes a
+        // guard actually running to a distraction read as running.
+        const back = g.angle + Math.PI;
+        ctx.strokeStyle = 'rgba(138,154,172,0.5)'; ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(gx, gy);
+        ctx.lineTo(gx + Math.cos(back) * 16, gy + Math.sin(back) * 16);
+        ctx.stroke();
+      }
       ctx.beginPath();
       ctx.arc(gx, gy, 8, 0, Math.PI * 2);
-      ctx.fillStyle = '#3a4a5a';
+      ctx.fillStyle = g.state === 'investigate' || g.state === 'pause' ? '#7a3a3a' : '#3a4a5a';
       ctx.fill();
-      ctx.strokeStyle = '#8a9aac';
+      ctx.strokeStyle = g.state === 'pause' ? '#e05a4a' : '#8a9aac';
       ctx.lineWidth = 1.5;
       ctx.stroke();
     });
@@ -1091,7 +1171,9 @@ class HeistGame {
 
     this.mazeTiltX = 0;
     this.mazeTiltY = 0;
+    this.mazeUseTilt = false;
     this._mazeTouches = {};
+    this._mazeOrientBase = null;
 
     this.mech = {
       kind: 'maze',
@@ -1109,13 +1191,50 @@ class HeistGame {
     this.mech.timeLeft = (t.timeLimit + bonusSeconds) * 60;
     this.mech.bonusSeconds = bonusSeconds;
 
-    this.showHud(
-      'The lock — roll it to the shear line',
-      'Two thumbs: left tilts left/right, right tilts up/down. (Mouse on desktop.)',
-      `+${bonusSeconds}s bought by the distractions`
-    );
     this.input.onDown = null;
     this.input.onUp = null;
+    this.showMazeChoice();
+  }
+
+  // Tilt needs an explicit, synchronous user gesture on iOS to unlock the
+  // permission — so ask before the ball starts rolling instead of guessing.
+  showMazeChoice() {
+    this.showOverlay('heist-maze-choice');
+    const hasOrientation = typeof window.DeviceOrientationEvent !== 'undefined';
+    const tiltBtn = document.getElementById('heist-maze-choice-tilt');
+    const note = document.getElementById('heist-maze-choice-note');
+    tiltBtn.classList.toggle('hidden', !hasOrientation);
+    note.textContent = hasOrientation
+      ? 'Tilt rolls the ball like a real labyrinth toy. Thumbs work everywhere, including desktop.'
+      : "This device doesn't seem to support tilt — thumbs it is.";
+
+    tiltBtn.onclick = () => {
+      this.requestTiltPermission((granted) => {
+        if (this.phase !== 'maze') return;
+        if (granted) {
+          this.mazeUseTilt = true;
+          this.beginMazeLoop('Tilt your phone left/right and forward/back to roll the ball.');
+        } else {
+          note.textContent = "Couldn't get tilt permission — using thumbs instead.";
+          this.mazeUseTilt = false;
+          this.beginMazeLoop('Two thumbs: left tilts left/right, right tilts up/down. (Mouse on desktop.)');
+        }
+      });
+    };
+    document.getElementById('heist-maze-choice-thumbs').onclick = () => {
+      this.mazeUseTilt = false;
+      this.beginMazeLoop('Two thumbs: left tilts left/right, right tilts up/down. (Mouse on desktop.)');
+    };
+  }
+
+  beginMazeLoop(hint) {
+    this.hideOverlays();
+    const m = this.mech;
+    this.showHud(
+      'The lock — roll it to the shear line',
+      hint,
+      `+${m.bonusSeconds}s bought by the distractions`
+    );
     this.mazeLoop();
   }
 
@@ -1628,7 +1747,7 @@ class HeistGame {
 
     // Two control zones, faintly marked at the bottom on mobile so the split
     // is discoverable without reading the hint text.
-    if ('ontouchstart' in window) {
+    if ('ontouchstart' in window && !this.mazeUseTilt) {
       ctx.fillStyle = 'rgba(255,255,255,0.05)';
       ctx.fillRect(0, H * 0.9, W / 2, H * 0.1);
       ctx.fillRect(W / 2, H * 0.9, W / 2, H * 0.1);

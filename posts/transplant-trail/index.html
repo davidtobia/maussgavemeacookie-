@@ -621,6 +621,18 @@
         </div>
       </div>
 
+      <!-- How do you want to roll the ball? Only offers tilt where the device
+           might actually support it; JS hides the tilt option otherwise. -->
+      <div id="heist-maze-choice" class="heist-overlay hidden">
+        <div class="cannon-splash">
+          <h2 class="cannon-splash-title">The Lock</h2>
+          <p class="cannon-splash-sub">How do you want to roll it?</p>
+          <button id="heist-maze-choice-tilt" class="menu-option">Tilt my phone</button>
+          <button id="heist-maze-choice-thumbs" class="menu-option">Use two thumbs</button>
+          <p id="heist-maze-choice-note" class="heist-hint"></p>
+        </div>
+      </div>
+
       <!-- Shared results panel (after each distraction and after the register) -->
       <div id="heist-result" class="heist-overlay hidden">
         <div class="cannon-splash">
@@ -692,7 +704,7 @@
   <script src="trail.js?v=6"></script>
   <script src="bodega.js?v=1"></script>
   <script src="cannon.js?v=13"></script>
-  <script src="heist.js?v=5"></script>
+  <script src="heist.js?v=6"></script>
   <script src="game.js?v=5"></script>
 
   <!-- GoatCounter Analytics -->
