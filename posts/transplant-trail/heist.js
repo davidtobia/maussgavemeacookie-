@@ -127,7 +127,6 @@ class HeistGame {
     this.cash = 0;
     this.assign = { distractionA: null, distractionB: null, lookout: null };
     this.selectedCrew = null;
-    this.distractionScores = {};
     this.crashes = 0;
     this.tumblersSet = 0;
 
@@ -160,11 +159,12 @@ class HeistGame {
     if (this._bound) return;
     this._bound = true;
 
-    const press = (y) => {
+    const press = (x, y) => {
       if (this.input.down) return;
       this.input.down = true;
+      this.input.tapX = x;
       this.input.tapY = y;
-      if (this.input.onDown) this.input.onDown(y);
+      if (this.input.onDown) this.input.onDown(x, y);
     };
     const release = () => {
       if (!this.input.down) return;
@@ -175,7 +175,7 @@ class HeistGame {
     this.canvas.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       const r = this.canvas.getBoundingClientRect();
-      press(e.clientY - r.top);
+      press(e.clientX - r.left, e.clientY - r.top);
     });
     window.addEventListener('pointerup', release);
     window.addEventListener('pointercancel', release);
@@ -184,7 +184,7 @@ class HeistGame {
       if (!this.isActiveScreen()) return;
       if (e.code === 'Space' || e.key === ' ') {
         e.preventDefault();
-        if (!e.repeat) press(this.canvas.height / 2);
+        if (!e.repeat) press(this.canvas.width / 2, this.canvas.height / 2);
       } else if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
         e.preventDefault();
         if (this.mech && this.mech.laneUp) this.mech.laneUp();
@@ -403,252 +403,461 @@ class HeistGame {
 
     document.getElementById('heist-briefing-go').onclick = () => {
       if (this.phase !== 'briefing') return;
-      this.startDistraction(0);
+      this.startFloor();
     };
   }
 
   // ------------------------------------------------
-  // PHASE 1 — DISTRACTIONS
+  // PHASE 1 — THE FLOOR
+  //
+  // An overhead view of the store. You switch between whichever crew are
+  // actually inside (the Thief, plus whoever got assigned to Distraction A/B
+  // — the Lookout stays outside with the car) and click to send the active
+  // one walking. Guards patrol with a real cone of vision; walk into one and
+  // your heat climbs. A distractor who overheats gets pulled off the floor —
+  // the job goes on without them. If YOUR heat (the Thief) maxes out, the
+  // job ends early, caught, before you ever reach the register.
+  //
+  // Each Eric's hotspots share the same five store zones, but what happens
+  // when they arrive — and what it does to nearby guards — is a different
+  // verb per Eric, not just different flavor text:
+  //   Tony   — loud. Every guard near the hotspot snaps toward it, hard and
+  //            short. Big, brief window, several guards at once.
+  //   Ruhul  — charm. Only the nearest guard drifts over, but stays pulled
+  //            much longer. Narrower, but you can plan around it.
+  //   Dmitri — the stall. Doesn't lure anyone toward him at all — freezes
+  //            the nearest guard's cone wherever it already happens to be
+  //            pointing, for a long time. Useful for locking down a guard
+  //            that's already looking somewhere safe.
   // ------------------------------------------------
 
-  startDistraction(index) {
+  floorZones() {
+    return [
+      { id: 'deli',     name: 'Deli Counter',   x: 34, y: 24 },
+      { id: 'fish',     name: 'Fish Counter',   x: 58, y: 22 },
+      { id: 'produce',  name: 'Produce Section', x: 30, y: 78 },
+      { id: 'frozen',   name: 'Frozen Aisle',   x: 62, y: 80 },
+      { id: 'checkout', name: 'Self-Checkout',  x: 78, y: 30 },
+    ];
+  }
+
+  // Narrator-voice notes on what each Eric actually does at each zone. Real
+  // quoted lines are the author's — anything not supplied stays a bracketed
+  // placeholder, same rule as everywhere else in this file.
+  floorFlavor(crewId, zoneId) {
+    const lines = {
+      tony: {
+        deli: 'How does a deli run out of prosciutto?',
+        fish: 'I need calamari. For my mother.',
+        produce: '[Tony at the produce section — line to be written]',
+        frozen: '[Tony at the frozen aisle — line to be written]',
+        checkout: '[Tony at self-checkout — line to be written]',
+      },
+      ruhul: {
+        deli: '[Ruhul at the deli counter — line to be written]',
+        fish: '[Ruhul at the fish counter — line to be written]',
+        produce: '[Ruhul at the produce section — line to be written]',
+        frozen: '[Ruhul at the frozen aisle — line to be written]',
+        checkout: '[Ruhul at self-checkout — line to be written]',
+      },
+      dmitri: {
+        deli: '[Dmitri at the deli counter — line to be written]',
+        fish: '[Dmitri at the fish counter — line to be written]',
+        produce: '[Dmitri at the produce section — line to be written]',
+        frozen: '[Dmitri at the frozen aisle — line to be written]',
+        checkout: '[Dmitri at self-checkout — line to be written]',
+      },
+    };
+    return lines[crewId][zoneId];
+  }
+
+  startFloor() {
     this.stopLoop();
     this.hideOverlays();
-    this.distractionIndex = index;
-    const roleId = index === 0 ? 'distractionA' : 'distractionB';
-    const crew = getHeistCrew(this.assign[roleId]);
-    this.currentDistraction = { roleId, crew };
-    this.phase = 'distraction';
+    this.hideHud();
+    this.phase = 'floor';
 
-    if (crew.id === 'tony') this.runTonyDistraction(crew, roleId);
-    else if (crew.id === 'ruhul') this.runRuhulDistraction(crew, roleId);
-    else this.runDmitriDistraction(crew, roleId);
+    const distractors = HEIST_ROLES.filter(r => r.id !== 'lookout')
+      .map(r => getHeistCrew(this.assign[r.id]));
+
+    // Everyone present starts at the entrance, staggered a little so they
+    // aren't stacked on the same pixel.
+    this.floorChars = [
+      { id: 'thief', name: this.gameState.playerName || 'You', color: '#d4a574',
+        x: 8, y: 50, tx: 8, ty: 50, speed: 0.62, heat: 0, pulled: false, isThief: true },
+      ...distractors.map((c, i) => ({
+        id: c.id, name: c.name, color: c.color, crew: c,
+        x: 8, y: 50 + (i === 0 ? -8 : 8), tx: 8, ty: 50 + (i === 0 ? -8 : 8),
+        speed: c.id === 'tony' ? 0.74 : c.id === 'dmitri' ? 0.5 : 0.62,
+        heat: 0, pulled: false, isThief: false,
+      })),
+    ];
+    this.floorActiveId = 'thief';
+
+    // Each distractor gets one hotspot per zone, offset slightly so two
+    // colors at the "same" zone don't sit on top of each other.
+    this.floorHotspots = [];
+    distractors.forEach((c, i) => {
+      const jitter = i === 0 ? -3.5 : 3.5;
+      this.floorZones().forEach(z => {
+        this.floorHotspots.push({
+          crewId: c.id, color: c.color, zoneId: z.id, zoneName: z.name,
+          x: z.x + jitter, y: z.y + jitter * 0.6,
+          triggered: false,
+        });
+      });
+    });
+
+    this.floorRegister = { x: 90, y: 50, r: 6 };
+
+    // Fixed posts, each sweeping its own cone on its own clock so they don't
+    // all turn in sync.
+    this.floorGuards = [
+      { x: 46, y: 50, baseAngle: 0,      sweep: 0.9, range: 26, halfAngle: 0.5, angle: 0,      seed: 0,
+        attractTo: null, attractTimer: 0, frozen: false, freezeTimer: 0 },
+      { x: 72, y: 34, baseAngle: Math.PI, sweep: 0.7, range: 24, halfAngle: 0.5, angle: Math.PI, seed: 40,
+        attractTo: null, attractTimer: 0, frozen: false, freezeTimer: 0 },
+      { x: 38, y: 66, baseAngle: -0.9,   sweep: 0.8, range: 24, halfAngle: 0.5, angle: -0.9,   seed: 80,
+        attractTo: null, attractTimer: 0, frozen: false, freezeTimer: 0 },
+    ];
+
+    this.floorHeatGain = 1.15;
+    this.floorHeatDecay = 0.55;
+
+    this.buildFloorRosterDOM();
+    document.getElementById('heist-floor-hud').classList.remove('hidden');
+    document.getElementById('heist-floor-hint').textContent =
+      'Click a crew member below, then click the floor to send them there. Colored dots are their distractions.';
+
+    this.input.onDown = (x, y) => this.floorClick(x, y);
+    this.input.onUp = null;
+
+    this.floorLoop();
   }
 
-  // --- Big Tony: reflex. Fast sweep, narrow window, three shoves.
-  runTonyDistraction(crew, roleId) {
-    const t = HEIST_TUNING.tony;
-    const roleName = HEIST_ROLES.find(r => r.id === roleId).name;
-    this.showHud(
-      `${roleName} — ${crew.name}`,
-      'TAP when the marker is in the red band. Tony does not wait.',
-      `Shove 1 of ${t.rounds}`
-    );
-
-    this.mech = {
-      kind: 'tony', crew, roleId,
-      pos: 0, dir: 1, round: 0, hits: 0, rounds: t.rounds,
-      zoneCenter: 30 + Math.random() * 40,
-      flash: 0, flashGood: false, doneTimer: 0,
-    };
-    this.input.onDown = () => this.tonyTap();
-    this.tonyLoop();
+  buildFloorRosterDOM() {
+    const row = document.getElementById('heist-floor-roster');
+    row.innerHTML = '';
+    this.floorChars.forEach(ch => {
+      const chip = document.createElement('div');
+      chip.className = 'heist-floor-chip';
+      chip.id = `heist-chip-${ch.id}`;
+      chip.innerHTML = `
+        <div class="heist-floor-chip-dot" style="background:${ch.color}"></div>
+        <div class="heist-floor-chip-name">${ch.isThief ? 'You' : ch.name}</div>
+        <div class="heist-floor-chip-heat"><div class="heist-floor-chip-heat-fill" id="heist-chip-heat-${ch.id}"></div></div>
+      `;
+      chip.onclick = () => {
+        if (this.phase !== 'floor') return;
+        const c = this.floorChars.find(x => x.id === ch.id);
+        if (!c || c.pulled) return;
+        this.floorActiveId = ch.id;
+        this.updateFloorRosterDOM();
+      };
+      row.appendChild(chip);
+    });
+    this.updateFloorRosterDOM();
   }
 
-  tonyTap() {
-    const m = this.mech;
-    if (!m || m.kind !== 'tony' || m.doneTimer > 0) return;
-    const t = HEIST_TUNING.tony;
-    const hit = Math.abs(m.pos - m.zoneCenter) < t.zone / 2;
-    if (hit) m.hits++;
-    m.flash = 18;
-    m.flashGood = hit;
-    m.round++;
-    m.zoneCenter = 26 + Math.random() * 48;
-    m.pos = Math.random() * 100;
-    if (m.round >= m.rounds) {
-      m.doneTimer = 45;
-    } else {
-      this.setHudHint(hit ? 'Landed. Go again.' : 'Missed — he is already committed to the next one.',
-        `Shove ${m.round + 1} of ${m.rounds}`);
-    }
+  updateFloorRosterDOM() {
+    this.floorChars.forEach(ch => {
+      const chip = document.getElementById(`heist-chip-${ch.id}`);
+      if (!chip) return;
+      chip.classList.toggle('active', ch.id === this.floorActiveId);
+      chip.classList.toggle('pulled', ch.pulled);
+      const fill = document.getElementById(`heist-chip-heat-${ch.id}`);
+      if (fill) {
+        fill.style.width = `${Math.round(ch.heat)}%`;
+        fill.style.background = ch.heat > 75 ? '#e74c3c' : ch.heat > 40 ? '#f39c12' : '#2ecc71';
+      }
+    });
   }
 
-  tonyLoop() {
-    const m = this.mech;
-    if (!m || m.kind !== 'tony') return;
-    const t = HEIST_TUNING.tony;
-    this._frame++;
-    if (m.flash > 0) m.flash--;
-    if (m.doneTimer > 0) {
-      m.doneTimer--;
-      if (m.doneTimer === 0) {
-        this.endDistraction(Math.round((m.hits / m.rounds) * 100),
-          `${m.hits} of ${m.rounds} shoves landed.`);
+  floorToast(text, ms) {
+    const el = document.getElementById('heist-floor-toast');
+    el.textContent = text;
+    el.classList.remove('hidden');
+    clearTimeout(this._floorToastTimer);
+    this._floorToastTimer = setTimeout(() => el.classList.add('hidden'), ms || 2200);
+  }
+
+  floorBounds() {
+    const W = this.canvas.width, H = this.canvas.height;
+    return { x: W * 0.06, y: H * 0.16, w: W * 0.88, h: H * 0.76 };
+  }
+
+  floorClick(px, py) {
+    if (this.phase !== 'floor') return;
+    const active = this.floorChars.find(c => c.id === this.floorActiveId);
+    if (!active || active.pulled) return;
+
+    const b = this.floorBounds();
+    const x = ((px - b.x) / b.w) * 100;
+    const y = ((py - b.y) / b.h) * 100;
+    if (x < -5 || x > 105 || y < -5 || y > 105) return;
+
+    // Hit-test the active character's own, untriggered hotspots first.
+    if (!active.isThief) {
+      const spot = this.floorHotspots.find(h =>
+        h.crewId === active.id && !h.triggered && Math.hypot(h.x - x, h.y - y) < 5);
+      if (spot) {
+        active.tx = spot.x; active.ty = spot.y; active.pendingHotspot = spot;
         return;
       }
+    }
+    active.tx = Math.max(2, Math.min(98, x));
+    active.ty = Math.max(2, Math.min(98, y));
+    active.pendingHotspot = null;
+  }
+
+  triggerHotspot(char, spot) {
+    spot.triggered = true;
+    char.pendingHotspot = null;
+    const flavor = this.floorFlavor(char.id, spot.zoneId);
+    this.floorToast(`${char.name} — ${spot.zoneName}: ${flavor}`, 3200);
+
+    const nearGuards = this.floorGuards
+      .map(g => ({ g, d: Math.hypot(g.x - spot.x, g.y - spot.y) }))
+      .sort((a, b) => a.d - b.d);
+
+    if (char.id === 'tony') {
+      // Loud: everyone within range snaps toward it, hard and short.
+      nearGuards.filter(({ d }) => d < 42).forEach(({ g }) => {
+        g.attractTo = { x: spot.x, y: spot.y };
+        g.attractTimer = 95;
+        g.frozen = false;
+      });
+      this.cash += 70;
+    } else if (char.id === 'ruhul') {
+      // Charm: just the nearest one, but for much longer.
+      if (nearGuards[0] && nearGuards[0].d < 55) {
+        const g = nearGuards[0].g;
+        g.attractTo = { x: spot.x, y: spot.y };
+        g.attractTimer = 260;
+        g.frozen = false;
+      }
+      this.cash += 85;
     } else {
-      m.pos += t.speed * m.dir;
-      if (m.pos >= 100) { m.pos = 100; m.dir = -1; }
-      if (m.pos <= 0) { m.pos = 0; m.dir = 1; }
-    }
-    this.drawStoreScene();
-    this.drawSweepGauge(m.pos, m.zoneCenter, t.zone, '#e05a4a', m.flash, m.flashGood,
-      `${m.hits} landed`);
-    this._af = requestAnimationFrame(() => this.tonyLoop());
-  }
-
-  // --- Ruhul: charm. Hold to build the patter, let go before you oversell it.
-  runRuhulDistraction(crew, roleId) {
-    const t = HEIST_TUNING.ruhul;
-    const roleName = HEIST_ROLES.find(r => r.id === roleId).name;
-    this.showHud(
-      `${roleName} — ${crew.name}`,
-      'HOLD to keep talking. RELEASE inside the green band. Wide band — he has room to work.',
-      `Beat 1 of ${t.rounds}`
-    );
-
-    this.mech = {
-      kind: 'ruhul', crew, roleId,
-      meter: 0, round: 0, quality: [], rounds: t.rounds,
-      band: t.bands[0], oversold: 0, flash: 0, flashGood: false, doneTimer: 0,
-    };
-    this.input.onUp = () => this.ruhulRelease();
-    this.ruhulLoop();
-  }
-
-  ruhulRelease() {
-    const m = this.mech;
-    if (!m || m.kind !== 'ruhul' || m.doneTimer > 0) return;
-    if (m.meter <= 2) return; // stray click, not a real release
-    const [lo, hi] = m.band;
-    let q = 0;
-    if (m.meter >= lo && m.meter <= hi) {
-      // Landing anywhere in the band works; landing high in it works better.
-      q = 0.6 + 0.4 * ((m.meter - lo) / (hi - lo));
-    }
-    m.quality.push(q);
-    m.flash = 18;
-    m.flashGood = q > 0;
-    this.advanceRuhulRound();
-  }
-
-  advanceRuhulRound() {
-    const m = this.mech, t = HEIST_TUNING.ruhul;
-    m.round++;
-    m.meter = 0;
-    m.band = t.bands[Math.min(m.round, t.bands.length - 1)];
-    if (m.round >= m.rounds) {
-      m.doneTimer = 45;
-    } else {
-      this.setHudHint(
-        m.flashGood ? 'That landed. Keep him going.' : 'Oversold it. He resets and tries another angle.',
-        `Beat ${m.round + 1} of ${m.rounds}`
-      );
+      // The stall: doesn't lure anyone. Freezes the nearest guard's cone
+      // wherever it already happens to be pointing.
+      if (nearGuards[0] && nearGuards[0].d < 50) {
+        const g = nearGuards[0].g;
+        g.frozen = true;
+        g.freezeTimer = 320;
+        g.attractTo = null;
+      }
+      this.cash += 65;
     }
   }
 
-  ruhulLoop() {
-    const m = this.mech;
-    if (!m || m.kind !== 'ruhul') return;
-    const t = HEIST_TUNING.ruhul;
+  floorLoop() {
+    if (this.phase !== 'floor') return;
     this._frame++;
-    if (m.flash > 0) m.flash--;
-    if (m.doneTimer > 0) {
-      m.doneTimer--;
-      if (m.doneTimer === 0) {
-        const avg = m.quality.reduce((a, b) => a + b, 0) / m.rounds;
-        const landed = m.quality.filter(q => q > 0).length;
-        this.endDistraction(Math.round(avg * 100), `${landed} of ${m.rounds} beats landed clean.`);
+
+    // Move every present, un-pulled character toward its own target.
+    this.floorChars.forEach(ch => {
+      if (ch.pulled) return;
+      const dx = ch.tx - ch.x, dy = ch.ty - ch.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > 0.4) {
+        ch.x += (dx / dist) * Math.min(ch.speed, dist);
+        ch.y += (dy / dist) * Math.min(ch.speed, dist);
+      } else if (ch.pendingHotspot && !ch.pendingHotspot.triggered) {
+        this.triggerHotspot(ch, ch.pendingHotspot);
+      }
+    });
+
+    // Guards: frozen holds its current angle; attracted turns toward the
+    // pull point; otherwise a slow patrol sweep.
+    this.floorGuards.forEach(g => {
+      if (g.frozen) {
+        g.freezeTimer--;
+        if (g.freezeTimer <= 0) g.frozen = false;
         return;
       }
-    } else if (this.input.down) {
-      m.meter += t.rate;
-      if (m.meter >= 100) {
-        // Went past the point of being charming. No penalty beyond the reset.
-        m.meter = 100;
-        m.quality.push(0);
-        m.flash = 18; m.flashGood = false;
-        this.advanceRuhulRound();
+      if (g.attractTo) {
+        g.attractTimer--;
+        const target = Math.atan2(g.attractTo.y - g.y, g.attractTo.x - g.x);
+        let diff = target - g.angle;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        g.angle += diff * 0.12;
+        if (g.attractTimer <= 0) g.attractTo = null;
+        return;
       }
-    } else {
-      m.meter = Math.max(0, m.meter - t.rate * 0.5);
-    }
-    this.drawStoreScene();
-    this.drawFillGauge(m.meter, m.band, '#5dc46a', m.flash, m.flashGood,
-      `${m.quality.filter(q => q > 0).length} landed`);
-    this._af = requestAnimationFrame(() => this.ruhulLoop());
-  }
+      g.angle = g.baseAngle + g.sweep * Math.sin((this._frame + g.seed) / 85);
+    });
 
-  // --- Dmitri: the stall. Not a lure — hold a person in place, indefinitely.
-  runDmitriDistraction(crew, roleId) {
-    const t = HEIST_TUNING.dmitri;
-    const roleName = HEIST_ROLES.find(r => r.id === roleId).name;
-    this.showHud(
-      `${roleName} — ${crew.name}`,
-      'HOLD and release to keep the needle inside the box. Bank enough seconds and nobody goes anywhere.',
-      'Stalled: 0.0s'
-    );
+    // Heat: anyone (present, un-pulled) inside any guard's cone heats up;
+    // otherwise cools down.
+    this.floorChars.forEach(ch => {
+      if (ch.pulled) return;
+      const seen = this.floorGuards.some(g => {
+        if (g.frozen) return false; // a frozen cone isn't watching anything new
+        const dx = ch.x - g.x, dy = ch.y - g.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > g.range) return false;
+        const a = Math.atan2(dy, dx);
+        let diff = a - g.angle;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        return Math.abs(diff) < g.halfAngle;
+      });
+      ch.heat = Math.max(0, Math.min(100, ch.heat + (seen ? this.floorHeatGain : -this.floorHeatDecay)));
 
-    this.mech = {
-      kind: 'dmitri', crew, roleId,
-      y: 45, vy: 0, inZone: 0, t: 0,
-      duration: t.duration * 60, target: t.target,
-    };
-    this.dmitriLoop();
-  }
+      if (!ch.isThief && ch.heat >= 100 && !ch.pulled) {
+        ch.pulled = true;
+        if (this.floorActiveId === ch.id) this.floorActiveId = 'thief';
+        this.floorToast(`${ch.name} got made. Security walks them out — the floor goes on without them.`, 2800);
+      }
+    });
 
-  dmitriZoneCenter(f) {
-    return 50 + 26 * Math.sin(f / 70) + 9 * Math.sin(f / 29);
-  }
-
-  dmitriLoop() {
-    const m = this.mech;
-    if (!m || m.kind !== 'dmitri') return;
-    const t = HEIST_TUNING.dmitri;
-    this._frame++;
-    m.t++;
-
-    const zc = this.dmitriZoneCenter(m.t);
-    m.vy += this.input.down ? t.thrust : -t.grav;
-    m.vy *= t.damp;
-    m.y += m.vy;
-    if (m.y < 0) { m.y = 0; m.vy = 0; }
-    if (m.y > 100) { m.y = 100; m.vy = 0; }
-    const inside = Math.abs(m.y - zc) < t.zoneH / 2;
-    if (inside) m.inZone++;
-
-    const banked = m.inZone / 60;
-    this.setHudHint(
-      inside ? 'He is still asking the question. Hold it there.' : 'The needle drifted. Get it back in the box.',
-      `Stalled: ${banked.toFixed(1)}s / ${t.target.toFixed(1)}s`
-    );
-
-    if (m.t >= m.duration) {
-      const score = Math.round(Math.min(1, banked / t.target) * 100);
-      this.endDistraction(score, `${banked.toFixed(1)} seconds of a conversation nobody could leave.`);
+    const thief = this.floorChars.find(c => c.isThief);
+    if (thief.heat >= 100) {
+      this.updateFloorRosterDOM();
+      this.drawFloorScene();
+      this.floorCaught();
       return;
     }
 
-    this.drawStoreScene();
-    this.drawStallGauge(m.y, zc, t.zoneH, inside, banked, t.target, '#6f9be0');
-    this._af = requestAnimationFrame(() => this.dmitriLoop());
+    if (Math.hypot(thief.x - this.floorRegister.x, thief.y - this.floorRegister.y) < this.floorRegister.r) {
+      this.updateFloorRosterDOM();
+      this.drawFloorScene();
+      this.floorSuccess();
+      return;
+    }
+
+    this.updateFloorRosterDOM();
+    this.drawFloorScene();
+    this._af = requestAnimationFrame(() => this.floorLoop());
   }
 
-  endDistraction(score, summary) {
+  floorCaught() {
     this.stopLoop();
-    this.hideHud();
-    this.mech = null;
-    const { crew, roleId } = this.currentDistraction;
-    const earned = Math.round(score * HEIST_TUNING.cashPerDistractionPoint);
-    this.cash += earned;
-    this.distractionScores[roleId] = score;
-    this.phase = 'distraction-result';
-
-    const grade = score >= 85 ? 'Textbook.' : score >= 55 ? 'Good enough. Nobody looked at the counter.' :
-      score >= 25 ? 'Messy, but the counter was clear for a second.' :
-      'Barely a distraction. You will be working faster than planned.';
+    document.getElementById('heist-floor-hud').classList.add('hidden');
+    document.getElementById('heist-floor-toast').classList.add('hidden');
+    this.phase = 'floor-caught';
+    this.caughtEarly = true;
 
     this.showResult({
-      title: `${HEIST_ROLES.find(r => r.id === roleId).name} — done`,
-      who: crew,
-      lines: [summary, grade],
-      stats: [['Performance', `${score} / 100`], ['Take so far', `$${this.cash}`]],
-      buttonLabel: this.distractionIndex === 0 ? 'Next distraction' : 'Get to the register',
-      onContinue: () => {
-        if (this.distractionIndex === 0) this.startDistraction(1);
-        else this.startRegister();
-      },
+      title: 'Made you',
+      who: null,
+      lines: [
+        'Someone puts a hand on your shoulder before you ever reach the drawer.',
+        'You never got the register open. Whatever the Erics pulled in is the whole take.',
+      ],
+      stats: [['Take so far', `$${this.cash}`]],
+      buttonLabel: 'Out the door — fast',
+      onContinue: () => this.startGetaway(),
+    });
+  }
+
+  floorSuccess() {
+    this.stopLoop();
+    document.getElementById('heist-floor-hud').classList.add('hidden');
+    document.getElementById('heist-floor-toast').classList.add('hidden');
+    this.startRegister();
+  }
+
+  // ------------------------------------------------
+  // FLOOR RENDERING
+  // ------------------------------------------------
+
+  drawFloorScene() {
+    const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
+    const b = this.floorBounds();
+    const toPx = (x, y) => [b.x + (x / 100) * b.w, b.y + (y / 100) * b.h];
+
+    ctx.fillStyle = '#0e1416';
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = '#1c2528';
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth = 1;
+    for (let gx = 10; gx < 100; gx += 10) {
+      const [px] = toPx(gx, 0);
+      ctx.beginPath(); ctx.moveTo(px, b.y); ctx.lineTo(px, b.y + b.h); ctx.stroke();
+    }
+
+    ctx.font = '13px VT323, monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.textAlign = 'center';
+    this.floorZones().forEach(z => {
+      const [zx, zy] = toPx(z.x, z.y);
+      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+      ctx.strokeRect(zx - 30, zy - 22, 60, 44);
+      ctx.fillText(z.name.toUpperCase(), zx, zy - 28);
+    });
+
+    const [ex, ey] = toPx(6, 50);
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.fillText('ENTRANCE', ex, ey - 40);
+    const [rx, ry] = toPx(this.floorRegister.x, this.floorRegister.y);
+    ctx.fillStyle = '#d4a574';
+    ctx.fillRect(rx - 16, ry - 22, 32, 44);
+    ctx.fillStyle = '#0e1416';
+    ctx.font = '11px VT323, monospace';
+    ctx.fillText('REGISTER', rx, ry + 40);
+
+    // Cones, drawn before the guard bodies that own them
+    this.floorGuards.forEach(g => {
+      const [gx, gy] = toPx(g.x, g.y);
+      const rangePx = (g.range / 100) * b.w;
+      ctx.save();
+      ctx.translate(gx, gy);
+      ctx.rotate(g.angle);
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, rangePx, -g.halfAngle, g.halfAngle);
+      ctx.closePath();
+      ctx.fillStyle = g.frozen ? 'rgba(120,120,140,0.16)' : g.attractTo ? 'rgba(231,76,60,0.22)' : 'rgba(241,196,15,0.14)';
+      ctx.fill();
+      ctx.restore();
+    });
+
+    this.floorHotspots.forEach(h => {
+      const [hx, hy] = toPx(h.x, h.y);
+      ctx.beginPath();
+      ctx.arc(hx, hy, 7, 0, Math.PI * 2);
+      ctx.fillStyle = h.triggered ? h.color + '33' : h.color;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    });
+
+    this.floorGuards.forEach(g => {
+      const [gx, gy] = toPx(g.x, g.y);
+      ctx.beginPath();
+      ctx.arc(gx, gy, 8, 0, Math.PI * 2);
+      ctx.fillStyle = '#3a4a5a';
+      ctx.fill();
+      ctx.strokeStyle = '#8a9aac';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    });
+
+    this.floorChars.forEach(ch => {
+      if (ch.pulled) return;
+      const [cx, cy] = toPx(ch.x, ch.y);
+      if (ch.id === this.floorActiveId) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, 13, 0, Math.PI * 2);
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.arc(cx, cy, 9, 0, Math.PI * 2);
+      ctx.fillStyle = ch.color;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
     });
   }
 
@@ -720,10 +929,11 @@ class HeistGame {
       flash: 0, flashGood: false, doneTimer: 0, failed: false,
     };
 
-    // Distraction quality buys you a little breathing room — the better the
-    // Erics did, the longer before anyone looks over at the counter.
-    const avgDist = (this.distractionScores.distractionA + this.distractionScores.distractionB) / 2;
-    const bonusSeconds = Math.round((avgDist / 100) * 5);
+    // Distraction work buys you a little breathing room on the register —
+    // every hotspot the Erics actually triggered on the floor is worth a
+    // second before anyone looks over at the counter.
+    const triggeredCount = (this.floorHotspots || []).filter(h => h.triggered).length;
+    const bonusSeconds = Math.min(10, triggeredCount);
     this.mech.timeLeft += bonusSeconds * 60;
     this.mech.bonusSeconds = bonusSeconds;
 
@@ -852,7 +1062,7 @@ class HeistGame {
       'Tap the top or bottom of the screen (or arrow keys) to change lanes.',
       cfg.label
     );
-    this.input.onDown = (y) => {
+    this.input.onDown = (x, y) => {
       const g = this.mech;
       if (!g || g.kind !== 'getaway') return;
       if (y < this.canvas.height / 2) g.laneUp();
@@ -1147,209 +1357,6 @@ class HeistGame {
     ctx.fillRect(x + 2 * scale, baseY - h * 0.4, 10 * scale, h * 0.4);
   }
 
-  // --- the target store interior, used behind both distractions
-  drawStoreScene() {
-    const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
-    ctx.fillStyle = '#131a1c';
-    ctx.fillRect(0, 0, W, H);
-
-    // Fluorescent ceiling
-    ctx.fillStyle = '#1d282b';
-    ctx.fillRect(0, 0, W, H * 0.16);
-    for (let i = 0; i < 4; i++) {
-      const lx = W * (0.14 + i * 0.24);
-      ctx.fillStyle = '#e8f4f0';
-      ctx.globalAlpha = 0.85;
-      ctx.fillRect(lx - 46, H * 0.09, 92, 8);
-      ctx.globalAlpha = 1;
-      const g = ctx.createRadialGradient(lx, H * 0.11, 6, lx, H * 0.11, H * 0.5);
-      g.addColorStop(0, 'rgba(220,240,235,0.16)');
-      g.addColorStop(1, 'rgba(220,240,235,0)');
-      ctx.fillStyle = g;
-      ctx.fillRect(lx - W * 0.3, H * 0.09, W * 0.6, H * 0.7);
-    }
-
-    // Shelving with product blocks
-    const shelfTop = H * 0.22, shelfH = H * 0.34;
-    ctx.fillStyle = '#222e31';
-    ctx.fillRect(0, shelfTop, W, shelfH);
-    const colors = ['#c1443a', '#d4a574', '#4f8f5e', '#c9a227', '#7a6bb5', '#3f7f9c'];
-    for (let r = 0; r < 4; r++) {
-      const y = shelfTop + 10 + r * (shelfH / 4);
-      ctx.fillStyle = '#171f21';
-      ctx.fillRect(0, y + shelfH / 4 - 14, W, 5);
-      for (let x = 8; x < W; x += 19) {
-        const idx = Math.abs(Math.floor(Math.sin(x * 3.1 + r * 7.7) * 97)) % colors.length;
-        ctx.fillStyle = colors[idx];
-        ctx.globalAlpha = 0.75;
-        ctx.fillRect(x, y, 13, shelfH / 4 - 26);
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    // Floor
-    ctx.fillStyle = '#1a2224';
-    ctx.fillRect(0, shelfTop + shelfH, W, H - shelfTop - shelfH);
-    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-    for (let x = 0; x < W + 200; x += 70) {
-      ctx.beginPath();
-      ctx.moveTo(x, shelfTop + shelfH);
-      ctx.lineTo(x - 90, H);
-      ctx.stroke();
-    }
-
-    // Counter + register on the right, clerk being pulled away from it
-    const cx = W * 0.78, cy = shelfTop + shelfH;
-    ctx.fillStyle = '#2c2320';
-    ctx.fillRect(cx - 10, cy - 10, W * 0.3, H * 0.14);
-    ctx.fillStyle = '#4a4038';
-    ctx.fillRect(cx + 30, cy - 42, 62, 34);
-    ctx.fillStyle = '#7ec8a0';
-    ctx.fillRect(cx + 38, cy - 36, 46, 12);
-
-    const crew = this.currentDistraction ? this.currentDistraction.crew : null;
-    // The clerk, drifting toward whatever is happening
-    const sway = Math.sin(this._frame / 30) * 8;
-    this.drawSilhouette(W * 0.62 + sway, cy + H * 0.11, 0.95, '#0d1416');
-    // The Eric doing the work, in their own color
-    if (crew) {
-      const bob = crew.id === 'tony' ? Math.sin(this._frame / 5) * 5 :
-        crew.id === 'ruhul' ? Math.sin(this._frame / 18) * 3 : 0;
-      this.drawSilhouette(W * 0.42 + bob, cy + H * 0.11, 1.02, crew.color + 'dd');
-    }
-    // You, at the edge of frame, waiting
-    this.drawSilhouette(W * 0.92, cy + H * 0.12, 1.0, '#0a1012');
-
-    ctx.fillStyle = 'rgba(0,0,0,0.34)';
-    ctx.fillRect(0, H * 0.72, W, H * 0.28);
-  }
-
-  // Horizontal sweeping gauge (Tony, and reused conceptually by the register)
-  drawSweepGauge(pos, center, width, color, flash, flashGood, subLabel) {
-    const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
-    const bx = W * 0.12, bw = W * 0.76, by = H * 0.80, bh = 34;
-
-    ctx.fillStyle = 'rgba(0,0,0,0.78)';
-    ctx.fillRect(bx - 8, by - 8, bw + 16, bh + 16);
-    ctx.fillStyle = '#191919';
-    ctx.fillRect(bx, by, bw, bh);
-
-    const zx = bx + ((center - width / 2) / 100) * bw;
-    const zw = (width / 100) * bw;
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.34;
-    ctx.fillRect(zx, by, zw, bh);
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(zx, by, zw, bh);
-
-    const mx = bx + (pos / 100) * bw;
-    ctx.fillStyle = flash > 0 ? (flashGood ? '#8ef0a0' : '#ff7b6b') : '#ffffff';
-    ctx.fillRect(mx - 3, by - 10, 6, bh + 20);
-
-    ctx.strokeStyle = '#5a4a3a';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(bx, by, bw, bh);
-
-    ctx.fillStyle = '#d4a574';
-    ctx.font = '20px VT323, monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(subLabel || '', bx, by - 16);
-
-    if (flash > 0) {
-      ctx.fillStyle = flashGood ? 'rgba(140,240,160,0.10)' : 'rgba(255,110,90,0.10)';
-      ctx.fillRect(0, 0, W, H);
-    }
-  }
-
-  // Vertical fill meter with a release band (Ruhul)
-  drawFillGauge(meter, band, color, flash, flashGood, subLabel) {
-    const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
-    const gw = 62, gh = H * 0.46;
-    const gx = W * 0.10, gy = H * 0.30;
-
-    ctx.fillStyle = 'rgba(0,0,0,0.78)';
-    ctx.fillRect(gx - 10, gy - 34, gw + 20, gh + 52);
-    ctx.fillStyle = '#191919';
-    ctx.fillRect(gx, gy, gw, gh);
-
-    const [lo, hi] = band;
-    const byTop = gy + gh * (1 - hi / 100);
-    const bandH = gh * ((hi - lo) / 100);
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.30;
-    ctx.fillRect(gx, byTop, gw, bandH);
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(gx, byTop, gw, bandH);
-
-    const fh = gh * (meter / 100);
-    ctx.fillStyle = flash > 0 ? (flashGood ? '#8ef0a0' : '#ff7b6b') : color;
-    ctx.globalAlpha = 0.85;
-    ctx.fillRect(gx + 4, gy + gh - fh, gw - 8, fh);
-    ctx.globalAlpha = 1;
-
-    ctx.strokeStyle = '#5a4a3a';
-    ctx.strokeRect(gx, gy, gw, gh);
-
-    ctx.fillStyle = '#d4a574';
-    ctx.font = '20px VT323, monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('PATTER', gx, gy - 12);
-    ctx.fillText(subLabel || '', gx, gy + gh + 24);
-
-    // Hold indicator
-    ctx.fillStyle = this.input.down ? '#5dc46a' : '#4a4038';
-    ctx.fillRect(gx, gy + gh + 34, gw, 10);
-  }
-
-  // Vertical needle held inside a drifting box (Dmitri)
-  drawStallGauge(y, zoneCenter, zoneH, inside, banked, target, color) {
-    const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
-    const gw = 74, gh = H * 0.50;
-    const gx = W * 0.09, gy = H * 0.26;
-
-    ctx.fillStyle = 'rgba(0,0,0,0.78)';
-    ctx.fillRect(gx - 10, gy - 34, gw + 20, gh + 74);
-    ctx.fillStyle = '#191919';
-    ctx.fillRect(gx, gy, gw, gh);
-
-    const toY = (v) => gy + gh * (1 - v / 100);
-    const zTop = toY(zoneCenter + zoneH / 2);
-    const zH = gh * (zoneH / 100);
-    ctx.fillStyle = inside ? color : '#4a4038';
-    ctx.globalAlpha = 0.30;
-    ctx.fillRect(gx, zTop, gw, zH);
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = inside ? color : '#6a5a4a';
-    ctx.lineWidth = 2;
-    ctx.strokeRect(gx, zTop, gw, zH);
-
-    ctx.fillStyle = inside ? '#8ef0a0' : '#ffffff';
-    ctx.fillRect(gx - 6, toY(y) - 3, gw + 12, 6);
-
-    ctx.strokeStyle = '#5a4a3a';
-    ctx.strokeRect(gx, gy, gw, gh);
-
-    ctx.fillStyle = '#d4a574';
-    ctx.font = '20px VT323, monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText('THE QUESTION', gx, gy - 12);
-
-    // Banked-seconds bar
-    const pw = gw, ph = 12, py = gy + gh + 18;
-    ctx.fillStyle = '#191919';
-    ctx.fillRect(gx, py, pw, ph);
-    ctx.fillStyle = color;
-    ctx.fillRect(gx, py, pw * Math.min(1, banked / target), ph);
-    ctx.strokeStyle = '#5a4a3a';
-    ctx.strokeRect(gx, py, pw, ph);
-
-    ctx.fillStyle = this.input.down ? color : '#4a4038';
-    ctx.fillRect(gx, py + 20, gw, 10);
-  }
 
   // --- the register close-up
   drawRegisterScene() {

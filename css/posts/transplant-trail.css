@@ -1524,6 +1524,97 @@ button.menu-option.cannon-shop-exit-btn:hover {
   display: none;
 }
 
+/* Phase 1 floor HUD — character switcher with a heat bar under each portrait */
+.heist-floor-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  pointer-events: none;
+  padding: 10px 16px;
+  font-family: 'VT323', monospace;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0));
+}
+
+.heist-floor-hud.hidden {
+  display: none;
+}
+
+.heist-floor-roster {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  pointer-events: all;
+}
+
+.heist-floor-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+.heist-floor-chip.active {
+  opacity: 1;
+}
+
+.heist-floor-chip.pulled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.heist-floor-chip-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+}
+
+.heist-floor-chip-name {
+  font-size: 14px;
+  color: #eee;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.heist-floor-chip-heat {
+  width: 54px;
+  height: 8px;
+  background: #111;
+  border: 1px solid #333;
+}
+
+.heist-floor-chip-heat-fill {
+  height: 100%;
+  background: #2ecc71;
+  transition: width 0.1s linear, background 0.2s ease;
+}
+
+.heist-floor-toast {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  max-width: min(520px, 88%);
+  background: rgba(0, 0, 0, 0.86);
+  border: 2px solid #d4a574;
+  padding: 12px 20px;
+  text-align: center;
+  font-family: 'VT323', monospace;
+  font-size: 19px;
+  color: #eee;
+  pointer-events: none;
+}
+
+.heist-floor-toast.hidden {
+  display: none;
+}
+
 .heist-hud-title {
   margin: 0;
   font-size: 26px;
