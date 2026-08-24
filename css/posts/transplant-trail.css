@@ -1614,6 +1614,70 @@ button.menu-option.cannon-shop-exit-btn:hover {
   transition: width 0.1s linear, background 0.2s ease;
 }
 
+/* Maze D-pads — real buttons, always work, no touch-position math or device
+   sensors required. Left pad = X-axis, right pad = Y-axis. */
+.heist-maze-pads {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: 4;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 0 14px 18px;
+  pointer-events: none;
+}
+
+.heist-maze-pads.hidden {
+  display: none;
+}
+
+.heist-maze-pads.tilt-active .heist-pad {
+  opacity: 0.25;
+}
+
+.heist-pad {
+  display: flex;
+  gap: 10px;
+  pointer-events: all;
+}
+
+.heist-pad-right {
+  flex-direction: column;
+}
+
+.heist-pad-btn {
+  width: 58px;
+  height: 58px;
+  font-size: 26px;
+  font-family: 'VT323', monospace;
+  background: rgba(0, 0, 0, 0.6);
+  color: #d4a574;
+  border: 2px solid #d4a574;
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  user-select: none;
+}
+
+.heist-pad-btn:active,
+.heist-pad-btn.pressed {
+  background: rgba(212, 165, 116, 0.35);
+}
+
+.heist-tilt-btn {
+  align-self: center;
+  margin-bottom: 20px;
+  font-family: 'VT323', monospace;
+  font-size: 14px;
+  color: #8a7a5a;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid #4a3a28;
+  padding: 6px 10px;
+  cursor: pointer;
+  pointer-events: all;
+}
+
 .heist-floor-controlling {
   margin: 6px 0 0;
   text-align: center;

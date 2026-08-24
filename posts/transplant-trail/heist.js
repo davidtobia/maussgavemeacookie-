@@ -85,7 +85,7 @@ const HEIST_TUNING = {
   // correct late and you're already committed. That inertia is the actual
   // difficulty, not just steering toward the goal.
   maze: {
-    timeLimit: 35,
+    timeLimit: 55,
     accel: 0.028,
     friction: 0.965,
     ballRadius: 3.0,
@@ -148,61 +148,37 @@ class HeistGame {
   // thumb sets Y-tilt the same way on the right half — like turning both
   // knobs on a wooden labyrinth toy. Only does anything during 'maze'.
   // Mouse position is the desktop fallback: it drives both axes at once.
+  // Real buttons, not touch-position tracking or a sensor — the previous
+  // continuous-drag and device-tilt approaches both turned out unreliable in
+  // practice (tilt in particular needs a secure (https) origin in most
+  // mobile browsers and just silently does nothing on plain http, which is
+  // almost certainly what "tilt isn't supported" actually was). A held
+  // button always works, on every device, with no permission and no
+  // position math to get subtly wrong.
   bindMazeInput() {
     this.mazeTiltX = 0;
     this.mazeTiltY = 0;
     this.mazeUseTilt = false;
-    this._mazeTouches = {}; // identifier -> { side: 'left'|'right' }
-    this._mazeOrientBase = null; // calibration baseline, set on enabling tilt
+    this._mazeOrientBase = null;
+    this._mazeGotOrientEvent = false;
 
-    const setFromTouch = (t) => {
-      const r = this.canvas.getBoundingClientRect();
-      const side = this._mazeTouches[t.identifier];
-      if (!side) return;
-      const ny = ((t.clientY - r.top) / r.height - 0.5) * 2.4;
-      const clamped = Math.max(-1, Math.min(1, ny));
-      if (side.side === 'left') this.mazeTiltX = clamped;
-      else this.mazeTiltY = clamped;
-    };
-
-    this.canvas.addEventListener('touchstart', (e) => {
-      if (this.phase !== 'maze' || this.mazeUseTilt) return;
-      e.preventDefault();
-      const r = this.canvas.getBoundingClientRect();
-      Array.from(e.changedTouches).forEach(t => {
-        const side = (t.clientX - r.left) < r.width / 2 ? 'left' : 'right';
-        this._mazeTouches[t.identifier] = { side };
-        setFromTouch(t);
-      });
-    }, { passive: false });
-
-    this.canvas.addEventListener('touchmove', (e) => {
-      if (this.phase !== 'maze' || this.mazeUseTilt) return;
-      e.preventDefault();
-      Array.from(e.changedTouches).forEach(t => {
-        if (this._mazeTouches[t.identifier]) setFromTouch(t);
-      });
-    }, { passive: false });
-
-    const endTouch = (e) => {
-      if (this.phase !== 'maze' || this.mazeUseTilt) return;
-      Array.from(e.changedTouches).forEach(t => {
-        const side = this._mazeTouches[t.identifier];
-        delete this._mazeTouches[t.identifier];
-        if (side && side.side === 'left') this.mazeTiltX = 0;
-        else if (side) this.mazeTiltY = 0;
-      });
-    };
-    this.canvas.addEventListener('touchend', endTouch);
-    this.canvas.addEventListener('touchcancel', endTouch);
-
-    // Desktop fallback — single cursor drives both axes at once.
-    this.canvas.addEventListener('mousemove', (e) => {
-      if (this.phase !== 'maze' || this.mazeUseTilt) return;
-      if (Object.keys(this._mazeTouches).length > 0) return; // real touch wins
-      const r = this.canvas.getBoundingClientRect();
-      this.mazeTiltX = Math.max(-1, Math.min(1, ((e.clientX - r.left) / r.width - 0.5) * 2.4));
-      this.mazeTiltY = Math.max(-1, Math.min(1, ((e.clientY - r.top) / r.height - 0.5) * 2.4));
+    document.querySelectorAll('.heist-pad-btn').forEach(btn => {
+      const axis = btn.dataset.axis, dir = parseFloat(btn.dataset.dir);
+      const press = (e) => {
+        if (this.phase !== 'maze' || this.mazeUseTilt) return;
+        e.preventDefault();
+        btn.classList.add('pressed');
+        if (axis === 'x') this.mazeTiltX = dir; else this.mazeTiltY = dir;
+      };
+      const release = (e) => {
+        if (this.mazeUseTilt) return;
+        btn.classList.remove('pressed');
+        if (axis === 'x') this.mazeTiltX = 0; else this.mazeTiltY = 0;
+      };
+      btn.addEventListener('pointerdown', press);
+      btn.addEventListener('pointerup', release);
+      btn.addEventListener('pointerleave', release);
+      btn.addEventListener('pointercancel', release);
     });
 
     // Real device tilt. Calibrated against whatever angle you're already
@@ -211,17 +187,61 @@ class HeistGame {
     window.addEventListener('deviceorientation', (e) => {
       if (this.phase !== 'maze' || !this.mazeUseTilt) return;
       if (e.beta === null || e.gamma === null) return;
+      this._mazeGotOrientEvent = true;
       if (!this._mazeOrientBase) this._mazeOrientBase = { beta: e.beta, gamma: e.gamma };
       const dGamma = e.gamma - this._mazeOrientBase.gamma; // left/right
       const dBeta = e.beta - this._mazeOrientBase.beta;   // front/back
       this.mazeTiltX = Math.max(-1, Math.min(1, dGamma / 22));
       this.mazeTiltY = Math.max(-1, Math.min(1, dBeta / 22));
     });
+
+    const tiltBtn = document.getElementById('heist-maze-tilt-btn');
+    if (typeof window.DeviceOrientationEvent === 'undefined') {
+      tiltBtn.classList.add('hidden');
+    } else {
+      tiltBtn.onclick = () => {
+        if (this.mazeUseTilt) {
+          // Toggle back off — buttons take over again immediately.
+          this.mazeUseTilt = false;
+          this.mazeTiltX = 0; this.mazeTiltY = 0;
+          tiltBtn.textContent = 'Try tilt instead';
+          document.getElementById('heist-maze-pads').classList.remove('tilt-active');
+          return;
+        }
+        this.requestTiltPermission((granted) => {
+          if (this.phase !== 'maze' || !granted) {
+            tiltBtn.textContent = "Tilt didn't respond — using arrows";
+            setTimeout(() => { tiltBtn.textContent = 'Try tilt instead'; }, 2000);
+            return;
+          }
+          this._mazeOrientBase = null;
+          this._mazeGotOrientEvent = false;
+          this.mazeUseTilt = true;
+          this.mazeTiltX = 0; this.mazeTiltY = 0;
+          tiltBtn.textContent = 'Checking for signal…';
+          // Some browsers grant permission but the sensor still never
+          // actually reports (common over plain http) -- verify a real
+          // event shows up before committing, instead of trusting the
+          // permission grant alone.
+          setTimeout(() => {
+            if (this.phase !== 'maze' || !this.mazeUseTilt) return;
+            if (this._mazeGotOrientEvent) {
+              tiltBtn.textContent = 'Using tilt (tap for arrows)';
+              document.getElementById('heist-maze-pads').classList.add('tilt-active');
+            } else {
+              this.mazeUseTilt = false;
+              tiltBtn.textContent = 'No signal — using arrows';
+              setTimeout(() => { tiltBtn.textContent = 'Try tilt instead'; }, 2000);
+            }
+          }, 700);
+        });
+      };
+    }
   }
 
   // iOS 13+ gates DeviceOrientationEvent behind an explicit permission
   // request that MUST be called synchronously from a user gesture — this is
-  // called directly from the "Tilt my phone" button's click handler.
+  // called directly from the tilt button's click handler.
   requestTiltPermission(onDone) {
     const DOE = window.DeviceOrientationEvent;
     if (DOE && typeof DOE.requestPermission === 'function') {
@@ -599,19 +619,29 @@ class HeistGame {
     // Two edge patrols (walking the full height, facing inward) so hugging a
     // wall isn't a free path anymore, plus one center patrol so the middle
     // still needs real timing rather than being the obviously-safe route.
+    // axis 'y' walks a fixed X up/down between min/max; axis 'x' walks a
+    // fixed Y left/right between min/max. facing is the cone direction while
+    // on patrol (kept fixed rather than tied to walk direction, so it reads
+    // as "watching a lane" rather than just looking where they're going).
+    const makeGuard = ({ axis, fixed, min, max, speed, facing, range, halfAngle, dir }) => {
+      const x = axis === 'y' ? fixed : min, y = axis === 'y' ? min : fixed;
+      return {
+        x, y, patrolAxis: axis, patrolMin: min, patrolMax: max, patrolDir: dir || 1,
+        speed, facing, angle: facing, range: range || 24, halfAngle: halfAngle || 0.55,
+        state: 'patrol', targetX: 0, targetY: 0, pauseTimer: 0, runSpeed: 0,
+        homeX: x, homeY: y, frozen: false, freezeTimer: 0,
+      };
+    };
+
+    // Five now, not three: two edge patrols, a center vertical, and two more
+    // horizontal sweeps top and bottom, so there's real coverage everywhere,
+    // not just a safe gap down the middle once you're past the edges.
     this.floorGuards = [
-      { x: 15, y: 14, patrolAxis: 'y', patrolFixed: 15, patrolMin: 14, patrolMax: 86,
-        patrolDir: 1, speed: 0.34, facing: 0, range: 24, halfAngle: 0.55, angle: 0,
-        state: 'patrol', targetX: 0, targetY: 0, pauseTimer: 0, runSpeed: 0,
-        homeX: 15, homeY: 14, frozen: false, freezeTimer: 0 },
-      { x: 85, y: 86, patrolAxis: 'y', patrolFixed: 85, patrolMin: 14, patrolMax: 86,
-        patrolDir: -1, speed: 0.34, facing: Math.PI, range: 24, halfAngle: 0.55, angle: Math.PI,
-        state: 'patrol', targetX: 0, targetY: 0, pauseTimer: 0, runSpeed: 0,
-        homeX: 85, homeY: 86, frozen: false, freezeTimer: 0 },
-      { x: 34, y: 50, patrolAxis: 'x', patrolFixed: 50, patrolMin: 34, patrolMax: 66,
-        patrolDir: 1, speed: 0.26, facing: -Math.PI / 2, range: 24, halfAngle: 0.6, angle: -Math.PI / 2,
-        state: 'patrol', targetX: 0, targetY: 0, pauseTimer: 0, runSpeed: 0,
-        homeX: 34, homeY: 50, frozen: false, freezeTimer: 0 },
+      makeGuard({ axis: 'y', fixed: 15, min: 14, max: 86, speed: 0.34, facing: 0 }),
+      makeGuard({ axis: 'y', fixed: 85, min: 14, max: 86, speed: 0.34, facing: Math.PI, dir: -1 }),
+      makeGuard({ axis: 'y', fixed: 50, min: 18, max: 82, speed: 0.30, facing: Math.PI, dir: -1 }),
+      makeGuard({ axis: 'x', fixed: 28, min: 22, max: 78, speed: 0.27, facing: Math.PI / 2 }),
+      makeGuard({ axis: 'x', fixed: 72, min: 22, max: 78, speed: 0.27, facing: -Math.PI / 2, dir: -1 }),
     ];
 
     this.floorHeatGain = 1.15;
@@ -692,13 +722,23 @@ class HeistGame {
 
   floorClick(px, py) {
     if (this.phase !== 'floor') return;
-    const active = this.floorChars.find(c => c.id === this.floorActiveId);
-    if (!active || active.pulled) return;
 
     const b = this.floorBounds();
     const x = ((px - b.x) / b.w) * 100;
     const y = ((py - b.y) / b.h) * 100;
     if (x < -5 || x > 105 || y < -5 || y > 105) return;
+
+    // Tapping directly on a character's dot on the floor selects them --
+    // just as valid as tapping their chip in the roster above.
+    const tapped = this.floorChars.find(c => !c.pulled && Math.hypot(c.x - x, c.y - y) < 6);
+    if (tapped) {
+      this.floorActiveId = tapped.id;
+      this.updateFloorRosterDOM();
+      return;
+    }
+
+    const active = this.floorChars.find(c => c.id === this.floorActiveId);
+    if (!active || active.pulled) return;
 
     // Hit-test the active character's own, untriggered hotspots first.
     if (!active.isThief) {
@@ -1013,6 +1053,32 @@ class HeistGame {
       ctx.stroke();
     });
 
+    // Order-of-march arrows: a colored line + arrowhead from wherever a
+    // character currently is to wherever you last sent them, so it's
+    // visible at a glance who's headed where even after you've switched to
+    // directing someone else.
+    this.floorChars.forEach(ch => {
+      if (ch.pulled) return;
+      const dist = Math.hypot(ch.tx - ch.x, ch.ty - ch.y);
+      if (dist < 1.5) return;
+      const [sx, sy] = toPx(ch.x, ch.y);
+      const [ex, ey] = toPx(ch.tx, ch.ty);
+      const ang = Math.atan2(ey - sy, ex - sx);
+      ctx.strokeStyle = ch.color + 'aa';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([6, 5]);
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = ch.color;
+      ctx.save();
+      ctx.translate(ex, ey);
+      ctx.rotate(ang);
+      ctx.beginPath();
+      ctx.moveTo(9, 0); ctx.lineTo(-4, -6); ctx.lineTo(-4, 6);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    });
+
     this.floorChars.forEach(ch => {
       if (ch.pulled) return;
       const [cx, cy] = toPx(ch.x, ch.y);
@@ -1147,17 +1213,26 @@ class HeistGame {
   // resting position to the shear line without dropping it down through the
   // housing. Real momentum, real holes, no scripted safety net beyond time.
   mazeLayout() {
+    // A tighter, longer serpentine — four bands instead of two, so it's a
+    // real four-reversal traverse, plus a hole guarding nearly every turn
+    // (and a couple mid-straightaway ones for anyone drifting carelessly).
     return {
-      start: { x: 8, y: 12 },
-      goal: { x: 50, y: 90, r: 6 },
+      start: { x: 8, y: 8 },
+      goal: { x: 50, y: 92, r: 5.5 },
       walls: [
-        { x: 0,  y: 20, w: 70, h: 6 },  // gap on the right
-        { x: 30, y: 46, w: 70, h: 6 },  // gap on the left
-        { x: 0,  y: 72, w: 70, h: 6 },  // gap on the right
+        { x: 0,  y: 16, w: 68, h: 5 },  // gap on the right
+        { x: 32, y: 34, w: 68, h: 5 },  // gap on the left
+        { x: 0,  y: 52, w: 68, h: 5 },  // gap on the right
+        { x: 32, y: 70, w: 68, h: 5 },  // gap on the left
       ],
       holes: [
-        { x: 78, y: 33, r: 4.2 },
-        { x: 18, y: 59, r: 4.2 },
+        { x: 50, y: 10, r: 3.6 },
+        { x: 76, y: 25, r: 3.8 },
+        { x: 15, y: 34, r: 3.6 },
+        { x: 24, y: 43, r: 3.8 },
+        { x: 76, y: 61, r: 3.8 },
+        { x: 24, y: 79, r: 3.8 },
+        { x: 62, y: 88, r: 3.6 },
       ],
     };
   }
@@ -1172,8 +1247,8 @@ class HeistGame {
     this.mazeTiltX = 0;
     this.mazeTiltY = 0;
     this.mazeUseTilt = false;
-    this._mazeTouches = {};
     this._mazeOrientBase = null;
+    this._mazeGotOrientEvent = false;
 
     this.mech = {
       kind: 'maze',
@@ -1193,47 +1268,12 @@ class HeistGame {
 
     this.input.onDown = null;
     this.input.onUp = null;
-    this.showMazeChoice();
-  }
-
-  // Tilt needs an explicit, synchronous user gesture on iOS to unlock the
-  // permission — so ask before the ball starts rolling instead of guessing.
-  showMazeChoice() {
-    this.showOverlay('heist-maze-choice');
-    const hasOrientation = typeof window.DeviceOrientationEvent !== 'undefined';
-    const tiltBtn = document.getElementById('heist-maze-choice-tilt');
-    const note = document.getElementById('heist-maze-choice-note');
-    tiltBtn.classList.toggle('hidden', !hasOrientation);
-    note.textContent = hasOrientation
-      ? 'Tilt rolls the ball like a real labyrinth toy. Thumbs work everywhere, including desktop.'
-      : "This device doesn't seem to support tilt — thumbs it is.";
-
-    tiltBtn.onclick = () => {
-      this.requestTiltPermission((granted) => {
-        if (this.phase !== 'maze') return;
-        if (granted) {
-          this.mazeUseTilt = true;
-          this.beginMazeLoop('Tilt your phone left/right and forward/back to roll the ball.');
-        } else {
-          note.textContent = "Couldn't get tilt permission — using thumbs instead.";
-          this.mazeUseTilt = false;
-          this.beginMazeLoop('Two thumbs: left tilts left/right, right tilts up/down. (Mouse on desktop.)');
-        }
-      });
-    };
-    document.getElementById('heist-maze-choice-thumbs').onclick = () => {
-      this.mazeUseTilt = false;
-      this.beginMazeLoop('Two thumbs: left tilts left/right, right tilts up/down. (Mouse on desktop.)');
-    };
-  }
-
-  beginMazeLoop(hint) {
-    this.hideOverlays();
-    const m = this.mech;
+    document.getElementById('heist-maze-pads').classList.remove('hidden', 'tilt-active');
+    document.getElementById('heist-maze-tilt-btn').textContent = 'Try tilt instead';
     this.showHud(
       'The lock — roll it to the shear line',
-      hint,
-      `+${m.bonusSeconds}s bought by the distractions`
+      'Hold the arrows below to roll the ball toward the shear line.',
+      `+${bonusSeconds}s bought by the distractions`
     );
     this.mazeLoop();
   }
@@ -1297,6 +1337,7 @@ class HeistGame {
   endMaze() {
     this.stopLoop();
     this.hideHud();
+    document.getElementById('heist-maze-pads').classList.add('hidden');
     const m = this.mech;
     const secondsLeft = Math.max(0, m.timeLeft / 60);
     const earned = m.completed
@@ -1744,19 +1785,6 @@ class HeistGame {
     ctx.fillRect(tx, ty, tw * frac, 14);
     ctx.strokeStyle = '#5a4a3a'; ctx.lineWidth = 2;
     ctx.strokeRect(tx, ty, tw, 14);
-
-    // Two control zones, faintly marked at the bottom on mobile so the split
-    // is discoverable without reading the hint text.
-    if ('ontouchstart' in window && !this.mazeUseTilt) {
-      ctx.fillStyle = 'rgba(255,255,255,0.05)';
-      ctx.fillRect(0, H * 0.9, W / 2, H * 0.1);
-      ctx.fillRect(W / 2, H * 0.9, W / 2, H * 0.1);
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(W / 2, H * 0.9); ctx.lineTo(W / 2, H); ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.4)'; ctx.font = '13px VT323, monospace'; ctx.textAlign = 'center';
-      ctx.fillText('LEFT / RIGHT', W * 0.25, H * 0.965);
-      ctx.fillText('UP / DOWN', W * 0.75, H * 0.965);
-    }
   }
 
   // --- the getaway street
