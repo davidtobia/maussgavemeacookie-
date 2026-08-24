@@ -37,7 +37,7 @@ const CANNON_UPGRADES = {
 
 const TARGET_BOROUGHS = [
   {
-    id: 'hoboken', name: 'Hoboken, NJ', angle: 290, minBlocks: 120, color: '#e67e22',
+    id: 'hoboken', name: 'Hoboken, NJ', angle: 290, minBlocks: 150, color: '#e67e22',
     river: { name: 'Hudson River', atBlock: 55, width: 80, bridge: 'sully' },
     unlock: {
       title: 'Giant Cannoli + MAGA Girlfriend',
@@ -457,8 +457,9 @@ class CannonGame {
       prideTimer: 0,
       flapFlash: 0,
       shakeX: 0, shakeY: 0,
-      river: targetB ? { ...targetB.river, crossed: false, active: false, timer: 0 } : null,
+      river: targetB ? { ...targetB.river, crossed: !targetB.river, active: false, timer: 0 } : null,
       riverEventTimer: 0,
+      splashed: false, splashTimer: 0, splashX: 0,
     };
 
     const hud = document.getElementById('cannon-flight-hud');
@@ -491,22 +492,54 @@ class CannonGame {
   }
 
   flightLoop() {
-    if (!this.flight || this.flight.landed) return;
+    if (!this.flight) return;
     this._frame++;
     if (this.flight.flapCooldown > 0) this.flight.flapCooldown--;
     if (this.flight.flapFlash > 0)    this.flight.flapFlash--;
     this.flight.shakeX *= 0.72;
     this.flight.shakeY *= 0.72;
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-    this.updateFlight();
+    if (!this.flight.landed) this.updateFlight();
+    if (this.flight.splashTimer > 0) this.flight.splashTimer--;
     this.renderFlight();
-    if (this.flight && this.flight.landed) { this.endFlight(); }
-    else { this._flightAF = requestAnimationFrame(() => this.flightLoop()); }
+    if (this.flight.landed) {
+      // A splash lingers on screen for a beat instead of cutting straight to
+      // results — splashTimer is 0 for a normal landing, so that's unchanged.
+      if (this.flight.splashTimer > 0) this._flightAF = requestAnimationFrame(() => this.flightLoop());
+      else this.endFlight();
+    } else {
+      this._flightAF = requestAnimationFrame(() => this.flightLoop());
+    }
   }
 
   // World Y → screen Y
   wToS(wy) {
     return this.canvas.height * 0.76 - wy + this.flight.cameraY;
+  }
+
+  // Is this distance still over the river for the current target?
+  isOverWater(distance) {
+    const r = this.flight && this.flight.river;
+    if (!r) return false;
+    return distance >= r.atBlock && distance < r.atBlock + r.width;
+  }
+
+  // Splash particles for a water-skip (flight continues) — purely visual.
+  spawnSplashFx(atDistance) {
+    const f = this.flight;
+    f.splashTimer = 20;
+    f.splashX = atDistance;
+  }
+
+  // Hard fail: came down in the river with nothing left to skip or slide on.
+  triggerSplash() {
+    const f = this.flight;
+    f.splashed = true;
+    f.splashTimer = 40;
+    f.splashX = f.distance;
+    f.worldY = 0; f.vx = 0; f.vy = 0;
+    f.sliding = false; f.ratMode = false;
+    f.landed = true;
   }
 
   updateFlight() {
@@ -532,6 +565,8 @@ class CannonGame {
 
     // ---- RAT MODE ----
     if (f.ratMode) {
+      // Running into the river means you're a rat in the Hudson, not on it — splash.
+      if (this.isOverWater(f.distance)) { this.triggerSplash(); return; }
       f.ratVx *= (f.bonusId === 'rat_whisp' ? 0.9775 : 0.975);
       f.worldY = 0; f.cameraY = 0;
       f.distance += f.ratVx * 0.4; f.bgOffset += f.ratVx * 0.9;
@@ -546,6 +581,8 @@ class CannonGame {
 
     // ---- SLIDING ----
     if (f.sliding) {
+      // Sliding into the river doesn't carry you across it — you sink. Splash.
+      if (this.isOverWater(f.distance)) { this.triggerSplash(); return; }
       const fr = f.bonusId === 'bouncy_legs' ? 0.958 : 0.930;
       f.vx *= fr;
       f.worldY = 0; f.cameraY = 0;
@@ -586,15 +623,34 @@ class CannonGame {
       });
     }
 
-    // Ground collision
+    // Ground (or water) collision
     if (f.worldY <= 0) {
-      const bm = f.bonusId === 'bouncy_legs' ? 0.55 : 0.40;
-      if (Math.abs(f.vy) > 2.0 && f.vx > 1.5) {
+      const overWater = this.isOverWater(f.distance);
+      const canBounce = Math.abs(f.vy) > 2.0 && f.vx > 1.5;
+
+      if (overWater) {
+        if (canBounce) {
+          // Skipping a stone across the Hudson — a real way to clear a river you
+          // didn't fully clear in the air, but it costs you speed each time.
+          f.worldY = 0;
+          f.vy = Math.abs(f.vy) * 0.62;
+          f.vx *= 0.68;
+          this.spawnSplashFx(f.distance);
+        } else {
+          // Not enough left to skip or slide across — you're in the water.
+          this.triggerSplash();
+        }
+        return;
+      }
+
+      // Solid ground: big, cartoonish bounce that tapers into a slide.
+      const bm = f.bonusId === 'bouncy_legs' ? 0.80 : 0.62;
+      if (canBounce) {
         f.worldY = 0;
         const bounceVy = Math.abs(f.vy) * bm;
         f.vy = bounceVy;
-        f.vx *= 0.88;
-        const impact = Math.min(bounceVy, 14);
+        f.vx *= 0.90;
+        const impact = Math.min(bounceVy, 18);
         f.shakeX = (Math.random() - 0.5) * impact * 2;
         f.shakeY = impact * 1.4;
       } else if (f.vx > 1.5) {
@@ -786,9 +842,31 @@ class CannonGame {
     });
 
     if (f.ratMode) this.renderRat(80, groundScreenY);
-    else           this.renderPlayer(80, playerScreenY, f);
+    else if (!f.splashed) this.renderPlayer(80, playerScreenY, f);
 
     ctx.restore();
+
+    // Splash — either a water-skip (flight continues) or the fail state (landed)
+    if (f.splashTimer > 0) {
+      const sy = this.wToS(0);
+      const t = f.splashed ? f.splashTimer / 40 : f.splashTimer / 20;
+      ctx.globalAlpha = Math.min(1, t);
+      ctx.strokeStyle = '#dff0ff'; ctx.lineWidth = 3;
+      for (let i = 0; i < 7; i++) {
+        const ang = -Math.PI / 2 - Math.PI / 2.6 + (Math.PI / 1.3) * (i / 6);
+        const grow = f.splashed ? (40 - f.splashTimer) : (20 - f.splashTimer);
+        const len = 12 + grow * 1.3;
+        ctx.beginPath();
+        ctx.moveTo(80, sy);
+        ctx.lineTo(80 + Math.cos(ang) * len, sy + Math.sin(ang) * len);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      if (f.splashed) {
+        ctx.fillStyle = '#5dade2'; ctx.font = 'bold 34px VT323'; ctx.textAlign = 'center';
+        ctx.fillText('SPLASH!', W / 2, H * 0.38);
+      }
+    }
 
     // Pride
     if (f.prideTimer > 0) {
@@ -1359,29 +1437,35 @@ class CannonGame {
     this._tapHandler = null;
 
     const distance = Math.floor(this.flight.distance);
+    const splashed = this.flight.splashed;
+    // A splash still earns Borough Bucks for the distance you did cover — the
+    // failure is not reaching the borough, not the attempt being worthless.
     const earned   = Math.floor(distance * 0.8);
     this.ts.boroughBucks  += earned;
     this.ts.totalDistance += distance;
 
     // High score
     const bid = this.ts.targetBorough;
-    if (bid) {
+    if (bid && !splashed) {
       const prev = this.ts.highScores[bid] || 0;
       if (distance > prev) this.ts.highScores[bid] = distance;
     }
 
     let newUnlock = null;
     const aimed = TARGET_BOROUGHS.find(b => b.id === this.ts.targetBorough);
-    if (aimed && distance >= aimed.minBlocks && !this.ts.unlocks.includes(aimed.id)) {
+    // Reaching a borough now requires actually having crossed its river, not
+    // just accumulating a big enough distance number while still short of it.
+    const crossedRiver = !aimed || !aimed.river || (this.flight.river && this.flight.river.crossed);
+    if (aimed && !splashed && crossedRiver && distance >= aimed.minBlocks && !this.ts.unlocks.includes(aimed.id)) {
       this.ts.unlocks.push(aimed.id);
       newUnlock = aimed;
     }
 
     this.flight = null;
-    this.showTurnResults(distance, earned, newUnlock);
+    this.showTurnResults(distance, earned, newUnlock, splashed, aimed);
   }
 
-  showTurnResults(distance, earned, newUnlock) {
+  showTurnResults(distance, earned, newUnlock, splashed, aimed) {
     this.showOverlay('cannon-results');
     document.getElementById('cannon-results-distance').textContent = distance;
     document.getElementById('cannon-results-earned').textContent   = earned;
@@ -1395,6 +1479,13 @@ class CannonGame {
         </div>
         <div class="cannon-unlock-title">${newUnlock.unlock.title}</div>
         <div class="cannon-unlock-text">${newUnlock.unlock.text}</div>`;
+      unlockEl.classList.remove('hidden');
+    } else if (splashed && aimed) {
+      unlockEl.innerHTML = `
+        <div class="cannon-unlock-borough" style="border-color:#4a8ac4;color:#5dade2">
+          SPLASHED IN THE ${(aimed.river && aimed.river.name || 'RIVER').toUpperCase()}
+        </div>
+        <div class="cannon-unlock-text">You didn't make it to ${aimed.name}. Upgrade and try again.</div>`;
       unlockEl.classList.remove('hidden');
     } else { unlockEl.classList.add('hidden'); }
 
