@@ -2004,39 +2004,6 @@ button.menu-option.cannon-shop-exit-btn:hover {
   margin: 8px 0 4px;
 }
 
-/* --- briefing corkboard rows --- */
-
-.heist-plan-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 16px 0;
-  text-align: left;
-}
-
-.heist-plan-row {
-  border-left: 3px solid #4a4038;
-  padding: 6px 0 6px 12px;
-}
-
-.heist-plan-role {
-  font-size: 17px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: #7a6a58;
-}
-
-.heist-plan-who {
-  font-size: 22px;
-  line-height: 1.2;
-}
-
-.heist-plan-text {
-  font-size: 17px;
-  color: #c8b89c;
-  line-height: 1.45;
-}
-
 /* --- results panel --- */
 
 .heist-result-line {

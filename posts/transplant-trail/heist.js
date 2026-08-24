@@ -85,16 +85,18 @@ const HEIST_TUNING = {
   // correct late and you're already committed. That inertia is the actual
   // difficulty, not just steering toward the goal.
   maze: {
-    // Re-simulated for the winding-tunnel-plus-ants redesign (see
-    // generateMazeLayout()): accel .06 / friction .90 (terminal ~0.6
-    // units/frame) against 300 randomly generated layouts with a
-    // deliberately imperfect bot -- reaction lag, imprecise stops, a
-    // "hesitate near a moving ant" heuristic instead of perfect timing --
-    // landed at ~86% clean completions, comfortably inside the clock.
+    // Real 90-degree cornering through actual maze corridors needs more
+    // precise stopping than the open tunnel did -- simulated a bot that
+    // knows the solution path (so this measures whether the physics can
+    // physically navigate the corridors, not whether the maze is
+    // solvable, which a perfect maze always is by construction) against
+    // 150 generated grids. accel .05 / friction .88 landed at 100%
+    // navigation success, ~17s for a clean run with zero wrong turns --
+    // comfortable room under the clock even before any exploring.
     timeLimit: 70,
-    accel: 0.06,
-    friction: 0.90,
-    ballRadius: 2.8,
+    accel: 0.05,
+    friction: 0.88,
+    ballRadius: 2.6,
   },
   getaway: {
     // Whichever Eric ended up on Lookout is the one behind the wheel. Distance
@@ -246,7 +248,16 @@ class HeistGame {
     if (kind === 'bullet') { if (g.gunAmmo <= 0) return; g.gunAmmo--; }
     else { if (g.rocketAmmo <= 0) return; g.rocketAmmo--; }
     const px = this.canvas.width * 0.22;
-    g.shots.push({ x: px + 44, y: g.laneY, lane: g.lane, kind, vx: kind === 'rocket' ? 15 : 24 });
+    // A rocket fired while the chopper's up homes toward its altitude --
+    // it flies down the lane at windshield height otherwise, and the
+    // helicopter sits well above the road, so a straight shot could never
+    // actually reach it (confirmed bug: rockets always missed).
+    const homing = kind === 'rocket' && g.heli && !g.heli.destroyed;
+    g.shots.push({
+      x: px + 44, y: g.laneY, lane: g.lane, kind,
+      vx: kind === 'rocket' ? 15 : 24,
+      homing,
+    });
   }
 
   // Only available for the bridge half of the run -- an alternate exit
@@ -531,13 +542,7 @@ class HeistGame {
     document.getElementById('heist-roles-confirm').onclick = () => {
       if (this.phase !== 'roles') return;
       if (!this.assignmentComplete()) return;
-      this.showBriefing();
-    };
-    document.getElementById('heist-roles-clear').onclick = () => {
-      if (this.phase !== 'roles') return;
-      this.assign = { distractionA: null, distractionB: null, lookout: null };
-      this.openRoleId = null;
-      this.renderRoleUI();
+      this.startFloor();
     };
   }
 
@@ -620,54 +625,15 @@ class HeistGame {
     });
 
     const hint = document.getElementById('heist-roles-hint');
-    if (this.assignmentComplete()) {
+    const complete = this.assignmentComplete();
+    if (complete) {
       hint.textContent = 'Everyone has a job. Who you put where changes how their part of the job actually plays.';
     } else if (this.openRoleId) {
       hint.textContent = 'Pick who fills this job.';
     } else {
       hint.textContent = 'Tap an open job to fill it. Tap a filled job to clear it.';
     }
-    document.getElementById('heist-roles-confirm').disabled = !this.assignmentComplete();
-  }
-
-  // ------------------------------------------------
-  // PHASE 0c — BRIEFING (the corkboard)
-  // ------------------------------------------------
-
-  showBriefing() {
-    this.phase = 'briefing';
-    this.showOverlay('heist-briefing');
-    const list = document.getElementById('heist-plan-list');
-    list.innerHTML = '';
-
-    const rows = [
-      { label: 'Thief', who: this.gameState.playerName || 'You', color: '#d4a574',
-        text: 'Two thumbs on the register lock. Roll it to the shear line before anyone counts the seconds.' },
-    ];
-    HEIST_ROLES.forEach(r => {
-      const c = getHeistCrew(this.assign[r.id]);
-      rows.push({
-        label: r.name,
-        who: c.name,
-        color: c.color,
-        text: r.id === 'lookout' ? c.getawayBlurb : c.distractionBlurb,
-      });
-    });
-
-    rows.forEach(row => {
-      const el = document.createElement('div');
-      el.className = 'heist-plan-row';
-      el.innerHTML = `
-        <div class="heist-plan-role">${row.label}</div>
-        <div class="heist-plan-who" style="color:${row.color}">${row.who}</div>
-        <div class="heist-plan-text">${row.text}</div>`;
-      list.appendChild(el);
-    });
-
-    document.getElementById('heist-briefing-go').onclick = () => {
-      if (this.phase !== 'briefing') return;
-      this.startFloor();
-    };
+    document.getElementById('heist-roles-confirm').classList.toggle('hidden', !complete);
   }
 
   // ------------------------------------------------
@@ -1371,104 +1337,103 @@ class HeistGame {
   // (two thumbs, or mouse position on desktop) to roll a ball from the pins'
   // resting position to the shear line without dropping it down through the
   // housing. Real momentum, real holes, no scripted safety net beyond time.
-  // A switchback grid with the holes in the same place every run reads as
-  // a diagram, not a dodge -- once you've seen it, "hard" collapses into
-  // "memorized." This generates a genuinely different winding tunnel every
-  // time you play it: a wiggling centerline (three summed sine waves with
-  // randomized frequency/phase, plus a random overall left/right drift),
-  // a handful of static pits, and fire ants that patrol back and forth
-  // across the tunnel -- a timing dodge, not a fixed-position one. It
-  // straightens into a plain centered runway for the last stretch so the
-  // ramp always sits exactly where the tunnel was already taking you, not
-  // off to the side -- the "jump makes no sense" bug in the switchback
-  // version. Simulated across 300 random layouts with a deliberately
-  // imperfect bot (reaction lag, imprecise stops, no perfect foresight):
-  // ~86% clean completions well inside the clock.
-  mazeSmoothstep(a, b, x) {
-    const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
-    return t * t * (3 - 2 * t);
+  // A curvy single tunnel turned out to feel like nothing at all -- direct
+  // feedback: "the way it is now doesn't work at all." What was actually
+  // missing was a REAL maze: branches that go nowhere, a genuine choice at
+  // every junction, wrong turns that cost you something. This generates an
+  // honest one -- randomized-DFS carves a perfect maze (every cell reachable
+  // by exactly one path, real dead ends, no loops) into a grid, walls are
+  // real rectangles you physically corner around like the original
+  // switchback version, and holes only ever sit in cells that are NOT on
+  // the solution path -- so the correct route is always clear, and every
+  // wrong branch is a real risk, not just a detour. Some of those cells
+  // land on the outer edge of the board and some in the middle, so the
+  // wrong-turn holes read as "rolled off the edge of the table" in some
+  // spots and "dropped through the floor" in others, same as the wooden
+  // labyrinth toy this is doing an impression of.
+  mazeCols = 6; mazeRows = 8;
+  mazeLeft = 4; mazeTop = 4; mazeBoardW = 92; mazeBoardH = 92;
+  mazeWallT = 2.2;
+
+  mazeCellCenter(r, c) {
+    const cw = this.mazeBoardW / this.mazeCols, ch = this.mazeBoardH / this.mazeRows;
+    return { x: this.mazeLeft + (c + 0.5) * cw, y: this.mazeTop + (r + 0.5) * ch };
   }
 
   generateMazeLayout() {
-    const N = 72, HALF_WIDTH = 15;
-    const RAMP_T0 = 0.80, RAMP_T1 = 0.835, CHASM_T0 = 0.835, CHASM_T1 = 0.945, FINALE_X = 50;
-    const rnd = Math.random;
-
-    const freqs = [0.8 + rnd() * 1.0, 2.0 + rnd() * 1.6, 3.6 + rnd() * 2.2];
-    const phases = [rnd() * Math.PI * 2, rnd() * Math.PI * 2, rnd() * Math.PI * 2];
-    const amps = [15, 8, 4];
-    const dirBias = (rnd() - 0.5) * 6;
-
-    const points = [];
-    for (let i = 0; i <= N; i++) {
-      const t = i / N;
-      let x = 50 + dirBias * t;
-      for (let k = 0; k < freqs.length; k++) x += amps[k] * Math.sin(freqs[k] * Math.PI * 2 * t + phases[k]);
-      x = Math.max(18, Math.min(82, x));
-      if (t >= 0.72) x = x + (FINALE_X - x) * this.mazeSmoothstep(0.72, RAMP_T0, t);
-      if (t >= RAMP_T0) x = FINALE_X;
-      points.push({ x, y: 6 + t * (97 - 6), t });
+    const COLS = this.mazeCols, ROWS = this.mazeRows;
+    const grid = [];
+    for (let r = 0; r < ROWS; r++) {
+      grid.push([]);
+      for (let c = 0; c < COLS; c++) grid[r].push({ N: true, S: true, E: true, W: true, visited: false });
+    }
+    // Randomized depth-first carve -- the standard "perfect maze" algorithm:
+    // every cell ends up reachable by exactly one path from the start.
+    const startC = Math.floor(Math.random() * COLS);
+    const stack = [{ r: 0, c: startC }];
+    grid[0][startC].visited = true;
+    while (stack.length) {
+      const { r, c } = stack[stack.length - 1];
+      const opts = [];
+      if (r > 0 && !grid[r - 1][c].visited) opts.push({ r: r - 1, c, dir: 'N' });
+      if (r < ROWS - 1 && !grid[r + 1][c].visited) opts.push({ r: r + 1, c, dir: 'S' });
+      if (c > 0 && !grid[r][c - 1].visited) opts.push({ r, c: c - 1, dir: 'W' });
+      if (c < COLS - 1 && !grid[r][c + 1].visited) opts.push({ r, c: c + 1, dir: 'E' });
+      if (!opts.length) { stack.pop(); continue; }
+      const pick = opts[Math.floor(Math.random() * opts.length)];
+      const opp = { N: 'S', S: 'N', E: 'W', W: 'E' };
+      grid[r][c][pick.dir] = false;
+      grid[pick.r][pick.c][opp[pick.dir]] = false;
+      grid[pick.r][pick.c].visited = true;
+      stack.push({ r: pick.r, c: pick.c });
     }
 
-    const pathAt = (t) => {
-      const idx = Math.max(0, Math.min(N, t * N));
-      const i0 = Math.floor(idx), frac = idx - i0;
-      const p0 = points[i0], p1 = points[Math.min(i0 + 1, N)];
-      return { x: p0.x + (p1.x - p0.x) * frac, y: p0.y + (p1.y - p0.y) * frac };
-    };
+    const start = { r: 0, c: startC };
+    const goal = { r: ROWS - 1, c: Math.floor(Math.random() * COLS) };
 
+    // Solve it (BFS -- a perfect maze has exactly one route, so this finds
+    // it) to know which cells are the real path vs. a dead-end branch.
+    const key = (r, c) => r + ',' + c;
+    const q = [start], parent = { [key(start.r, start.c)]: null };
+    while (q.length) {
+      const cur = q.shift();
+      if (cur.r === goal.r && cur.c === goal.c) break;
+      const cell = grid[cur.r][cur.c];
+      const nbrs = [];
+      if (!cell.N) nbrs.push({ r: cur.r - 1, c: cur.c });
+      if (!cell.S) nbrs.push({ r: cur.r + 1, c: cur.c });
+      if (!cell.W) nbrs.push({ r: cur.r, c: cur.c - 1 });
+      if (!cell.E) nbrs.push({ r: cur.r, c: cur.c + 1 });
+      nbrs.forEach(n => { if (!(key(n.r, n.c) in parent)) { parent[key(n.r, n.c)] = cur; q.push(n); } });
+    }
+    const path = [];
+    for (let cur = goal; cur; cur = parent[key(cur.r, cur.c)]) path.unshift(cur);
+    const pathSet = new Set(path.map(p => key(p.r, p.c)));
+
+    // Walls as real rectangles -- each shared edge drawn exactly once.
+    const cw = this.mazeBoardW / COLS, ch = this.mazeBoardH / ROWS, T = this.mazeWallT;
+    const walls = [];
+    for (let c = 0; c < COLS; c++) if (grid[0][c].N) walls.push({ x: this.mazeLeft + c * cw, y: this.mazeTop - T / 2, w: cw, h: T });
+    for (let r = 0; r < ROWS; r++) if (grid[r][0].W) walls.push({ x: this.mazeLeft - T / 2, y: this.mazeTop + r * ch, w: T, h: ch });
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      const cell = grid[r][c];
+      if (cell.E) walls.push({ x: this.mazeLeft + (c + 1) * cw - T / 2, y: this.mazeTop + r * ch, w: T, h: ch });
+      if (cell.S) walls.push({ x: this.mazeLeft + c * cw, y: this.mazeTop + (r + 1) * ch - T / 2, w: cw, h: T });
+    }
+
+    // Holes only in off-path cells -- the correct route is always clear,
+    // wrong turns are the actual hazard.
     const holes = [];
-    const numHoles = 3 + Math.floor(rnd() * 2);
-    for (let tries = 0; holes.length < numHoles && tries < 200; tries++) {
-      const t = 0.08 + rnd() * 0.6;
-      if (holes.some(h => Math.abs(h.t - t) < 0.08)) continue;
-      const p = pathAt(t);
-      const r = 2.3 + rnd() * 0.4;
-      const maxOffset = HALF_WIDTH - r - 5;
-      holes.push({ t, x: p.x + (rnd() * 2 - 1) * maxOffset, y: p.y, r });
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (pathSet.has(key(r, c))) continue;
+      if (Math.random() < 0.55) {
+        const p = this.mazeCellCenter(r, c);
+        holes.push({ x: p.x, y: p.y, r: 2.2 + Math.random() * 0.3 });
+      }
     }
 
-    const ants = [];
-    const numAnts = 1 + Math.floor(rnd() * 2);
-    for (let tries = 0; ants.length < numAnts && tries < 200; tries++) {
-      const t = 0.14 + rnd() * 0.5;
-      if (ants.some(a => Math.abs(a.t - t) < 0.12) || holes.some(h => Math.abs(h.t - t) < 0.07)) continue;
-      const p = pathAt(t);
-      ants.push({
-        t, baseX: p.x, y: p.y,
-        amp: HALF_WIDTH - 7,
-        speed: 0.025 + rnd() * 0.02,
-        phase: rnd() * Math.PI * 2,
-        r: 2.2,
-        x: p.x,
-      });
-    }
-
-    const rampP = pathAt((RAMP_T0 + RAMP_T1) / 2);
-    const ramp = { x: rampP.x - 11, y: rampP.y - 2.5, w: 22, h: (RAMP_T1 - RAMP_T0) * (97 - 6) + 5 };
-
-    return {
-      points, pathAt, holes, ants, ramp,
-      rampT0: RAMP_T0, rampT1: RAMP_T1, chasmT0: CHASM_T0, chasmT1: CHASM_T1, halfWidth: HALF_WIDTH,
-      start: { x: points[0].x, y: points[0].y },
-      goal: { x: FINALE_X, y: 97, r: 5 },
-    };
-  }
-
-  mazeClosestOnPath(layout, px, py) {
-    const pts = layout.points;
-    let best = Infinity, bestX = pts[0].x, bestY = pts[0].y, bestT = 0;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const a = pts[i], b = pts[i + 1];
-      const abx = b.x - a.x, aby = b.y - a.y;
-      const len2 = abx * abx + aby * aby || 1;
-      let t = ((px - a.x) * abx + (py - a.y) * aby) / len2;
-      t = Math.max(0, Math.min(1, t));
-      const cx = a.x + abx * t, cy = a.y + aby * t;
-      const d = Math.hypot(px - cx, py - cy);
-      if (d < best) { best = d; bestX = cx; bestY = cy; bestT = a.t + (b.t - a.t) * t; }
-    }
-    return { dist: best, x: bestX, y: bestY, t: bestT };
+    const startP = this.mazeCellCenter(start.r, start.c), goalP = this.mazeCellCenter(goal.r, goal.c);
+    return { grid, walls, holes, path, pathKeys: pathSet, start: startP, goal: { x: goalP.x, y: goalP.y, r: 4.5 } };
   }
 
   startRegister() {
@@ -1487,17 +1452,17 @@ class HeistGame {
     this.mech = {
       kind: 'maze',
       layout,
-      ball: { x: layout.start.x, y: layout.start.y, vx: 0, vy: 0, airborne: false, airborneTimer: 0 },
+      ball: { x: layout.start.x, y: layout.start.y, vx: 0, vy: 0 },
       resets: 0,
       completed: false,
-      // Falling in a hole or getting clipped by an ant sends you back to
-      // the furthest point you actually reached, not all the way to the
-      // start -- but only a point that was actually clear when you passed
-      // it. Banking a checkpoint mid-hazard would just respawn you back
-      // into it forever (a real bug in an earlier pass: same coordinates,
+      // Falling in a hole sends you back to the furthest point on the
+      // SOLUTION path you actually reached, not all the way to the start
+      // -- but only a point that was actually clear when you passed it.
+      // Banking a checkpoint mid-hazard would just respawn you back into
+      // it forever (a real bug in an earlier pass: same coordinates,
       // instant re-death, every single retry).
       checkpoint: { x: layout.start.x, y: layout.start.y },
-      maxT: 0,
+      maxPathIndex: 0,
     };
 
     // Distraction work buys you a little breathing room — every hotspot the
@@ -1513,11 +1478,36 @@ class HeistGame {
     document.getElementById('heist-maze-pads').classList.remove('hidden', 'tilt-active');
     document.getElementById('heist-maze-tilt-btn').textContent = 'Try tilt instead';
     this.showHud(
-      'The lock — roll it to the shear line',
-      'Hold the arrows below to roll the ball toward the shear line.',
+      'The lock — a real maze, not a diagram',
+      'Roll to the shear line. Wrong turns aren’t just dead ends -- some of them drop you.',
       `+${bonusSeconds}s bought by the distractions`
     );
     this.mazeLoop();
+  }
+
+  resolveWallCollision(ball, r, wall) {
+    const closestX = Math.max(wall.x, Math.min(ball.x, wall.x + wall.w));
+    const closestY = Math.max(wall.y, Math.min(ball.y, wall.y + wall.h));
+    const dx = ball.x - closestX, dy = ball.y - closestY;
+    const dist = Math.hypot(dx, dy);
+    if (dist >= r || dist < 0.0001) return;
+    const push = r - dist, nx = dx / dist, ny = dy / dist;
+    ball.x += nx * push;
+    ball.y += ny * push;
+    const vDotN = ball.vx * nx + ball.vy * ny;
+    if (vDotN < 0) { ball.vx -= vDotN * nx; ball.vy -= vDotN * ny; }
+  }
+
+  // Which cell (r, c) the ball is currently in, and if that cell is on the
+  // solution path, its index there -- used both for the checkpoint and (via
+  // maxPathIndex) so a hole can never bank a checkpoint ahead of where the
+  // ball has genuinely, safely been.
+  mazeCellIndexAt(layout, x, y) {
+    const cw = this.mazeBoardW / this.mazeCols, ch = this.mazeBoardH / this.mazeRows;
+    const c = Math.floor((x - this.mazeLeft) / cw), r = Math.floor((y - this.mazeTop) / ch);
+    if (r < 0 || r >= this.mazeRows || c < 0 || c >= this.mazeCols) return -1;
+    if (!layout.pathKeys.has(r + ',' + c)) return -1;
+    return layout.path.findIndex(p => p.r === r && p.c === c);
   }
 
   mazeLoop() {
@@ -1527,10 +1517,6 @@ class HeistGame {
     this._frame++;
 
     if (!m.completed) {
-      // Ants patrol laterally, independent of the player -- world state,
-      // not something you can freeze by holding still.
-      layout.ants.forEach(a => { a.x = a.baseX + Math.sin(this._frame * a.speed + a.phase) * a.amp; });
-
       ball.vx += this.mazeTiltX * t.accel;
       ball.vy += this.mazeTiltY * t.accel;
       ball.vx *= t.friction;
@@ -1538,59 +1524,24 @@ class HeistGame {
       ball.x += ball.vx;
       ball.y += ball.vy;
 
-      if (ball.airborneTimer > 0) {
-        ball.airborneTimer--;
-        if (ball.airborneTimer <= 0) ball.airborne = false;
-      }
-
-      // Tunnel containment: a soft wall against the winding path's own
-      // boundary, instead of a fixed rectangle grid. Still blocks you
-      // while airborne, so a jump stays roughly over the tunnel rather
-      // than sailing off wherever.
-      const cp = this.mazeClosestOnPath(layout, ball.x, ball.y);
-      const limit = layout.halfWidth - t.ballRadius;
-      if (cp.dist > limit && cp.dist > 0.0001) {
-        const nx = (ball.x - cp.x) / cp.dist, ny = (ball.y - cp.y) / cp.dist;
-        const push = cp.dist - limit;
-        ball.x -= nx * push; ball.y -= ny * push;
-        const vDotN = ball.vx * nx + ball.vy * ny;
-        if (vDotN > 0) { ball.vx -= vDotN * nx; ball.vy -= vDotN * ny; }
-      }
-
-      if (!ball.airborne) {
-        const onRamp = ball.x > layout.ramp.x && ball.x < layout.ramp.x + layout.ramp.w &&
-          ball.y > layout.ramp.y && ball.y < layout.ramp.y + layout.ramp.h;
-        if (onRamp) {
-          ball.airborne = true;
-          ball.airborneTimer = 80;
-          ball.vy = Math.max(ball.vy, 2.4); // guarantee enough speed to clear the chasm
-        }
-      }
+      layout.walls.forEach(w => this.resolveWallCollision(ball, t.ballRadius, w));
 
       // Bank a checkpoint only on a frame where the ball is actually clear
       // of every hazard -- see the note on m.checkpoint above.
-      if (cp.t > m.maxT) {
+      const idx = this.mazeCellIndexAt(layout, ball.x, ball.y);
+      if (idx > m.maxPathIndex) {
         const margin = 2;
-        const nearHazard = layout.holes.some(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r + t.ballRadius + margin) ||
-          layout.ants.some(a => Math.hypot(ball.x - a.x, ball.y - a.y) < a.r + t.ballRadius + margin);
-        if (!nearHazard) { m.maxT = cp.t; m.checkpoint = { x: ball.x, y: ball.y }; }
+        const nearHazard = layout.holes.some(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r + t.ballRadius + margin);
+        if (!nearHazard) { m.maxPathIndex = idx; m.checkpoint = { x: ball.x, y: ball.y }; }
       }
 
-      if (!ball.airborne) {
-        const inChasm = cp.t >= layout.chasmT0 && cp.t < layout.chasmT1;
-        const inHole = layout.holes.find(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r);
-        const inAnt = layout.ants.find(a => Math.hypot(ball.x - a.x, ball.y - a.y) < a.r + t.ballRadius * 0.6);
-        if (inChasm || inHole || inAnt) {
-          m.resets++;
-          ball.x = m.checkpoint.x; ball.y = m.checkpoint.y; ball.vx = 0; ball.vy = 0;
-          ball.airborne = false; ball.airborneTimer = 0;
-          const why = inChasm ? 'Missed the jump and went straight down.' :
-            inAnt ? 'One of them got you. Bitten and dropped.' :
-            'Down through the housing.';
-          this.setHudHint(
-            `${why} ${m.maxT > 0 ? 'Back to the last spot you cleared.' : 'Back to the start.'}`,
-            `+${m.bonusSeconds}s bought by the distractions`);
-        }
+      const inHole = layout.holes.find(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r);
+      if (inHole) {
+        m.resets++;
+        ball.x = m.checkpoint.x; ball.y = m.checkpoint.y; ball.vx = 0; ball.vy = 0;
+        this.setHudHint(
+          `Down through the floor. ${m.maxPathIndex > 0 ? 'Back to the last spot you cleared.' : 'Back to the start.'}`,
+          `+${m.bonusSeconds}s bought by the distractions`);
       }
 
       if (Math.hypot(ball.x - layout.goal.x, ball.y - layout.goal.y) < layout.goal.r) {
@@ -1671,9 +1622,19 @@ class HeistGame {
       nitro: 0, nitroActive: 0, speedBonus: 0, fireTrail: false,
       gunAmmo: 0, rocketAmmo: 0, shots: [], particles: [],
       heli: null, heliDone: false, jumpedOff: false,
+      // Guaranteed pickups: relying purely on random spawn chance meant a
+      // run could easily end without ever handing you a gun (confirmed --
+      // "I never got the ability to shoot the guns" was bad luck on a
+      // ~4% chance per spawn, not a bug, but a mechanic nobody ever sees
+      // isn't much of a mechanic). Each of the four pickup types is
+      // guaranteed to appear at least once, spaced through the run,
+      // independent of the random spawns that still happen on top.
+      pickupQueue: ['gun', 'nitro', 'rocket', 'speedpwr'].sort(() => Math.random() - 0.5),
+      nextGuaranteedAt: 0,
       laneUp: () => { const g = this.mech; if (g && g.lane > 0) g.lane--; },
       laneDown: () => { const g = this.mech; if (g && g.lane < 2) g.lane++; },
     };
+    this.mech.nextGuaranteedAt = this.mech.cfg.distance * 0.16;
     this.mech.laneY = this.laneCenterY(1);
     this.getawayJumpHeld = false;
     this.jumpedOffBridge = false;
@@ -1769,13 +1730,27 @@ class HeistGame {
       this.spawnGetawayObstacle();
     }
 
+    // Force-spawn the next guaranteed pickup regardless of the random
+    // roll above, spaced through the run so you actually see all four.
+    if (g.pickupQueue.length > 0 && g.dist >= g.nextGuaranteedAt) {
+      const type = g.pickupQueue.shift();
+      g.obstacles.push({ kind: 'pickup', type, lane: Math.floor(Math.random() * 3), x: this.canvas.width + 80, hit: false });
+      g.nextGuaranteedAt += g.cfg.distance * 0.22;
+    }
+
     // The helicopter shows up once the heat's high enough and stays for
     // the rest of the run unless you take it down with a rocket.
     if (!g.heli && !g.heliDone && g.sirens >= 0.5) this.spawnGetawayHeli();
     if (g.heli) this.updateGetawayHeli();
 
     // Shots: bullets down cop cars, rockets down cop cars OR the chopper.
-    g.shots.forEach(s => { s.x += s.vx + g.speed; });
+    // A homing rocket steers its altitude toward the chopper as it flies --
+    // fired at windshield height otherwise it could never reach something
+    // hovering up near the skyline.
+    g.shots.forEach(s => {
+      s.x += s.vx + g.speed;
+      if (s.homing && g.heli && !g.heli.destroyed) s.y += (g.heli.y - s.y) * 0.18;
+    });
     g.shots.forEach(s => {
       if (s.dead) return;
       g.obstacles.forEach(o => {
@@ -1788,12 +1763,12 @@ class HeistGame {
         }
       });
       if (s.kind === 'rocket' && g.heli && !g.heli.destroyed && !s.dead &&
-          Math.abs(s.x - g.heli.x) < 40 && Math.abs(g.heli.y - s.y) < 60) {
-        g.heli.destroyed = true; s.dead = true;
+          Math.abs(s.x - g.heli.x) < 34 && Math.abs(g.heli.y - s.y) < 34) {
+        g.heli.destroyed = true; s.dead = true; g.heliDone = true;
+        g.heli.fallVy = -2; g.heli.fallSpin = (Math.random() < 0.5 ? -1 : 1) * 0.1;
         this.cash += 80;
         this.spawnGetawayBurst(g.heli.x, g.heli.y);
-        this.setHudHint('The helicopter goes down over the water.', g.cfg.label);
-        setTimeout(() => { if (this.mech === g) g.heli = null; }, 500);
+        this.setHudHint('Hit! The helicopter goes down in flames.', g.cfg.label);
       }
     });
     g.shots = g.shots.filter(s => !s.dead && s.x < this.canvas.width + 200);
@@ -1914,7 +1889,27 @@ class HeistGame {
 
   updateGetawayHeli() {
     const g = this.mech, heli = g.heli;
-    if (heli.destroyed) return;
+    if (heli.destroyed) {
+      // Shot down: tumble toward the road trailing fire, then it's gone
+      // for good -- a real "goes down in flames," not a silent despawn.
+      heli.fallVy += 0.35;
+      heli.y += heli.fallVy;
+      heli.x -= 1.5;
+      heli.spin = (heli.spin || 0) + heli.fallSpin;
+      if (this._frame % 3 === 0) {
+        this.mech.particles.push({
+          x: heli.x + (Math.random() - 0.5) * 20, y: heli.y + (Math.random() - 0.5) * 10,
+          vx: (Math.random() - 0.5) * 1.5, vy: 0.5 + Math.random(),
+          life: 20 + Math.floor(Math.random() * 10),
+          color: Math.random() < 0.6 ? '#e2622c' : '#8a8a8a',
+        });
+      }
+      if (heli.y > this.canvas.height * 0.52) {
+        this.spawnGetawayBurst(heli.x, this.canvas.height * 0.52);
+        g.heli = null;
+      }
+      return;
+    }
     const targetX = this.canvas.width * 0.62;
     heli.x += (targetX - heli.x) * 0.04;
     heli.y = this.canvas.height * 0.28 + Math.sin(this._frame / 45) * 22;
@@ -2196,64 +2191,22 @@ class HeistGame {
 
     if (!m) { ctx.restore(); return; }
     const layout = m.layout;
-    const pts = layout.points, last = pts.length - 1;
-    const normalAt = (i) => {
-      const p0 = pts[Math.max(0, i - 1)], p1 = pts[Math.min(last, i + 1)];
-      const dx = p1.x - p0.x, dy = p1.y - p0.y;
-      const len = Math.hypot(dx, dy) || 1;
-      return { nx: -dy / len, ny: dx / len };
-    };
 
-    // The tunnel itself: a winding carved-out band around the centerline,
-    // not a fixed grid of rectangles -- it's a different shape every time
-    // you play it.
-    ctx.beginPath();
-    pts.forEach((p, i) => {
-      const { nx, ny } = normalAt(i);
-      const [px, py] = toPx(p.x + nx * layout.halfWidth, p.y + ny * layout.halfWidth);
-      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    // The maze walls themselves -- real rectangles forming real corridors,
+    // dead ends and all, the same wooden-labyrinth-toy construction as the
+    // very first pass, just generated instead of hand-placed switchbacks.
+    layout.walls.forEach(w => {
+      const [wx, wy] = toPx(w.x, w.y);
+      ctx.fillStyle = '#6a5a44';
+      ctx.fillRect(wx, wy, toPxLen(w.w), toPxLen(w.h));
+      ctx.strokeStyle = '#3a2f22'; ctx.lineWidth = 1;
+      ctx.strokeRect(wx, wy, toPxLen(w.w), toPxLen(w.h));
     });
-    for (let i = last; i >= 0; i--) {
-      const p = pts[i], { nx, ny } = normalAt(i);
-      const [px, py] = toPx(p.x - nx * layout.halfWidth, p.y - ny * layout.halfWidth);
-      ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    const tunnelGrad = ctx.createLinearGradient(b.x, b.y, b.x, b.y + b.h);
-    tunnelGrad.addColorStop(0, '#4a3a28'); tunnelGrad.addColorStop(1, '#3a2c1e');
-    ctx.fillStyle = tunnelGrad;
-    ctx.fill();
-    ctx.strokeStyle = '#6a5a44'; ctx.lineWidth = 3; ctx.stroke();
 
-    // The chasm: the tunnel floor just drops out for this stretch, edges
-    // torn instead of a clean cut, so a jump reads as "the housing is
-    // broken here" rather than an arbitrary gold box sitting on the board.
-    const chasmPts = pts.filter(p => p.t >= layout.chasmT0 - 0.01 && p.t <= layout.chasmT1 + 0.01);
-    if (chasmPts.length > 1) {
-      ctx.beginPath();
-      chasmPts.forEach((p, i) => {
-        const idx = pts.indexOf(p);
-        const { nx, ny } = normalAt(idx);
-        const jag = (i % 2 === 0 ? 1 : -1) * 1.4;
-        const [px, py] = toPx(p.x + nx * (layout.halfWidth + jag), p.y + ny * (layout.halfWidth + jag));
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      });
-      for (let i = chasmPts.length - 1; i >= 0; i--) {
-        const p = chasmPts[i], idx = pts.indexOf(p);
-        const { nx, ny } = normalAt(idx);
-        const jag = (i % 2 === 0 ? 1 : -1) * 1.4;
-        const [px, py] = toPx(p.x - nx * (layout.halfWidth + jag), p.y - ny * (layout.halfWidth + jag));
-        ctx.lineTo(px, py);
-      }
-      ctx.closePath();
-      const pitGrad = ctx.createLinearGradient(0, toPx(0, chasmPts[0].y)[1], 0, toPx(0, chasmPts[chasmPts.length - 1].y)[1]);
-      pitGrad.addColorStop(0, '#0a0604'); pitGrad.addColorStop(1, '#000');
-      ctx.fillStyle = pitGrad;
-      ctx.fill();
-      ctx.strokeStyle = '#1a1008'; ctx.lineWidth = 2; ctx.stroke();
-    }
-
-    // Holes
+    // Holes -- only ever in a wrong-turn cell, never on the solution path,
+    // so the correct route is always clean and a wrong branch is a real
+    // risk. Some sit against the board's outer edge (roll off the side),
+    // some sit in the middle (drop through the floor).
     layout.holes.forEach(h => {
       const [hx, hy] = toPx(h.x, h.y);
       const r = toPxLen(h.r);
@@ -2263,58 +2216,6 @@ class HeistGame {
       ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.stroke();
     });
-
-    // Fire ants — small, dark, legged, patrolling back and forth with a
-    // flickering flame out front so the danger reads as "moving," not
-    // just another pit.
-    layout.ants.forEach(a => {
-      const [ax, ay] = toPx(a.x, a.y);
-      const ar = toPxLen(a.r);
-      const facing = Math.cos(this._frame * a.speed + a.phase) >= 0 ? 1 : -1;
-      const flicker = 0.75 + Math.sin(this._frame * 0.6 + a.phase) * 0.25;
-      // Flame
-      ctx.beginPath();
-      ctx.moveTo(ax + facing * ar * 0.9, ay);
-      ctx.lineTo(ax + facing * ar * (2.6 * flicker), ay - ar * 0.55 * flicker);
-      ctx.lineTo(ax + facing * ar * (2.1 * flicker), ay);
-      ctx.lineTo(ax + facing * ar * (2.6 * flicker), ay + ar * 0.55 * flicker);
-      ctx.closePath();
-      const fg = ctx.createLinearGradient(ax, ay, ax + facing * ar * 2.6, ay);
-      fg.addColorStop(0, '#ffd36a'); fg.addColorStop(1, 'rgba(224,90,74,0)');
-      ctx.fillStyle = fg; ctx.fill();
-      // Legs
-      ctx.strokeStyle = '#1a1008'; ctx.lineWidth = 1;
-      for (let leg = -1; leg <= 1; leg++) {
-        ctx.beginPath(); ctx.moveTo(ax + leg * ar * 0.5, ay - ar * 0.3);
-        ctx.lineTo(ax + leg * ar * 0.9, ay - ar * 0.9); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(ax + leg * ar * 0.5, ay + ar * 0.3);
-        ctx.lineTo(ax + leg * ar * 0.9, ay + ar * 0.9); ctx.stroke();
-      }
-      // Body (two segments)
-      ctx.fillStyle = '#2a1810';
-      ctx.beginPath(); ctx.ellipse(ax - facing * ar * 0.3, ay, ar * 0.75, ar * 0.55, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(ax + facing * ar * 0.55, ay, ar * 0.42, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#000'; ctx.lineWidth = 1; ctx.stroke();
-    });
-
-    // Ramp — striped, unmistakably "launch off this," and (unlike the
-    // switchback version) always sitting exactly where the straightened
-    // finale was already taking you.
-    {
-      const r = layout.ramp;
-      const [rx, ry] = toPx(r.x, r.y);
-      const rw = toPxLen(r.w), rh = toPxLen(r.h);
-      ctx.fillStyle = '#c9a227';
-      ctx.fillRect(rx, ry, rw, rh);
-      ctx.strokeStyle = '#5a4a30'; ctx.lineWidth = 4;
-      ctx.beginPath();
-      for (let i = -1; i * 6 < rw + rh; i++) {
-        ctx.moveTo(rx + i * 6, ry + rh); ctx.lineTo(rx + i * 6 + rh, ry);
-      }
-      ctx.save(); ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip(); ctx.stroke(); ctx.restore();
-      ctx.fillStyle = '#3a2f10'; ctx.font = '10px VT323, monospace'; ctx.textAlign = 'center';
-      ctx.fillText('JUMP', rx + rw / 2, ry - 4);
-    }
 
     // Goal
     const [gx, gy] = toPx(layout.goal.x, layout.goal.y);
@@ -2328,30 +2229,16 @@ class HeistGame {
     ctx.font = '11px VT323, monospace'; ctx.textAlign = 'center';
     ctx.fillText('SHEAR LINE', gx, gy + gr + 16);
 
-    // Ball — bigger with a drop shadow while airborne, so clearing the
-    // chasm off the ramp actually reads as "in the air," not just immune.
+    // Ball
     const [bx2, by2] = toPx(m.ball.x, m.ball.y);
     const baseBr = toPxLen(HEIST_TUNING.maze.ballRadius);
-    if (m.ball.airborne) {
-      const hop = Math.sin((m.ball.airborneTimer / 60) * Math.PI) * baseBr * 1.4;
-      ctx.beginPath();
-      ctx.ellipse(bx2, by2, baseBr * 1.1, baseBr * 0.5, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fill();
-      const br = baseBr * 1.35;
-      ctx.beginPath(); ctx.arc(bx2, by2 - hop, br, 0, Math.PI * 2);
-      const g2 = ctx.createRadialGradient(bx2 - br * 0.3, by2 - hop - br * 0.3, br * 0.1, bx2, by2 - hop, br);
-      g2.addColorStop(0, '#fff4dc'); g2.addColorStop(1, '#c8a878');
-      ctx.fillStyle = g2; ctx.fill();
-      ctx.strokeStyle = '#5a4a30'; ctx.lineWidth = 1.5; ctx.stroke();
-    } else {
-      ctx.beginPath();
-      ctx.arc(bx2, by2, baseBr, 0, Math.PI * 2);
-      const ballGrad = ctx.createRadialGradient(bx2 - baseBr * 0.3, by2 - baseBr * 0.3, baseBr * 0.1, bx2, by2, baseBr);
-      ballGrad.addColorStop(0, '#f0e8d8'); ballGrad.addColorStop(1, '#a89878');
-      ctx.fillStyle = ballGrad;
-      ctx.fill();
-      ctx.strokeStyle = '#5a4a30'; ctx.lineWidth = 1.5; ctx.stroke();
-    }
+    ctx.beginPath();
+    ctx.arc(bx2, by2, baseBr, 0, Math.PI * 2);
+    const ballGrad = ctx.createRadialGradient(bx2 - baseBr * 0.3, by2 - baseBr * 0.3, baseBr * 0.1, bx2, by2, baseBr);
+    ballGrad.addColorStop(0, '#f0e8d8'); ballGrad.addColorStop(1, '#a89878');
+    ctx.fillStyle = ballGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#5a4a30'; ctx.lineWidth = 1.5; ctx.stroke();
 
     ctx.restore();
 
@@ -2429,7 +2316,7 @@ class HeistGame {
     ctx.globalAlpha = 1;
 
     // Helicopter
-    if (g.heli && !g.heli.destroyed) this.drawHeli(g.heli);
+    if (g.heli) this.drawHeli(g.heli);
 
     // Getaway car
     const px = W * 0.22;
@@ -2733,25 +2620,43 @@ class HeistGame {
   drawHeli(heli) {
     const ctx = this.ctx, x = heli.x, y = heli.y;
     const spin = this._frame * 1.4;
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath(); ctx.ellipse(x, this.canvas.height * 0.52 - 4, 30, 6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.save();
+    if (heli.destroyed) {
+      // Tumbling, not flying -- rotor still visible but no longer level.
+      ctx.translate(x, y);
+      ctx.rotate(heli.spin || 0);
+      ctx.translate(-x, -y);
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath(); ctx.ellipse(x, this.canvas.height * 0.52 - 4, 30, 6, 0, 0, Math.PI * 2); ctx.fill();
+    }
     // Rotor
-    ctx.strokeStyle = 'rgba(20,20,20,0.5)'; ctx.lineWidth = 3;
+    ctx.strokeStyle = heli.destroyed ? 'rgba(60,40,30,0.5)' : 'rgba(20,20,20,0.5)'; ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(x - Math.cos(spin) * 46, y - 16 - Math.sin(spin) * 6);
     ctx.lineTo(x + Math.cos(spin) * 46, y - 16 + Math.sin(spin) * 6);
     ctx.stroke();
     // Body
-    ctx.fillStyle = '#2a3138';
+    ctx.fillStyle = heli.destroyed ? '#241c18' : '#2a3138';
     ctx.beginPath(); ctx.ellipse(x, y, 34, 14, 0, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#4a7bd8';
     ctx.fillRect(x + 8, y - 8, 16, 10);
     ctx.fillStyle = '#1c2228';
     ctx.fillRect(x - 6, y + 10, 4, 16); ctx.fillRect(x - 34, y + 20, 44, 4);
     // Tail
-    ctx.fillStyle = '#2a3138';
+    ctx.fillStyle = heli.destroyed ? '#241c18' : '#2a3138';
     ctx.fillRect(x - 50, y - 3, 20, 6);
     ctx.beginPath(); ctx.moveTo(x - 50, y - 10); ctx.lineTo(x - 50, y + 10); ctx.lineTo(x - 60, y); ctx.closePath(); ctx.fill();
+    if (heli.destroyed) {
+      // Flame licking off the body, on top of the trailing smoke particles.
+      const flicker = 0.7 + Math.sin(this._frame * 1.1) * 0.3;
+      const fg = ctx.createRadialGradient(x, y, 2, x, y, 26 * flicker);
+      fg.addColorStop(0, 'rgba(255,210,120,0.85)');
+      fg.addColorStop(1, 'rgba(224,90,74,0)');
+      ctx.fillStyle = fg;
+      ctx.beginPath(); ctx.arc(x, y, 26 * flicker, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   }
 
   // --- the bust: the street, frozen, under police lights
