@@ -5,10 +5,10 @@
 
 const CANNON_UPGRADES = {
   strength: [
-    { id: 'standard',   label: 'Standard Cannon',  cost: 0,    velocity: 11, desc: 'Gets you there... maybe' },
-    { id: 'reinforced', label: 'Reinforced Cannon', cost: 350,  velocity: 17, desc: 'More oomph' },
-    { id: 'industrial', label: 'Industrial Cannon', cost: 900,  velocity: 24, desc: 'Serious hardware' },
-    { id: 'nuclear',    label: 'Nuclear Option',    cost: 2000, velocity: 34, desc: 'Unregulated' },
+    { id: 'standard',   label: 'Standard Cannon',  cost: 0,    velocity: 6,  desc: 'Gets you there... maybe' },
+    { id: 'reinforced', label: 'Reinforced Cannon', cost: 350,  velocity: 9,  desc: 'More oomph' },
+    { id: 'industrial', label: 'Industrial Cannon', cost: 900,  velocity: 12, desc: 'Serious hardware' },
+    { id: 'nuclear',    label: 'Nuclear Option',    cost: 2000, velocity: 15, desc: 'Unregulated' },
   ],
   accuracy: [
     { id: 'untrained', label: 'Wild Guess',    cost: 0,    swingSpeed: 3.5, tolerance: 22, desc: 'Needle goes brrr' },
@@ -17,9 +17,9 @@ const CANNON_UPGRADES = {
     { id: 'surgical',  label: 'Surgical Aim', cost: 1400, swingSpeed: 0.5, tolerance: 50, desc: 'Touch grass later' },
   ],
   suit: [
-    { id: 'naked',   label: 'Just Vibes',   cost: 0,    flapForce: 2.5, cooldownFrames: 62, drag: 0.24, desc: 'Barely works. One weak flap/sec.' },
-    { id: 'pigeon',  label: 'Pigeon Wings', cost: 250,  flapForce: 5.5, cooldownFrames: 38, drag: 0.14, desc: 'Actual lift. Faster cooldown.' },
-    { id: 'eagle',   label: 'Eagle Suit',   cost: 600,  flapForce: 9.5, cooldownFrames: 18, drag: 0.07, desc: 'Real power. Very fast recovery.' },
+    { id: 'naked',   label: 'Just Vibes',   cost: 0,    flapForce: 2.5, cooldownFrames: 62, drag: 0.24, desc: 'Barely works. One weak flap/sec. You will land.' },
+    { id: 'pigeon',  label: 'Pigeon Wings', cost: 250,  flapForce: 4.5, cooldownFrames: 42, drag: 0.14, desc: 'Real lift, still comes down eventually.' },
+    { id: 'eagle',   label: 'Eagle Suit',   cost: 600,  flapForce: 6.5, cooldownFrames: 26, drag: 0.07, desc: 'Enough lift to stay up as long as you dodge everything.' },
     { id: 'jetpack', label: 'Jetpack',      cost: 1200, flapForce: 15,  cooldownFrames: 6,  drag: 0.03, desc: 'Near-infinite flight. Only damage stops you.' },
   ],
   rocket: [
@@ -96,7 +96,7 @@ class CannonGame {
       strength: 0, accuracy: 0, suit: 0, rocket: 0, bonus: 0,
     };
 
-    this.aim = { active: false, angle: 0, dir: 1, phase: 'swing', power: 0, aimed: null };
+    this.aim = { active: false, angle: 0, dir: 1, phase: 'swing', power: 0, powerDir: 1, aimed: null };
     this.flight      = null;
     this._aimAF      = null;
     this._flightAF   = null;
@@ -254,7 +254,7 @@ class CannonGame {
     if (this._aimAF)    { cancelAnimationFrame(this._aimAF);    this._aimAF    = null; }
     if (this._flightAF) { cancelAnimationFrame(this._flightAF); this._flightAF = null; }
     this.aim.active = true; this.aim.angle = 0; this.aim.dir = 1;
-    this.aim.phase = 'swing'; this.aim.power = 0; this.aim.aimed = null;
+    this.aim.phase = 'swing'; this.aim.power = 0; this.aim.powerDir = 1; this.aim.aimed = null;
     this.hideOverlays();
     document.getElementById('cannon-aim').classList.remove('hidden');
     document.getElementById('cannon-aim-turn').textContent = `Turn ${this.ts.currentTurn}`;
@@ -266,18 +266,21 @@ class CannonGame {
   handleAimTap() {
     if (this.aim.phase === 'swing') {
       this.aim.phase = 'power';
+      this.aim.power = 0;
+      this.aim.powerDir = 1;
       const acc = CANNON_UPGRADES.accuracy[this.ts.accuracy];
       this.aim.aimed = this.getAimedBorough(this.aim.angle, acc.tolerance);
       document.getElementById('cannon-aim-hint').textContent =
         this.aim.aimed
-          ? `Aimed at ${this.aim.aimed.name} — Tap to fire!`
-          : 'No target locked — Tap to fire anyway';
+          ? `Aimed at ${this.aim.aimed.name} — Tap at full power!`
+          : 'No target locked — Tap anyway (no borough credit)';
     } else if (this.aim.phase === 'power') {
       this.aim.active = false; this.aim.phase = 'done';
       this._tapHandler = null;
       cancelAnimationFrame(this._aimAF);
       document.getElementById('cannon-aim').classList.add('hidden');
-      if (this.aim.aimed) this.ts.targetBorough = this.aim.aimed.id;
+      // No lock = no borough credit, rather than silently reusing last turn's target.
+      this.ts.targetBorough = this.aim.aimed ? this.aim.aimed.id : null;
       this.launchFlight(this.aim.power);
     }
   }
@@ -299,7 +302,11 @@ class CannonGame {
       if (this.aim.angle >= 360) { this.aim.angle = 360; this.aim.dir = -1; }
       if (this.aim.angle <= 0)   { this.aim.angle = 0;   this.aim.dir =  1; }
     } else if (this.aim.phase === 'power') {
-      this.aim.power = Math.min(100, this.aim.power + 1.4);
+      // Oscillates instead of holding at 100 — waiting forever is no longer free;
+      // you have to time the tap near the top of the swing.
+      this.aim.power += this.aim.powerDir * 1.8;
+      if (this.aim.power >= 100) { this.aim.power = 100; this.aim.powerDir = -1; }
+      if (this.aim.power <= 45)  { this.aim.power = 45;  this.aim.powerDir = 1; }
     }
     this.drawAimCanvas(this.canvas.width, this.canvas.height);
     this._aimAF = requestAnimationFrame(() => this.aimLoop());
@@ -402,7 +409,7 @@ class CannonGame {
       vy: speed * Math.sin(launchAngle),  // world space: positive = upward
       worldY: 25,                          // 0=ground, positive=up
       cameraY: 0,                          // scrolled camera offset
-      gravity: 0.10,
+      gravity: 0.28,
       drag: sut.drag,
       flapForce: sut.flapForce,
       flapCooldown: 0,
@@ -522,7 +529,11 @@ class CannonGame {
     }
 
     // ---- AIRBORNE ----
-    f.vy -= f.gravity;
+    // Fatigue: past ~40s of flight, a gentle extra pull kicks in and grows slowly.
+    // Backstops the endurance suits (eagle/jetpack) so a flight can't run forever
+    // even with perfect play and good luck — it just takes a long time to bite.
+    const fatigue = this._frame > 2400 ? Math.min(0.06, (this._frame - 2400) / 20000) : 0;
+    f.vy -= f.gravity + fatigue;
     f.vx *= (1 - f.drag * 0.018);
     f.worldY += f.vy;
 
@@ -544,7 +555,7 @@ class CannonGame {
 
     // Ground collision
     if (f.worldY <= 0) {
-      const bm = f.bonusId === 'bouncy_legs' ? 0.72 : 0.52;
+      const bm = f.bonusId === 'bouncy_legs' ? 0.55 : 0.40;
       if (Math.abs(f.vy) > 2.0 && f.vx > 1.5) {
         f.worldY = 0;
         const bounceVy = Math.abs(f.vy) * bm;
@@ -564,8 +575,11 @@ class CannonGame {
     if (f.vx < 0.2 && f.worldY < 10) { f.worldY = 0; f.landed = true; return; }
 
     f.spawnTimer++;
-    if (f.spawnTimer % 68 === 0 && f.distance > 20) this.spawnSky();
-    if (f.spawnTimer % 112 === 0 && f.distance > 40) this.spawnGround();
+    // Spawn rate ramps up with distance — a long endurance flight gets busier, not calmer.
+    const skyInterval = Math.max(28, 68 - Math.floor(f.distance / 200));
+    const groundInterval = Math.max(50, 112 - Math.floor(f.distance / 200));
+    if (f.spawnTimer % skyInterval === 0 && f.distance > 20) this.spawnSky();
+    if (f.spawnTimer % groundInterval === 0 && f.distance > 40) this.spawnGround();
     this.updateLaunchersAndArcs();
     f.entities = f.entities.filter(e => {
       e.x -= dx * 0.85 + 1.5;
@@ -612,11 +626,22 @@ class CannonGame {
     else if (r < 0.90) type = 'helicopter';
     else               type = 'updraft';
 
-    const playerAlt = Math.max(this.flight.worldY, 60);
+    // Long flights get meaner: occasionally upgrade a benign pickup into a hazard,
+    // scaling with distance. Keeps endurance suits (eagle/jetpack) from being a free ride.
+    const hazardBias = Math.min(0.35, this.flight.distance / 3000);
+    const escalate = { coin: 'dark_cloud', ring: 'pigeon_obs', light_cloud: 'helicopter', pretzel: 'pigeon_obs' };
+    if (escalate[type] && Math.random() < hazardBias) type = escalate[type];
+
     const minWY = { coin:40, ring:50, light_cloud:70, dark_cloud:90, rainbow_cloud:200,
       pretzel:50, pigeon_flock:80, pigeon_obs:70, helicopter:220, updraft:25 };
     const base = minWY[type] || 50;
-    const worldY = base + Math.random() * Math.max(80, playerAlt * 0.7 + 50);
+
+    // Band tracks the player's CURRENT altitude at a fixed width, so climbing high
+    // doesn't thin out hazard density (it used to — the higher you went, the more
+    // spread out spawns got, making altitude a free escape from danger).
+    const spread = 260;
+    const low = Math.max(base, this.flight.worldY - spread * 0.5);
+    const worldY = low + Math.random() * spread;
     this.flight.entities.push({ type, x: W + 60, worldY, collected: false });
   }
 
@@ -1411,7 +1436,11 @@ class CannonGame {
     document.getElementById('cannon-shop-continue').onclick = () => this.startAimPhase();
     document.getElementById('cannon-shop-continue').textContent = 'Keep flying';
     const exitBtn = document.getElementById('cannon-shop-exit');
-    if (exitBtn) exitBtn.onclick = () => this.onComplete();
+    if (exitBtn) exitBtn.onclick = () => this.onComplete({
+      boroughBucks: this.ts.boroughBucks,
+      unlocks: this.ts.unlocks.slice(),
+      totalDistance: this.ts.totalDistance,
+    });
   }
 
   drawWSPNight() {

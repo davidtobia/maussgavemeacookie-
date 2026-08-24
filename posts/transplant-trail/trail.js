@@ -672,7 +672,12 @@ class TrailGame {
   startCannonGame() {
     this.stop();
     game.showScreen('cannon-game');
-    cannonGame = new CannonGame(this.gameState, () => {
+    cannonGame = new CannonGame(this.gameState, (result) => {
+      // Borough Bucks earned in the cannon game become real cash on hand — the
+      // mini-game used to just discard everything you earned in it.
+      if (result && result.boroughBucks) {
+        this.gameState.checkingAccount += result.boroughBucks;
+      }
       // Save chapter 3 checkpoint after cannon game completes
       game.saveChapter(3, this.getTrailStateSnapshot());
       game.showScreen('trail-screen');
