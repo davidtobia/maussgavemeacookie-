@@ -1769,6 +1769,9 @@ button.menu-option.cannon-shop-exit-btn:hover {
   text-align: center;
   cursor: pointer;
   transition: background 0.12s, transform 0.12s;
+  /* Without this, a touch-drag on a crew card also scrolls the page
+     underneath it -- the browser's native pan gesture fighting the drag. */
+  touch-action: none;
 }
 
 .heist-crew-card:hover,
@@ -1794,11 +1797,12 @@ button.menu-option.cannon-shop-exit-btn:hover {
 .heist-crew-ghost {
   position: fixed;
   z-index: 50;
-  width: 150px;
+  /* No fixed width here -- JS sets it to match the real card's actual
+     rendered size at pickup time, so it doesn't visibly snap smaller. */
   transform: translate(-50%, -50%) scale(1.06) rotate(-2deg);
   pointer-events: none;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
-  opacity: 0.95;
+  opacity: 0.95 !important;
 }
 
 .heist-role-slot.filled {

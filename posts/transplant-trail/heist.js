@@ -494,12 +494,22 @@ class HeistGame {
         if (Math.hypot(dx, dy) < 8) return;
         dragging = true;
         this._dragJustHappened = true;
+        ev.preventDefault();
+        const rect = cardEl.getBoundingClientRect();
         cardEl.classList.add('dragging');
         ghost = cardEl.cloneNode(true);
-        ghost.classList.add('heist-crew-ghost');
+        // Reset the clone's classes entirely rather than inheriting
+        // whatever the live card had (assigned/selected/dragging) -- those
+        // were fighting the ghost's own opacity via CSS specificity, which
+        // is why the dragged card was barely visible. And match its actual
+        // on-screen size instead of the CSS default, so it doesn't visibly
+        // shrink the instant you pick it up.
+        ghost.className = 'heist-crew-card heist-crew-ghost';
+        ghost.style.width = rect.width + 'px';
         ghost.style.borderColor = crew.color;
         document.body.appendChild(ghost);
       }
+      ev.preventDefault();
       ghost.style.left = ev.clientX + 'px';
       ghost.style.top = ev.clientY + 'px';
       document.querySelectorAll('.heist-role-slot').forEach(s => s.classList.remove('drag-over'));
