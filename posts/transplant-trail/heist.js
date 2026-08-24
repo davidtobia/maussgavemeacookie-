@@ -85,15 +85,19 @@ const HEIST_TUNING = {
   // correct late and you're already committed. That inertia is the actual
   // difficulty, not just steering toward the goal.
   maze: {
-    // Cranked up hard on purpose: the point is fast and a little out of
-    // control, not a precise puzzle. accel up ~4x, friction closer to 1
-    // (slipperier, more momentum carries through) -- terminal speed goes
-    // from ~0.8 units/frame to ~4.5, and it's genuinely hard to stop on a
-    // dime. That's the intent.
+    // Dialed back from accel .11 / friction .978 after simulated play (see
+    // mazeLayout()) showed that combo was uncontrollable on digital
+    // buttons -- terminal speed near 5 units/frame with almost no way to
+    // stop on a dime, on top of the layout bugs fixed alongside it. Still
+    // clearly quicker than a shove-around-a-marble feel (terminal speed
+    // ~0.72 units/frame here vs. the very first pass's ~0.8, but you get
+    // there and stop much faster with this much friction), just not
+    // fighting the controls to do it. A bigger ball radius too, so a near
+    // miss reads as a near miss instead of a graze you didn't feel.
     timeLimit: 70,
-    accel: 0.11,
-    friction: 0.978,
-    ballRadius: 2.6,
+    accel: 0.065,
+    friction: 0.91,
+    ballRadius: 2.8,
   },
   getaway: {
     // Whichever Eric ended up on Lookout is the one behind the wheel. Distance
@@ -1291,46 +1295,47 @@ class HeistGame {
   // resting position to the shear line without dropping it down through the
   // housing. Real momentum, real holes, no scripted safety net beyond time.
   mazeLayout() {
-    // Roughly quadrupled from the first pass: seven reversals instead of
-    // four, about twice the holes, and a dedicated ramp + chasm section
-    // right before the goal that can't be crossed by rolling at all -- you
-    // have to actually launch off the ramp. Fun and chaos over fairness;
-    // it barely matters how anyone does.
+    // Cut back from seven reversals to five after simulating the original
+    // layout and confirming why it felt impossible: it wasn't just fast,
+    // it had two real bugs. (1) The ramp sat dead-center (x 42-58) while
+    // the wall right before it only opens on the far right (x 68-100) --
+    // every run crossed that gap carrying rightward speed, then had to
+    // yank ~30 units sideways in about 6 units of vertical room to line up
+    // with the ramp, and simulated play missed it and fell in the chasm
+    // basically every single time. (2) Several holes sat right in the
+    // strip a ball is forced to slide along while pinned against a wall
+    // hunting for the gap -- not a dodge, a guaranteed hit. Five reversals
+    // with the ramp aligned to the exit it actually follows, and holes
+    // moved off the pinned corridors, simulated to a 100% completion rate
+    // for a deliberately imperfect bot (reaction lag + imprecise stops) in
+    // well under half the clock -- still fast, still a real dodge, just
+    // not rigged.
     return {
       start: { x: 8, y: 6 },
       goal: { x: 50, y: 97, r: 5 },
       walls: [
-        { x: 0,  y: 13, w: 68, h: 4.5 },  // gap right
-        { x: 32, y: 24, w: 68, h: 4.5 },  // gap left
-        { x: 0,  y: 35, w: 68, h: 4.5 },  // gap right
-        { x: 32, y: 46, w: 68, h: 4.5 },  // gap left
-        { x: 0,  y: 57, w: 68, h: 4.5 },  // gap right
-        { x: 32, y: 68, w: 68, h: 4.5 },  // gap left
-        { x: 0,  y: 79, w: 68, h: 4.5 },  // gap right, into the ramp section
+        { x: 0,  y: 16, w: 68, h: 4.5 },  // gap right (68-100)
+        { x: 32, y: 30, w: 68, h: 4.5 },  // gap left  (0-32)
+        { x: 0,  y: 44, w: 68, h: 4.5 },  // gap right
+        { x: 32, y: 58, w: 68, h: 4.5 },  // gap left
+        { x: 0,  y: 72, w: 68, h: 4.5 },  // gap right, into the ramp section
       ],
       holes: [
-        { x: 74, y: 18, r: 3.4 },
-        { x: 18, y: 20, r: 3.2 },
-        { x: 26, y: 29, r: 3.4 },
-        { x: 74, y: 31, r: 3.2 },
-        { x: 74, y: 40, r: 3.4 },
-        { x: 18, y: 42, r: 3.2 },
-        { x: 26, y: 51, r: 3.4 },
-        { x: 74, y: 53, r: 3.2 },
-        { x: 74, y: 62, r: 3.4 },
-        { x: 18, y: 64, r: 3.2 },
-        { x: 26, y: 73, r: 3.4 },
-        { x: 74, y: 75, r: 3.2 },
-        { x: 50, y: 44, r: 3.4 },
-        // The chasm: three overlapping big holes forming one wide gap
-        // spanning almost the full width. Rolling into any of these fails
-        // the same as any other hole -- only the ramp gets you across.
-        { x: 28, y: 90, r: 8 },
-        { x: 50, y: 90, r: 8 },
-        { x: 72, y: 90, r: 8 },
+        { x: 46, y: 9,  r: 2.6 },
+        { x: 46, y: 23, r: 2.6 },
+        { x: 46, y: 37, r: 2.6 },
+        { x: 46, y: 51, r: 2.6 },
+        { x: 46, y: 65, r: 2.6 },
+        // The chasm, sitting under the ramp's own x-range (which is
+        // aligned with wall 5's exit corridor, not dead-center) instead of
+        // spanning ground you'd otherwise have to scramble sideways
+        // across to reach it.
+        { x: 42, y: 91, r: 8 },
+        { x: 62, y: 91, r: 8 },
+        { x: 82, y: 91, r: 8 },
       ],
       ramps: [
-        { x: 42, y: 84, w: 16, h: 5 },
+        { x: 68, y: 82, w: 22, h: 5 },
       ],
     };
   }
@@ -1354,6 +1359,11 @@ class HeistGame {
       ball: { x: layout.start.x, y: layout.start.y, vx: 0, vy: 0, airborne: false, airborneTimer: 0 },
       resets: 0,
       completed: false,
+      // Falling in a hole sends you back to the last wall you actually got
+      // past, not all the way to the start -- one bad dodge on wall 4
+      // shouldn't force redoing walls 1-3 from scratch.
+      checkpoint: { x: layout.start.x, y: layout.start.y },
+      wallsCleared: 0,
     };
 
     // Distraction work buys you a little breathing room — every hotspot the
@@ -1423,13 +1433,26 @@ class HeistGame {
         }
       }
 
+      // Passed a wall for the first time this run: that's the new
+      // checkpoint. Checked before the hole test below so a hole right
+      // past a wall you just cleared can't strand your checkpoint short
+      // of the wall you're already through.
+      if (m.wallsCleared < layout.walls.length) {
+        const w = layout.walls[m.wallsCleared];
+        if (ball.y > w.y + w.h) {
+          m.checkpoint = { x: ball.x, y: w.y + w.h + 1 };
+          m.wallsCleared++;
+        }
+      }
+
       if (!ball.airborne) {
         const inHole = layout.holes.find(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r);
         if (inHole) {
           m.resets++;
-          ball.x = layout.start.x; ball.y = layout.start.y; ball.vx = 0; ball.vy = 0;
+          ball.x = m.checkpoint.x; ball.y = m.checkpoint.y; ball.vx = 0; ball.vy = 0;
           ball.airborne = false; ball.airborneTimer = 0;
-          this.setHudHint('Down through the housing. Back to the start.',
+          this.setHudHint(
+            m.wallsCleared > 0 ? 'Down through the housing. Back to the last pin you set.' : 'Down through the housing. Back to the start.',
             `+${m.bonusSeconds}s bought by the distractions`);
         }
       }
