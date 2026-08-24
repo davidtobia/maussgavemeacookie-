@@ -1670,6 +1670,43 @@ button.menu-option.cannon-shop-exit-btn:hover {
   background: rgba(212, 165, 116, 0.35);
 }
 
+.heist-jump-btn {
+  position: absolute;
+  right: 20px;
+  bottom: 24px;
+  z-index: 4;
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  font-family: 'VT323', monospace;
+  font-size: 20px;
+  line-height: 1.15;
+  background: rgba(201, 162, 39, 0.85);
+  color: #1a1408;
+  border: 3px solid #5a4a10;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.heist-jump-btn span {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.heist-jump-btn:active,
+.heist-jump-btn.pressed {
+  background: rgba(231, 194, 74, 0.95);
+  transform: scale(0.94);
+}
+
+.heist-jump-btn.hidden {
+  display: none;
+}
+
 .heist-tilt-btn {
   align-self: center;
   margin-bottom: 20px;

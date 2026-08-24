@@ -126,6 +126,7 @@ class HeistGame {
     this.assign = { distractionA: null, distractionB: null, lookout: null };
     this.selectedCrew = null;
     this.crashes = 0;
+    this.bestFlips = 0;
     this.mazeCompleted = false;
 
     this.mech = null;      // active mini-encounter state
@@ -185,6 +186,32 @@ class HeistGame {
       }
       startY = null;
     });
+
+    // Jump button: press to launch, keep holding while airborne to spin
+    // the car for a flip. Doesn't fight the swipe/tap lane logic above --
+    // separate element entirely.
+    const jumpBtn = document.getElementById('heist-jump-btn');
+    const press = (e) => {
+      if (this.phase !== 'getaway') return;
+      e.preventDefault();
+      jumpBtn.classList.add('pressed');
+      this.getawayJumpHeld = true;
+      this.triggerGetawayJump();
+    };
+    const release = () => { jumpBtn.classList.remove('pressed'); this.getawayJumpHeld = false; };
+    jumpBtn.addEventListener('pointerdown', press);
+    jumpBtn.addEventListener('pointerup', release);
+    jumpBtn.addEventListener('pointerleave', release);
+    jumpBtn.addEventListener('pointercancel', release);
+  }
+
+  triggerGetawayJump() {
+    const g = this.mech;
+    if (!g || g.kind !== 'getaway' || g.airborne) return;
+    g.airborne = true;
+    g.jumpVy = -3.4;
+    g.jumpHeight = 0;
+    g.flips = 0;
   }
 
   // Two real, simultaneous fingers: left thumb (wherever it lands on the
@@ -1545,10 +1572,12 @@ class HeistGame {
       lane: 1, laneY: 0, dist: 0, speed: cfg.speed,
       obstacles: [], spawnTimer: 40, offset: 0, bgOffset: 0,
       hitFlash: 0, invuln: 0, crashes: 0, sirens: 0,
+      airborne: false, jumpVy: 0, jumpHeight: 0, flipAngle: 0, flips: 0, bestFlips: 0,
       laneUp: () => { const g = this.mech; if (g && g.lane > 0) g.lane--; },
       laneDown: () => { const g = this.mech; if (g && g.lane < 2) g.lane++; },
     };
     this.mech.laneY = this.laneCenterY(1);
+    this.getawayJumpHeld = false;
 
     // The chase can cost you at most 40% of what you walked out with. Losing
     // the entire take to a phase whose ending is scripted anyway would just be
@@ -1557,11 +1586,12 @@ class HeistGame {
 
     this.showHud(
       `Getaway — ${driver.name} driving`,
-      'Swipe up or down to change lanes (or tap the top/bottom half, or arrow keys).',
+      'Swipe up/down for lanes. Hit JUMP to clear obstacles — hold it in the air to flip.',
       cfg.label
     );
     this.input.onDown = null;
     this.input.onUp = null;
+    document.getElementById('heist-jump-btn').classList.remove('hidden');
     this.getawayLoop();
   }
 
@@ -1588,6 +1618,25 @@ class HeistGame {
     const targetY = this.laneCenterY(g.lane);
     g.laneY += (targetY - g.laneY) * 0.22;
 
+    // Jump: a simple parabola. Holding the button while airborne spins the
+    // car; landing mid-spin banks whatever full rotations you completed.
+    if (g.airborne) {
+      g.jumpVy += 0.16;
+      g.jumpHeight += g.jumpVy;
+      if (this.getawayJumpHeld) g.flipAngle += 0.32;
+      if (g.jumpHeight >= 0) {
+        g.jumpHeight = 0; g.jumpVy = 0; g.airborne = false;
+        const fullFlips = Math.floor(g.flipAngle / (Math.PI * 2) + 0.15);
+        if (fullFlips > 0) {
+          g.flips += fullFlips;
+          g.bestFlips = Math.max(g.bestFlips, fullFlips);
+          this.cash += fullFlips * 30;
+          this.setHudHint(`${fullFlips === 1 ? 'A flip!' : fullFlips + ' flips!'} +$${fullFlips * 30}`, g.cfg.label);
+        }
+        g.flipAngle = 0;
+      }
+    }
+
     g.spawnTimer--;
     if (g.spawnTimer <= 0) {
       g.spawnTimer = g.cfg.spawn + Math.floor(Math.random() * 22);
@@ -1597,7 +1646,7 @@ class HeistGame {
     const px = this.canvas.width * 0.22;
     g.obstacles.forEach(o => {
       o.x -= g.speed;
-      if (o.hit) return;
+      if (o.hit || g.airborne) return; // jumped clean over it
       if (Math.abs(o.x - px) < 44 && Math.abs(this.laneCenterY(o.lane) - g.laneY) < 34) {
         o.hit = true;
         if (g.invuln <= 0) {
@@ -1610,13 +1659,16 @@ class HeistGame {
     });
     g.obstacles = g.obstacles.filter(o => o.x > -120);
 
+    const where = g.sirens < 0.5 ? 'across the Brooklyn Bridge' : 'through Chinatown';
     document.getElementById('heist-hud-meta').textContent =
-      `$${this.cash} in the bag · ${Math.round(g.sirens * 100)}% of the way to the bridge`;
+      `$${this.cash} in the bag · ${Math.round(g.sirens * 100)}% ${where}`;
 
     if (g.dist >= g.cfg.distance) {
       this.crashes = g.crashes;
+      this.bestFlips = g.bestFlips;
       this.stopLoop();
       this.hideHud();
+      document.getElementById('heist-jump-btn').classList.add('hidden');
       this.mech = null;
       this.showEnding();
       return;
@@ -1654,9 +1706,12 @@ class HeistGame {
 
     const driver = getHeistCrew(this.assign.lookout);
     const clean = this.crashes === 0;
-    const flavor = clean
+    let flavor = clean
       ? `${driver.name} drove it clean. Not one scratch on the car. It will be photographed from six angles later tonight.`
       : `${driver.name} took ${this.crashes} ${this.crashes === 1 ? 'hit' : 'hits'} on the way out. Every one of them is on a doorbell camera.`;
+    if (this.bestFlips > 0) {
+      flavor += ` Somewhere over the East River, the car did a ${this.bestFlips === 1 ? 'full flip' : this.bestFlips + '-flip'}. Nobody asked it to.`;
+    }
 
     document.getElementById('heist-ending-flavor').textContent = flavor;
     document.getElementById('heist-ending-take').textContent = `$${this.cash}`;
@@ -1976,32 +2031,17 @@ class HeistGame {
   drawStreetScene() {
     const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
     const g = this.mech;
+    // First half of the run: the Brooklyn Bridge. Second half: Chinatown.
+    const onBridge = g.sirens < 0.5;
 
-    // Night sky
     const sky = ctx.createLinearGradient(0, 0, 0, H * 0.52);
-    sky.addColorStop(0, '#0a1020');
-    sky.addColorStop(1, '#2a2036');
+    if (onBridge) { sky.addColorStop(0, '#0a1020'); sky.addColorStop(1, '#26324a'); }
+    else { sky.addColorStop(0, '#170a1e'); sky.addColorStop(1, '#3a1c2c'); }
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H * 0.52);
 
-    // Parallax building silhouettes
-    const drawBuildings = (off, scale, color, baseY) => {
-      ctx.fillStyle = color;
-      const bw = 90 * scale;
-      const start = -((off % bw) + bw);
-      for (let x = start, i = 0; x < W + bw; x += bw, i++) {
-        const seed = Math.abs(Math.floor((x + off) / bw));
-        const h = (60 + ((seed * 37) % 90)) * scale;
-        ctx.fillRect(x, baseY - h, bw - 6, h);
-        ctx.fillStyle = 'rgba(255,220,150,0.35)';
-        for (let k = 0; k < 4; k++) {
-          if ((seed + k) % 3 === 0) ctx.fillRect(x + 8 + (k % 2) * 22, baseY - h + 10 + k * 16, 8, 10);
-        }
-        ctx.fillStyle = color;
-      }
-    };
-    drawBuildings(g.bgOffset * 0.4, 1.4, '#141b2c', H * 0.52);
-    drawBuildings(g.bgOffset, 1.0, '#0d1220', H * 0.53);
+    if (onBridge) this.drawBridgeBackdrop(g, W, H);
+    else this.drawChinatownBackdrop(g, W, H);
 
     // Road
     const roadTop = H * 0.52, roadBot = H * 0.94;
@@ -2057,6 +2097,97 @@ class HeistGame {
     if (g.hitFlash > 0) {
       ctx.fillStyle = `rgba(224,90,74,${0.16 * (g.hitFlash / 22)})`;
       ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  // Gothic stone towers, catenary main cables, a fan of hanger cables --
+  // the actual Brooklyn Bridge shape, scrolling past at two parallax depths.
+  drawBridgeBackdrop(g, W, H) {
+    const ctx = this.ctx, baseY = H * 0.52;
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    for (let i = 0; i < 40; i++) {
+      const sx = ((i * 97 - g.bgOffset * 0.05) % (W + 40) + W + 40) % (W + 40) - 20;
+      ctx.fillRect(sx, (i * 53) % (H * 0.3), i % 6 === 0 ? 2 : 1, i % 6 === 0 ? 2 : 1);
+    }
+    const drawTower = (cx, scale) => {
+      const towH = 150 * scale, towW = 26 * scale, roadY = baseY;
+      const topY = roadY - towH;
+      ctx.fillStyle = `rgba(160,150,132,${0.5 + scale * 0.35})`;
+      ctx.fillRect(cx - towW * 1.6, topY, towW, towH);
+      ctx.fillRect(cx + towW * 0.6, topY, towW, towH);
+      ctx.fillStyle = `rgba(20,25,40,${0.5 + scale * 0.35})`;
+      [cx - towW * 1.1, cx + towW * 1.1].forEach(archX => {
+        ctx.beginPath(); ctx.arc(archX, topY + towH * 0.22, towW * 0.55, Math.PI, 0); ctx.fill();
+        ctx.fillRect(archX - towW * 0.55, topY + towH * 0.22, towW * 1.1, towH * 0.5);
+      });
+      // Main cable sag between the two towers
+      ctx.strokeStyle = `rgba(180,170,150,${0.4 + scale * 0.4})`;
+      ctx.lineWidth = 2 * scale;
+      ctx.beginPath();
+      ctx.moveTo(cx - towW * 1.6, topY + 10);
+      ctx.quadraticCurveTo(cx, topY + towH * 0.55, cx + towW * 1.6, topY + 10);
+      ctx.stroke();
+    };
+    const spacing = 620;
+    for (let cx = -((g.bgOffset * 0.55) % spacing) - spacing; cx < W + spacing; cx += spacing) {
+      drawTower(cx, 1.0);
+    }
+    for (let cx = -((g.bgOffset * 0.3) % (spacing * 1.4)) - spacing; cx < W + spacing; cx += spacing * 1.4) {
+      drawTower(cx + spacing * 0.6, 0.55);
+    }
+    // A hint of the river far below, past the rail
+    ctx.fillStyle = 'rgba(30,60,110,0.25)';
+    ctx.fillRect(0, baseY - 4, W, 4);
+  }
+
+  // Warm, dense, lantern-strung — the turn onto Canal Street.
+  drawChinatownBackdrop(g, W, H) {
+    const ctx = this.ctx, baseY = H * 0.52;
+    const drawRow = (off, scale, colors, baseAlpha) => {
+      const bw = 78 * scale;
+      const start = -((off % bw) + bw);
+      for (let x = start, i = 0; x < W + bw; x += bw, i++) {
+        const seed = Math.abs(Math.floor((x + off) / bw));
+        const h = (70 + ((seed * 41) % 80)) * scale;
+        const c = colors[seed % colors.length];
+        ctx.globalAlpha = baseAlpha;
+        ctx.fillStyle = c;
+        ctx.fillRect(x, baseY - h, bw - 5, h);
+        // Pagoda-ish upturned roofline on every third building
+        if (seed % 3 === 0) {
+          ctx.beginPath();
+          ctx.moveTo(x - 4, baseY - h);
+          ctx.lineTo(x + (bw - 5) / 2, baseY - h - 14 * scale);
+          ctx.lineTo(x + bw + 1, baseY - h);
+          ctx.closePath();
+          ctx.fill();
+        }
+        // Lit signage — a warm glowing block, red or gold
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = seed % 2 === 0 ? 'rgba(224,74,74,0.55)' : 'rgba(224,180,74,0.5)';
+        ctx.fillRect(x + 6, baseY - h + 14 * scale, bw - 22, 10 * scale);
+        ctx.fillStyle = 'rgba(255,220,150,0.3)';
+        for (let k = 0; k < 3; k++) ctx.fillRect(x + 8 + k * 18, baseY - h + 32 * scale, 8, 9);
+      }
+      ctx.globalAlpha = 1;
+    };
+    drawRow(g.bgOffset * 0.4, 1.3, ['#241522', '#2a1a1a'], 0.55);
+    drawRow(g.bgOffset, 1.0, ['#1c1018', '#221414'], 0.9);
+
+    // Lanterns strung across the street, bobbing gently
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
+    for (let i = 0; i < 6; i++) {
+      const lx = ((i * 210 - g.bgOffset * 0.8) % (W + 260) + W + 260) % (W + 260) - 130;
+      const ly = baseY * 0.28 + Math.sin(this._frame / 40 + i) * 6;
+      ctx.beginPath(); ctx.moveTo(lx - 60, ly - 20); ctx.lineTo(lx + 60, ly - 10); ctx.stroke();
+      [-30, 0, 30].forEach(dx => {
+        const bob = Math.sin(this._frame / 30 + i + dx) * 3;
+        const cy = ly - 16 + (dx / 60) * -10 + bob;
+        ctx.fillStyle = '#d8442e';
+        ctx.beginPath(); ctx.ellipse(lx + dx, cy, 8, 10, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#f1c40f';
+        ctx.fillRect(lx + dx - 1, cy - 12, 2, 4);
+      });
     }
   }
 
@@ -2126,35 +2257,48 @@ class HeistGame {
 
   drawGetawayCar(x, y, g) {
     const ctx = this.ctx;
+    const jumpH = g.jumpHeight || 0;
+    // Shadow stays on the ground and shrinks/fades with height, so the jump
+    // actually reads as height rather than the car just floating.
+    const shadowScale = Math.max(0.35, 1 - Math.abs(jumpH) / 90);
+    ctx.globalAlpha = shadowScale;
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath();
-    ctx.ellipse(x, y + 18, 44, 8, 0, 0, Math.PI * 2);
+    ctx.ellipse(x, y + 18, 44 * shadowScale, 8 * shadowScale, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = 1;
+
+    ctx.save();
+    ctx.translate(x, y + jumpH);
+    if (g.flipAngle) ctx.rotate(g.flipAngle);
+    ctx.translate(-x, -(y + jumpH));
+    const cy = y + jumpH;
 
     const body = g.invuln > 0 && Math.floor(this._frame / 4) % 2 === 0 ? '#8a2b22' : '#b23227';
     ctx.fillStyle = body;
-    ctx.fillRect(x - 44, y - 16, 88, 32);
+    ctx.fillRect(x - 44, cy - 16, 88, 32);
     ctx.fillStyle = '#c8402f';
-    ctx.fillRect(x - 30, y - 26, 54, 12);
+    ctx.fillRect(x - 30, cy - 26, 54, 12);
     ctx.fillStyle = '#1b2a33';
-    ctx.fillRect(x - 26, y - 24, 22, 9);
-    ctx.fillRect(x + 2, y - 24, 20, 9);
+    ctx.fillRect(x - 26, cy - 24, 22, 9);
+    ctx.fillRect(x + 2, cy - 24, 20, 9);
     ctx.fillStyle = '#111';
-    ctx.fillRect(x - 34, y + 14, 16, 8);
-    ctx.fillRect(x + 18, y + 14, 16, 8);
+    ctx.fillRect(x - 34, cy + 14, 16, 8);
+    ctx.fillRect(x + 18, cy + 14, 16, 8);
     // Cash bag on the roof rack, because of course it is
     ctx.fillStyle = '#d9c9a3';
-    ctx.fillRect(x + 26, y - 34, 16, 12);
+    ctx.fillRect(x + 26, cy - 34, 16, 12);
     ctx.fillStyle = '#4a4038';
     ctx.font = '11px VT323, monospace';
     ctx.textAlign = 'center';
-    ctx.fillText('$', x + 34, y - 25);
+    ctx.fillText('$', x + 34, cy - 25);
     // Headlight wash forward
-    const hl = ctx.createLinearGradient(x + 44, y, x + 180, y);
+    const hl = ctx.createLinearGradient(x + 44, cy, x + 180, cy);
     hl.addColorStop(0, 'rgba(255,240,200,0.22)');
     hl.addColorStop(1, 'rgba(255,240,200,0)');
     ctx.fillStyle = hl;
-    ctx.fillRect(x + 44, y - 18, 140, 36);
+    ctx.fillRect(x + 44, cy - 18, 140, 36);
+    ctx.restore();
   }
 
   // --- the bust: the street, frozen, under police lights
