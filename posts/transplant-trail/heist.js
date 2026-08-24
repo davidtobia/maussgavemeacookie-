@@ -412,12 +412,16 @@ class HeistGame {
         <div class="heist-crew-origin">${c.origin}</div>
         <div class="heist-crew-verb">Plays on: ${c.verb}</div>
         <div class="heist-crew-slotline">${role ? role.name : 'Unassigned'}</div>`;
+      // Tap still works exactly as before (pick up, then tap a slot) as a
+      // fallback, but dragging the card straight onto a slot is the primary
+      // interaction now — one gesture instead of two taps.
       card.onclick = () => {
-        // Clicking an already-placed Eric pulls them back out of their slot.
+        if (this._dragJustHappened) return;
         if (role) this.assign[role.id] = null;
         this.selectedCrew = this.selectedCrew === c.id ? null : c.id;
         this.renderRoleUI();
       };
+      card.addEventListener('pointerdown', (e) => this.startCrewDrag(e, c, card));
       crewRow.appendChild(card);
     });
 
@@ -436,6 +440,7 @@ class HeistGame {
       const occupant = this.assign[r.id] ? getHeistCrew(this.assign[r.id]) : null;
       const slot = document.createElement('button');
       slot.className = 'heist-role-slot';
+      slot.dataset.roleId = r.id;
       if (occupant) slot.classList.add('filled');
       slot.innerHTML = `
         <div class="heist-role-name">${r.name}</div>
@@ -444,6 +449,7 @@ class HeistGame {
           ${occupant ? occupant.name : '— empty —'}
         </div>`;
       slot.onclick = () => {
+        if (this._dragJustHappened) return;
         if (occupant && !this.selectedCrew) {
           // Tap a filled slot with nobody picked up: empty it.
           this.assign[r.id] = null;
@@ -466,9 +472,68 @@ class HeistGame {
     } else if (this.selectedCrew) {
       hint.textContent = `${getHeistCrew(this.selectedCrew).name} is picked up. Now choose a slot.`;
     } else {
-      hint.textContent = 'Choose a name, then choose their slot. Tap a placed name again to pull them back.';
+      hint.textContent = 'Drag a name onto a slot — or tap a name, then tap a slot.';
     }
     document.getElementById('heist-roles-confirm').disabled = !this.assignmentComplete();
+  }
+
+  // A real drag: pick up a crew card, a ghost follows the pointer/finger,
+  // whichever slot it's over highlights, and letting go over a slot
+  // assigns them there in one motion. A small movement threshold before
+  // the ghost appears means a plain tap still falls through to the
+  // existing click handler untouched — nothing about tap-to-pick-up,
+  // tap-to-place breaks, this is just a faster path to the same result.
+  startCrewDrag(e, crew, cardEl) {
+    if (this.phase !== 'roles') return;
+    const startX = e.clientX, startY = e.clientY;
+    let dragging = false, ghost = null;
+
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      if (!dragging) {
+        if (Math.hypot(dx, dy) < 8) return;
+        dragging = true;
+        this._dragJustHappened = true;
+        cardEl.classList.add('dragging');
+        ghost = cardEl.cloneNode(true);
+        ghost.classList.add('heist-crew-ghost');
+        ghost.style.borderColor = crew.color;
+        document.body.appendChild(ghost);
+      }
+      ghost.style.left = ev.clientX + 'px';
+      ghost.style.top = ev.clientY + 'px';
+      document.querySelectorAll('.heist-role-slot').forEach(s => s.classList.remove('drag-over'));
+      const under = document.elementFromPoint(ev.clientX, ev.clientY);
+      const slotEl = under && under.closest('.heist-role-slot[data-role-id]');
+      if (slotEl) slotEl.classList.add('drag-over');
+    };
+
+    const onUp = (ev) => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.querySelectorAll('.heist-role-slot').forEach(s => s.classList.remove('drag-over'));
+      if (!dragging) return;
+      cardEl.classList.remove('dragging');
+      if (ghost) ghost.remove();
+
+      const under = document.elementFromPoint(ev.clientX, ev.clientY);
+      const slotEl = under && under.closest('.heist-role-slot[data-role-id]');
+      if (slotEl) {
+        const roleId = slotEl.dataset.roleId;
+        const prev = this.assignedRoleOf(crew.id);
+        if (prev) this.assign[prev.id] = null;
+        this.assign[roleId] = crew.id;
+      }
+      // Dropped somewhere that isn't a slot: nothing changes, card just
+      // stays exactly where it already was -- no accidental unassign from
+      // an imprecise drop.
+      this.selectedCrew = null;
+      this.renderRoleUI();
+      setTimeout(() => { this._dragJustHappened = false; }, 60);
+    };
+
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
   }
 
   // ------------------------------------------------

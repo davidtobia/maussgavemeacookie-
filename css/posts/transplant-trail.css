@@ -1786,9 +1786,30 @@ button.menu-option.cannon-shop-exit-btn:hover {
   opacity: 0.55;
 }
 
+.heist-crew-card.dragging {
+  opacity: 0.3;
+}
+
+/* The floating clone that follows the pointer/finger during a drag */
+.heist-crew-ghost {
+  position: fixed;
+  z-index: 50;
+  width: 150px;
+  transform: translate(-50%, -50%) scale(1.06) rotate(-2deg);
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  opacity: 0.95;
+}
+
 .heist-role-slot.filled {
   border-color: #d4a574;
   background: #150f0a;
+}
+
+.heist-role-slot.drag-over {
+  border-color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  transform: scale(1.04);
 }
 
 .heist-role-fixed {
