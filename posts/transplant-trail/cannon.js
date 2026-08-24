@@ -500,6 +500,7 @@ class CannonGame {
       riverEventTimer: 0,
       splashed: false, splashTimer: 0, splashX: 0,
       jetpackHeat: 0, exploded: false,
+      groundSpawnCount: 0, ratSpawned: false,
     };
 
     const hud = document.getElementById('cannon-flight-hud');
@@ -805,29 +806,40 @@ class CannonGame {
   }
 
   spawnGround() {
-    const W = this.canvas.width, r = Math.random();
+    const W = this.canvas.width, r = Math.random(), f = this.flight;
     const borough = this.ts.targetBorough;
-    const river = this.flight.river;
-    // Guys throwing pizza from rowboats, specifically out on the Hudson —
-    // Hoboken's signature hazard, right where the crossing actually happens.
-    const onHobokenRiver = borough === 'hoboken' && river &&
-      this.flight.distance >= river.atBlock - 60 && this.flight.distance < river.atBlock + river.width + 60;
+    const river = f.river;
+    f.groundSpawnCount = (f.groundSpawnCount || 0) + 1;
+
+    // Rat mode is meant to be something most players actually see, not a rare
+    // roll — it was buried in a 14% slice of a pool that itself only fires
+    // when a borough's own hazard doesn't. Guarantee it by a player's 4th
+    // ground encounter if it hasn't happened yet, ahead of everything else.
     let type;
-    if      (onHobokenRiver && r < 0.55) type = 'pizza_boat';
-    else if (borough === 'hoboken'          && r < 0.45) type = r < 0.25 ? 'pizza_man' : 'drunk_vomit';
-    else if (borough === 'bushwick'         && r < 0.40) type = 'drunk_vomit';
-    else if (borough === 'brooklyn-heights' && r < 0.40) type = 'stroller_launcher';
-    else if (borough === 'astoria'          && r < 0.40) type = 'greek_grandpa';
-    else {
-      if      (r < 0.18) type = 'dumpster';
-      else if (r < 0.32) type = 'rat_dumpster';
-      else if (r < 0.46) type = 'hydrant';
-      else if (r < 0.58) type = 'subway_grate';
-      else if (r < 0.70) type = 'hotdog_cart';
-      else if (r < 0.82) type = 'manhole';
-      else                type = 'cab_ground';
+    if (!f.ratSpawned && f.groundSpawnCount >= 4) {
+      type = 'rat_dumpster';
+    } else {
+      // Guys throwing pizza from rowboats, specifically out on the Hudson —
+      // Hoboken's signature hazard, right where the crossing actually happens.
+      const onHobokenRiver = borough === 'hoboken' && river &&
+        f.distance >= river.atBlock - 60 && f.distance < river.atBlock + river.width + 60;
+      if      (onHobokenRiver && r < 0.55) type = 'pizza_boat';
+      else if (borough === 'hoboken'          && r < 0.45) type = r < 0.25 ? 'pizza_man' : 'drunk_vomit';
+      else if (borough === 'bushwick'         && r < 0.40) type = 'drunk_vomit';
+      else if (borough === 'brooklyn-heights' && r < 0.40) type = 'stroller_launcher';
+      else if (borough === 'astoria'          && r < 0.40) type = 'greek_grandpa';
+      else {
+        if      (r < 0.15) type = 'dumpster';
+        else if (r < 0.40) type = 'rat_dumpster';
+        else if (r < 0.54) type = 'hydrant';
+        else if (r < 0.66) type = 'subway_grate';
+        else if (r < 0.78) type = 'hotdog_cart';
+        else if (r < 0.90) type = 'manhole';
+        else                type = 'cab_ground';
+      }
     }
-    this.flight.entities.push({ type, x: W + 60, groundEnt: true, lastShot: 0, collected: false });
+    if (type === 'rat_dumpster') f.ratSpawned = true;
+    f.entities.push({ type, x: W + 60, groundEnt: true, lastShot: 0, collected: false });
   }
 
   // Ground hazards (dumpsters, hydrants, every borough-specific launcher) used
@@ -1534,15 +1546,42 @@ class CannonGame {
     ctx.fillStyle = '#d4a574'; ctx.font = '18px VT323'; ctx.textAlign = 'center';
     ctx.fillText('Turn ' + this.ts.currentTurn, W/2, 24);
 
-    // Target borough
+    // Target borough + live progress strip — same visual language as the aim
+    // screen's distance strip, but tracking your actual position in real
+    // time: where the river is, where the finish line is, and where you are
+    // right now, so "how am I doing" is never a guess mid-flight.
     if (this.ts.targetBorough) {
       const tb = TARGET_BOROUGHS.find(b => b.id === this.ts.targetBorough);
       if (tb) {
-        ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(W/2 - 115, H - 34, 230, 28);
-        ctx.fillStyle = tb.color; ctx.font = '18px VT323'; ctx.textAlign = 'center';
         const hs = this.ts.highScores[tb.id];
         const done = this.ts.unlocks.includes(tb.id);
-        ctx.fillText((done ? '✓ ' : '') + tb.name + (hs ? ' · best ' + hs : ''), W/2, H - 14);
+        const panelH = tb.river ? 52 : 28;
+        const panelY = H - panelH - 8;
+
+        ctx.fillStyle = 'rgba(0,0,0,0.62)'; ctx.fillRect(W/2 - 140, panelY, 280, panelH);
+        ctx.fillStyle = tb.color; ctx.font = '17px VT323'; ctx.textAlign = 'center';
+        ctx.fillText((done ? '✓ ' : '') + tb.name + (hs ? ' · best ' + hs : ''), W/2, panelY + 18);
+
+        if (tb.river) {
+          const stripY = panelY + 26, stripX = W/2 - 120, stripW = 240, stripH = 12;
+          const maxD = tb.minBlocks * 1.15;
+          const toX = (d) => stripX + Math.min(1, Math.max(0, d / maxD)) * stripW;
+
+          ctx.fillStyle = '#3a3a3a'; ctx.fillRect(stripX, stripY, stripW, stripH);
+          const rX0 = toX(tb.river.atBlock), rX1 = toX(tb.river.atBlock + tb.river.width);
+          ctx.fillStyle = '#3a6ea8'; ctx.fillRect(rX0, stripY, rX1 - rX0, stripH);
+
+          const finishX = toX(tb.minBlocks);
+          ctx.strokeStyle = tb.color; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(finishX, stripY - 3); ctx.lineTo(finishX, stripY + stripH + 3); ctx.stroke();
+
+          // Where you actually are right now
+          const curX = toX(f.distance);
+          ctx.fillStyle = '#fff';
+          ctx.beginPath();
+          ctx.moveTo(curX, stripY - 7); ctx.lineTo(curX - 5, stripY - 1); ctx.lineTo(curX + 5, stripY - 1);
+          ctx.closePath(); ctx.fill();
+        }
       }
     }
 
