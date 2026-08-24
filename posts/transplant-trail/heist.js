@@ -100,13 +100,27 @@ const HEIST_TUNING = {
     ballRadius: 2.6,
   },
   getaway: {
-    // Whichever Eric ended up on Lookout is the one behind the wheel. Distance
-    // is in world pixels, so distance/speed/60 is the run in seconds:
-    // Tony ~24s of fast dense traffic, Ruhul ~20s because he knows a street,
-    // Dmitri ~26s at one unchanging speed with the most room between hazards.
-    tony:   { speed: 9.0, spawn: 34, distance: 13000, label: 'Big Tony drives.' },
-    ruhul:  { speed: 7.4, spawn: 44, distance: 9000,  label: 'Ruhul knows a shortcut.' },
-    dmitri: { speed: 6.6, spawn: 56, distance: 10500, label: 'Dmitri drives. Dmitri always drives like this.' },
+    // Not a finish line anymore -- "no matter what they will be caught,
+    // but as they get nitro or shoot cops it'll go down... in the end
+    // they'll get caught no matter what after 75 seconds or so." Fixed
+    // real-time run for everyone (so there's actually time to go through
+    // the motions: shoot some cops, maybe the chopper, jump if you feel
+    // like it) with a HEAT meter that's always drifting toward capture
+    // and only good play pushes back against it. Whichever Eric ended up
+    // on Lookout is still the one behind the wheel -- speed/spawn density
+    // are their personality now, not a race distance.
+    duration: 55,
+    tony:   { speed: 9.0, spawn: 34, label: 'Big Tony drives.' },
+    ruhul:  { speed: 7.4, spawn: 44, label: 'Ruhul knows a shortcut.' },
+    dmitri: { speed: 6.6, spawn: 56, label: 'Dmitri drives. Dmitri always drives like this.' },
+    heat: {
+      start: 22,
+      driftPerSecond: 0.88, // ~66 of drift alone over 75s -- capture is coming regardless
+      crashAdd: 8,
+      copKillSub: 6,
+      heliKillSub: 20,
+      nitroSub: 6,
+    },
   },
   cashMazeComplete: 420,
   cashPerSecondLeft: 10,
@@ -242,7 +256,23 @@ class HeistGame {
     const g = this.mech;
     if (!g || g.kind !== 'getaway' || g.aiming || g.rocketAmmo <= 0) return;
     g.rocketAmmo--;
-    const startPoint = (g.heli && !g.heli.destroyed) ? { x: g.heli.x, y: g.heli.y } : { x: this.canvas.width * 0.6, y: this.canvas.height * 0.6 };
+    // Snap the reticle to a real target to start, not empty road -- the
+    // helicopter barely moves so it was always easy, but cop cars are
+    // fast-moving and the reticle used to default to screen-center, miles
+    // from wherever a cruiser actually was (confirmed: "the rocket didn't
+    // work on the cops, it did on the helicopter" -- this is why).
+    let startPoint = null;
+    if (g.heli && !g.heli.destroyed) startPoint = { x: g.heli.x, y: g.heli.y };
+    else {
+      let best = null, bestDist = Infinity;
+      g.obstacles.forEach(o => {
+        if (o.kind !== 'cop' || o.destroyed) return;
+        const oy = this.laneCenterY(o.lane);
+        const d = Math.abs(o.x - this.canvas.width * 0.22);
+        if (d < bestDist) { bestDist = d; best = { x: o.x, y: oy }; }
+      });
+      startPoint = best || { x: this.canvas.width * 0.6, y: this.canvas.height * 0.6 };
+    }
     g.aiming = { x: startPoint.x, y: startPoint.y, timer: 180 };
     this.updateGetawayButtons();
   }
@@ -295,6 +325,7 @@ class HeistGame {
     if (!g || g.kind !== 'getaway' || g.nitro <= 0 || g.nitroActive > 0) return;
     g.nitro--;
     g.nitroActive = 90;
+    g.heat = Math.max(0, g.heat - HEIST_TUNING.getaway.heat.nitroSub);
   }
 
   // One button fires whatever's currently loaded -- bullets down cop cars,
@@ -1467,10 +1498,10 @@ class HeistGame {
     }
 
     // Holes AND cash, scattered randomly across every cell (path included),
-    // offset within the cell instead of dead-center. Simulated with a bot
-    // that dodges holes it can see coming (not a perfect solver) across
-    // 40 generated mazes to land on a chance/spacing/speed combo that's a
-    // real fight but not a wall: ~58% clean completions.
+    // offset within the cell instead of dead-center. Bumped up from 4.5%
+    // to 6.5% per hole per cell on direct feedback ("add more holes to
+    // make it slightly more difficult") -- still spaced apart so a bad
+    // pair can't combine into a real blockage.
     const startKey = key(start.r, start.c), goalKey = key(goal.r, goal.c);
     const holes = [], cash = [];
     const denomTable = [
@@ -1481,7 +1512,7 @@ class HeistGame {
       const k = key(r, c);
       if (k === startKey || k === goalKey) continue;
       const p = this.mazeCellCenter(r, c);
-      if (Math.random() < 0.045) {
+      if (Math.random() < 0.065) {
         const maxOff = CELL * 0.24;
         const x = p.x + (Math.random() * 2 - 1) * maxOff, y = p.y + (Math.random() * 2 - 1) * maxOff;
         // Skip if this lands too close to an existing hole -- avoids an
@@ -1622,9 +1653,20 @@ class HeistGame {
       const inHole = layout.holes.find(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r);
       if (inHole) {
         m.resets++;
+        // Whatever cash you'd grabbed this run spills out right where you
+        // fell -- real stakes for pushing your luck, but not gone for
+        // good: it's sitting there as a pile if you make it back.
+        let dropLine = '';
+        if (m.cashCollected > 0) {
+          const dropped = m.cashCollected;
+          this.cash -= dropped;
+          m.cashCollected = 0;
+          layout.cash.push({ x: ball.x, y: ball.y, value: dropped, collected: false, dropped: true });
+          dropLine = ` Dropped $${dropped} right there.`;
+        }
         ball.x = m.checkpoint.x; ball.y = m.checkpoint.y; ball.vx = 0; ball.vy = 0;
         this.setHudHint(
-          `Down through the floor. ${m.maxPathIndex > 0 ? 'Back to the last spot you cleared.' : 'Back to the start.'}`,
+          `Down through the floor.${dropLine} ${m.maxPathIndex > 0 ? 'Back to the last spot you cleared.' : 'Back to the start.'}`,
           `+${m.bonusSeconds}s bought by the distractions`);
       }
 
@@ -1704,13 +1746,23 @@ class HeistGame {
       obstacles: [], spawnTimer: 40, offset: 0, bgOffset: 0,
       hitFlash: 0, invuln: 0, crashes: 0, sirens: 0,
       airborne: false, jumpVy: 0, jumpHeight: 0, flipAngle: 0, flips: 0, bestFlips: 0,
+      jumpUnlocked: false,
+      // Elapsed real time drives the run now, not a distance to a finish
+      // line -- capture is inevitable at HEIST_TUNING.getaway.duration
+      // seconds no matter what. heat is how close: drifts up on its own,
+      // pushed back down by good play.
+      elapsed: 0, durationFrames: HEIST_TUNING.getaway.duration * 60,
+      heat: HEIST_TUNING.getaway.heat.start,
       // Pickups: nitro charges (burn for a speed burst), stacked permanent
       // speed bonus from speed powerups (each one also lights the exhaust
       // for good), gun/rocket ammo, live shots in flight, explosion
-      // particles, the helicopter (null until it shows up), jumped-off flag.
+      // particles, the helicopter (null until it shows up), a separate
+      // cop-spawn clock (cops come from behind now, not the normal ahead
+      // traffic), jumped-off flag.
       nitro: 0, nitroActive: 0, speedBonus: 0, fireTrail: false,
       gunAmmo: 0, rocketAmmo: 0, shots: [], particles: [],
       heli: null, heliDone: false, jumpedOff: false,
+      copSpawnTimer: 90,
       // Guaranteed pickups: relying purely on random spawn chance meant a
       // run could easily end without ever handing you a gun (confirmed --
       // "I never got the ability to shoot the guns" was bad luck on a
@@ -1723,7 +1775,7 @@ class HeistGame {
       laneUp: () => { const g = this.mech; if (g && g.lane > 0) g.lane--; },
       laneDown: () => { const g = this.mech; if (g && g.lane < 2) g.lane++; },
     };
-    this.mech.nextGuaranteedAt = this.mech.cfg.distance * 0.16;
+    this.mech.nextGuaranteedAt = this.mech.durationFrames * 0.12;
     this.mech.laneY = this.laneCenterY(1);
     this.getawayJumpHeld = false;
     this.jumpedOffBridge = false;
@@ -1741,6 +1793,10 @@ class HeistGame {
     this.input.onDown = null;
     this.input.onUp = null;
     document.getElementById('heist-getaway-controls').classList.remove('hidden');
+    // Jump comes in a little later -- direct feedback: "the jump button
+    // is there from the start, that should only come in later." Lanes and
+    // dodging first, everything else layers on as the run goes.
+    document.getElementById('heist-jump-btn').classList.add('hidden');
     document.getElementById('heist-jumpout-btn').classList.remove('hidden');
     this.updateGetawayButtons();
     this.getawayLoop();
@@ -1765,6 +1821,7 @@ class HeistGame {
     rocketBtn.disabled = !!g.aiming;
     document.getElementById('heist-rocket-count').textContent = g.aiming ? '…' : g.rocketAmmo;
     document.getElementById('heist-jumpout-btn').classList.toggle('hidden', g.sirens >= 0.5 || g.jumpedOff);
+    document.getElementById('heist-jump-btn').classList.toggle('hidden', !g.jumpUnlocked);
   }
 
   laneCenterY(lane) {
@@ -1786,14 +1843,30 @@ class HeistGame {
       g.aiming.timer--;
       if (g.aiming.timer <= 0) this.confirmGetawayAim();
     }
-    const slow = g.aiming ? 0.1 : 1;
+    // Clearly slowed, not frozen -- direct feedback was "I don't know
+    // that the bullet time thing worked," which at a near-full stop reads
+    // as the game hanging rather than a deliberate effect.
+    const slow = g.aiming ? 0.24 : 1;
 
+    g.elapsed += slow;
     g.dist += g.speed * slow;
     g.offset += g.speed * slow;
     g.bgOffset += g.speed * 0.28 * slow;
     if (g.hitFlash > 0) g.hitFlash--;
     if (g.invuln > 0) g.invuln--;
-    g.sirens = Math.min(1, g.dist / g.cfg.distance);
+    g.sirens = Math.min(1, g.elapsed / g.durationFrames);
+
+    // Heat only ever drifts up on its own -- capture is coming regardless
+    // -- good play (nitro, taking out a cruiser or the chopper) is what
+    // buys you a lower number at the end, not a way to avoid it outright.
+    const heatCfg = HEIST_TUNING.getaway.heat;
+    g.heat = Math.min(100, g.heat + (heatCfg.driftPerSecond / 60) * slow);
+
+    if (!g.jumpUnlocked && g.elapsed > 480) {
+      g.jumpUnlocked = true;
+      document.getElementById('heist-jump-btn').classList.remove('hidden');
+      this.setHudHint('Jump unlocked. Hold it in the air to flip.', g.cfg.label);
+    }
 
     // Ease toward the target lane instead of snapping — reads as driving.
     const targetY = this.laneCenterY(g.lane);
@@ -1832,10 +1905,10 @@ class HeistGame {
 
       // Force-spawn the next guaranteed pickup regardless of the random
       // roll above, spaced through the run so you actually see all four.
-      if (g.pickupQueue.length > 0 && g.dist >= g.nextGuaranteedAt) {
+      if (g.pickupQueue.length > 0 && g.elapsed >= g.nextGuaranteedAt) {
         const type = g.pickupQueue.shift();
         g.obstacles.push({ kind: 'pickup', type, lane: Math.floor(Math.random() * 3), x: this.canvas.width + 80, hit: false });
-        g.nextGuaranteedAt += g.cfg.distance * 0.22;
+        g.nextGuaranteedAt += g.durationFrames * 0.20;
       }
     }
 
@@ -1883,6 +1956,7 @@ class HeistGame {
           g.invuln = 45;
           g.hitFlash = 22;
           g.crashes++;
+          g.heat = Math.min(100, g.heat + HEIST_TUNING.getaway.heat.crashAdd);
           this.cash = Math.max(this.bagFloor, this.cash - HEIST_TUNING.cashLostPerCrash);
         }
       }
@@ -1891,12 +1965,13 @@ class HeistGame {
 
     const where = g.sirens < 0.5 ? 'across the Brooklyn Bridge' : 'through Chinatown';
     document.getElementById('heist-hud-meta').textContent =
-      `$${this.cash} in the bag · ${Math.round(g.sirens * 100)}% ${where}`;
+      `$${this.cash} in the bag · Heat ${Math.round(g.heat)}% · ${where}`;
     this.updateGetawayButtons();
 
-    if (g.dist >= g.cfg.distance) {
+    if (g.elapsed >= g.durationFrames) {
       this.crashes = g.crashes;
       this.bestFlips = g.bestFlips;
+      this.finalHeat = g.heat;
       this.stopLoop();
       this.hideHud();
       document.getElementById('heist-getaway-controls').classList.add('hidden');
@@ -2029,10 +2104,12 @@ class HeistGame {
       flavor = `${driver.name} watched the car go on without you. You and the bag went off the rail and into the East River instead -- cold, but nobody follows you in.`;
     } else {
       this.bustLoop();
-      const clean = this.crashes === 0;
-      flavor = clean
-        ? `${driver.name} drove it clean. Not one scratch on the car. It will be photographed from six angles later tonight.`
-        : `${driver.name} took ${this.crashes} ${this.crashes === 1 ? 'hit' : 'hits'} on the way out. Every one of them is on a doorbell camera.`;
+      const heat = this.finalHeat != null ? this.finalHeat : 100;
+      flavor = heat < 45
+        ? `${driver.name} nearly made it. It takes them longer than it should to even find the car.`
+        : heat < 75
+        ? `${driver.name} took ${this.crashes} ${this.crashes === 1 ? 'hit' : 'hits'} on the way. They're on you before the engine cools.`
+        : `${driver.name} never really had a chance to lose them. The block is swarmed inside a minute.`;
       if (this.bestFlips > 0) {
         flavor += ` Somewhere over the East River, the car did a ${this.bestFlips === 1 ? 'full flip' : this.bestFlips + '-flip'}. Nobody asked it to.`;
       }
@@ -2251,9 +2328,16 @@ class HeistGame {
 
   // --- the register close-up
   mazeBounds() {
+    // Centered in the space actually available between the HUD strip up
+    // top and the D-pad down below -- a fixed "15% from the top" offset
+    // left a lot of dead air underneath on a tall phone screen, since the
+    // board's width (not height) is what caps its size there. Direct
+    // feedback: "very high on the screen, not really balanced."
     const W = this.canvas.width, H = this.canvas.height;
-    const side = Math.min(W * 0.86, H * 0.72);
-    return { x: (W - side) / 2, y: H * 0.15, w: side, h: side };
+    const top = H * 0.10, bottom = H * 0.86;
+    const availH = bottom - top;
+    const side = Math.min(W * 0.92, availH);
+    return { x: (W - side) / 2, y: top + (availH - side) / 2, w: side, h: side };
   }
 
   drawMazeScene() {
@@ -2316,10 +2400,26 @@ class HeistGame {
     });
 
     // Cash -- bills sized and colored by denomination, gone once collected.
+    // A dropped pile (spilled from a hole fall) renders as a stack of
+    // bills instead of one, so it reads as "everything you were
+    // carrying," not just another pickup.
     const cashColor = { 1: '#7ec89a', 5: '#7ec89a', 10: '#d4c574', 20: '#d4a574', 100: '#e0c04a' };
     layout.cash.forEach(c => {
       if (c.collected || !visible(c.x, c.y)) return;
       const [cx, cy] = toPx(c.x, c.y);
+      if (c.dropped) {
+        const w2 = toPxLen(5.4), h2 = toPxLen(3.2);
+        [-2, 0, 2].forEach((off, i) => {
+          ctx.fillStyle = i === 1 ? '#e0c04a' : '#c9a84a';
+          ctx.fillRect(cx - w2 / 2 + off, cy - h2 / 2 - off * 0.6, w2, h2);
+          ctx.strokeStyle = '#1a2e1f'; ctx.lineWidth = 1;
+          ctx.strokeRect(cx - w2 / 2 + off, cy - h2 / 2 - off * 0.6, w2, h2);
+        });
+        ctx.fillStyle = '#1a2e1f';
+        ctx.font = '10px VT323, monospace'; ctx.textAlign = 'center';
+        ctx.fillText('$' + c.value, cx, cy + 3.5);
+        return;
+      }
       const scale = 0.55 + Math.min(1, c.value / 100) * 0.5;
       const w2 = toPxLen(4.6) * scale, h2 = toPxLen(2.8) * scale;
       ctx.fillStyle = cashColor[c.value] || '#7ec89a';
@@ -2455,14 +2555,19 @@ class HeistGame {
     ctx.fillStyle = glow;
     ctx.fillRect(sx - 100, this.laneCenterY(1) - 150, 300, 300);
 
-    // Progress bar
+    // Heat bar -- not "how far to the finish," how close to caught. Always
+    // drifting up; good play buys it back down, never stops it outright.
     const pw = W * 0.7, pxx = W * 0.15, py = H * 0.045;
     ctx.fillStyle = 'rgba(0,0,0,0.6)';
     ctx.fillRect(pxx - 4, py - 4, pw + 8, 18);
     ctx.fillStyle = '#191919';
     ctx.fillRect(pxx, py, pw, 10);
-    ctx.fillStyle = '#d4a574';
-    ctx.fillRect(pxx, py, pw * Math.min(1, g.dist / g.cfg.distance), 10);
+    const heatFrac = Math.min(1, g.heat / 100);
+    ctx.fillStyle = heatFrac < 0.45 ? '#7ec89a' : heatFrac < 0.75 ? '#d4a574' : '#e05a4a';
+    ctx.fillRect(pxx, py, pw * heatFrac, 10);
+    ctx.fillStyle = '#c8b89c';
+    ctx.font = '10px VT323, monospace'; ctx.textAlign = 'center';
+    ctx.fillText('HEAT', pxx + pw / 2, py + 9);
 
     if (g.hitFlash > 0) {
       ctx.fillStyle = `rgba(224,90,74,${0.16 * (g.hitFlash / 22)})`;
