@@ -22,6 +22,17 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Applied to <html> and <body> by game.js while a canvas mini-game
+   (cannon/heist/bodega) is open, so a stray pinch/double-tap can't zoom
+   the page no matter which element either finger actually lands on --
+   see showScreen() for why this needed to move up from the individual
+   screens/canvases to the document root. */
+html.game-zoom-lock,
+body.game-zoom-lock {
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
 /* Game Container */
 .game-container {
   min-height: 100vh;
