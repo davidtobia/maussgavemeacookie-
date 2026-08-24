@@ -681,7 +681,12 @@ class TrailGame {
       // Save chapter 3 checkpoint after cannon game completes
       game.saveChapter(3, this.getTrailStateSnapshot());
       game.showScreen('trail-screen');
-      this.start();
+      if (result && result.wisemenJoined) {
+        this.gameState.wisemenJoined = true;
+        this.showEvent("Big Tony, Ruhul, and Dmitri fall in step behind you. You've earned New York.", () => this.start());
+      } else {
+        this.start();
+      }
     });
     cannonGame.init();
   }

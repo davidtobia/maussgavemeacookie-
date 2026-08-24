@@ -20,7 +20,7 @@ const CANNON_UPGRADES = {
     { id: 'naked',   label: 'Just Vibes',   cost: 0,    flapForce: 2.5, cooldownFrames: 62, drag: 0.24, desc: 'Barely works. One weak flap/sec. You will land.' },
     { id: 'pigeon',  label: 'Pigeon Wings', cost: 250,  flapForce: 4,   cooldownFrames: 40, drag: 0.14, desc: 'Real lift — stay up much longer.' },
     { id: 'eagle',   label: 'Eagle Suit',   cost: 900,  flapForce: 6,   cooldownFrames: 22, drag: 0.07, desc: 'Strong, sustained lift. Built for endurance flights.' },
-    { id: 'jetpack', label: 'Jetpack',      cost: 2000, flapForce: 15,  cooldownFrames: 6,  drag: 0.03, desc: 'Near-infinite flight. Only damage stops you.' },
+    { id: 'jetpack', label: 'Jetpack',      cost: 2000, flapForce: 15,  cooldownFrames: 6,  drag: 0.03, desc: 'Massive lift. Mash it too hard and it explodes.' },
   ],
   rocket: [
     { id: 'none',  label: 'No Rocket',    cost: 0,   boost: 0  },
@@ -72,12 +72,12 @@ const TARGET_BOROUGHS = [
 
 const GROUND_ENTITY_TYPES = new Set([
   'dumpster','rat_dumpster','hydrant','subway_grate','hotdog_cart','manhole','cab_ground',
-  'pizza_man','drunk_vomit','stroller_launcher','greek_grandpa',
+  'pizza_man','drunk_vomit','stroller_launcher','greek_grandpa','pizza_boat',
 ]);
 const ARC_TYPES     = new Set(['pizza_arc','vomit_arc','baby_arc','plate_arc']);
-const LAUNCHER_TYPES = new Set(['pizza_man','drunk_vomit','stroller_launcher','greek_grandpa']);
-const LAUNCH_INTERVALS = { pizza_man: 65, drunk_vomit: 80, stroller_launcher: 75, greek_grandpa: 68 };
-const LAUNCHER_ARC  = { pizza_man: 'pizza_arc', drunk_vomit: 'vomit_arc', stroller_launcher: 'baby_arc', greek_grandpa: 'plate_arc' };
+const LAUNCHER_TYPES = new Set(['pizza_man','drunk_vomit','stroller_launcher','greek_grandpa','pizza_boat']);
+const LAUNCH_INTERVALS = { pizza_man: 65, drunk_vomit: 80, stroller_launcher: 75, greek_grandpa: 68, pizza_boat: 50 };
+const LAUNCHER_ARC  = { pizza_man: 'pizza_arc', drunk_vomit: 'vomit_arc', stroller_launcher: 'baby_arc', greek_grandpa: 'plate_arc', pizza_boat: 'pizza_arc' };
 
 // ============================================
 // CANNON GAME CLASS
@@ -499,6 +499,7 @@ class CannonGame {
       river: targetB ? { ...targetB.river, crossed: !targetB.river, active: false, timer: 0 } : null,
       riverEventTimer: 0,
       splashed: false, splashTimer: 0, splashX: 0,
+      jetpackHeat: 0, exploded: false,
     };
 
     const hud = document.getElementById('cannon-flight-hud');
@@ -520,6 +521,26 @@ class CannonGame {
     if (f.vy > 20) f.vy = 20;
     f.flapCooldown = f.flapCooldownMax;
     f.flapFlash = 10;
+    // Jetpack isn't actually infinite — lean on it too hard and it cooks off.
+    // Heat builds fast on rapid firing and bleeds off slowly between flaps, so
+    // steady use is fine but mashing nonstop eventually blows you up.
+    if (f.suitId === 'jetpack') {
+      f.jetpackHeat = Math.min(100, f.jetpackHeat + 9);
+      if (f.jetpackHeat >= 100) this.triggerExplosion();
+    }
+  }
+
+  // Jetpack overheat — a comedic hard stop so "near-infinite flight" doesn't
+  // mean literally infinite. Ends the flight immediately, no unlock either way.
+  triggerExplosion() {
+    const f = this.flight;
+    if (!f || f.exploded) return;
+    f.exploded = true;
+    f.damage = 100;
+    f.splashTimer = 40; // reuse the same lingering-visual beat as a splash
+    f.vx = 0; f.vy = 0;
+    f.sliding = false; f.ratMode = false;
+    f.landed = true;
   }
 
   useRocket() {
@@ -613,7 +634,7 @@ class CannonGame {
       if (f.spawnTimer % 55 === 0) this.spawnGround();
       this.updateLaunchersAndArcs();
       f.entities = f.entities.filter(e => { e.x -= f.ratVx * 0.8 + 1; return e.x > -120; });
-      this.checkCollisions(true);
+      this.checkCollisions();
       if (f.ratVx < 0.4) f.landed = true;
       return;
     }
@@ -630,7 +651,7 @@ class CannonGame {
       if (f.spawnTimer % 80 === 0) this.spawnGround();
       this.updateLaunchersAndArcs();
       f.entities = f.entities.filter(e => { e.x -= f.vx * 0.8 + 1; return e.x > -120; });
-      this.checkCollisions(true);
+      this.checkCollisions();
       if (f.vx < 0.4) f.landed = true;
       return;
     }
@@ -638,13 +659,15 @@ class CannonGame {
     // ---- AIRBORNE ----
     // Fatigue: past ~40s of flight, a gentle extra pull kicks in and ramps up over
     // the next minute or so. Backstops naked/pigeon/eagle so a flight can't run
-    // forever even with perfect play and good luck. Jetpack's lift is strong enough
-    // to outlast even this — by design, it's the one tier where only a hazard hit
-    // ends the flight.
+    // forever even with perfect play and good luck.
     const fatigue = this._frame > 2400 ? Math.min(0.30, (this._frame - 2400) / 10000) : 0;
     f.vy -= f.gravity + fatigue;
     f.vx *= (1 - f.drag * 0.018);
     f.worldY += f.vy;
+
+    // Jetpack heat bleeds off between flaps — steady, measured use is safe,
+    // nonstop mashing cooks it (see handleFlap's triggerExplosion).
+    if (f.suitId === 'jetpack' && f.jetpackHeat > 0) f.jetpackHeat = Math.max(0, f.jetpackHeat - 0.6);
 
     const dx = Math.max(0, f.vx);
     f.distance += dx * 0.5; f.bgOffset += dx * 0.9;
@@ -716,7 +739,7 @@ class CannonGame {
       if (e.isArc && e.arcWorldY !== undefined && e.arcWorldY < -10) return false;
       return e.x > -120;
     });
-    this.checkCollisions(false);
+    this.checkCollisions();
   }
 
   updateLaunchersAndArcs() {
@@ -784,8 +807,14 @@ class CannonGame {
   spawnGround() {
     const W = this.canvas.width, r = Math.random();
     const borough = this.ts.targetBorough;
+    const river = this.flight.river;
+    // Guys throwing pizza from rowboats, specifically out on the Hudson —
+    // Hoboken's signature hazard, right where the crossing actually happens.
+    const onHobokenRiver = borough === 'hoboken' && river &&
+      this.flight.distance >= river.atBlock - 60 && this.flight.distance < river.atBlock + river.width + 60;
     let type;
-    if      (borough === 'hoboken'          && r < 0.45) type = r < 0.25 ? 'pizza_man' : 'drunk_vomit';
+    if      (onHobokenRiver && r < 0.55) type = 'pizza_boat';
+    else if (borough === 'hoboken'          && r < 0.45) type = r < 0.25 ? 'pizza_man' : 'drunk_vomit';
     else if (borough === 'bushwick'         && r < 0.40) type = 'drunk_vomit';
     else if (borough === 'brooklyn-heights' && r < 0.40) type = 'stroller_launcher';
     else if (borough === 'astoria'          && r < 0.40) type = 'greek_grandpa';
@@ -801,20 +830,28 @@ class CannonGame {
     this.flight.entities.push({ type, x: W + 60, groundEnt: true, lastShot: 0, collected: false });
   }
 
-  checkCollisions(groundOnly) {
+  // Ground hazards (dumpsters, hydrants, every borough-specific launcher) used
+  // to only be reachable during the brief final slide, which — now that most
+  // flights are long river crossings — is often skipped or over in under a
+  // second. Checking by actual world-space proximity instead means flying low
+  // is a real risk/reward choice: you can clip a hydrant or a pizza man
+  // mid-flight, not just in the last half-second on the ground.
+  checkCollisions() {
     const f = this.flight, px = 80;
-    const py = groundOnly ? this.wToS(0) : this.wToS(f.worldY);
+    const playerWY = (f.sliding || f.ratMode) ? 0 : f.worldY;
+    const py = this.wToS(playerWY);
 
     f.entities.forEach(e => {
       if (e.collected) return;
       if (LAUNCHER_TYPES.has(e.type)) return;
       const isArc    = ARC_TYPES.has(e.type);
       const isGround = e.groundEnt && !isArc;
-      if (!groundOnly && isGround) return;
-      if ( groundOnly && !isGround && !isArc) return;
 
       const esy = isArc ? this.wToS(e.arcWorldY || 0) : isGround ? this.wToS(0) : this.wToS(e.worldY || 80);
-      if (Math.abs(px - e.x) > 34 || Math.abs(py - esy) > 32) return;
+      // Ground hazards get a wider vertical catch zone than sky ones — "flying
+      // low" needs to be a reliably readable risk, not a one-frame coincidence.
+      const vTol = isGround ? 55 : 32;
+      if (Math.abs(px - e.x) > 34 || Math.abs(py - esy) > vTol) return;
 
       e.collected = true;
       switch (e.type) {
@@ -881,12 +918,35 @@ class CannonGame {
     });
 
     if (f.ratMode) this.renderRat(80, groundScreenY);
-    else if (!f.splashed) this.renderPlayer(80, playerScreenY, f);
+    else if (!f.splashed && !f.exploded) this.renderPlayer(80, playerScreenY, f);
 
     ctx.restore();
 
+    // Jetpack overheat — fiery burst at wherever the player actually is (this
+    // can happen mid-air, unlike a splash which is tied to hitting the water).
+    if (f.exploded && f.splashTimer > 0) {
+      const ex = 80, ey = this.wToS(f.worldY);
+      const grow = 40 - f.splashTimer;
+      ctx.globalAlpha = Math.min(1, f.splashTimer / 40);
+      const colors = ['#f1c40f', '#e67e22', '#e74c3c'];
+      for (let i = 0; i < 10; i++) {
+        const ang = (Math.PI * 2 * i) / 10;
+        const len = 10 + grow * 2.2;
+        ctx.strokeStyle = colors[i % colors.length]; ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(ex, ey);
+        ctx.lineTo(ex + Math.cos(ang) * len, ey + Math.sin(ang) * len);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 36px VT323'; ctx.textAlign = 'center';
+      ctx.fillText('KABOOM!', W / 2, H * 0.38);
+      ctx.fillStyle = '#e67e22'; ctx.font = '18px VT323';
+      ctx.fillText('The jetpack could not take it anymore.', W / 2, H * 0.38 + 30);
+    }
+
     // Splash — either a water-skip (flight continues) or the fail state (landed)
-    if (f.splashTimer > 0) {
+    if (!f.exploded && f.splashTimer > 0) {
       const sy = this.wToS(0);
       const t = f.splashed ? f.splashTimer / 40 : f.splashTimer / 20;
       ctx.globalAlpha = Math.min(1, t);
@@ -1320,6 +1380,31 @@ class CannonGame {
         ctx.fillStyle='#c0392b';ctx.beginPath();ctx.arc(ex+18,y-37,2.5,0,Math.PI*2);ctx.fill();
         ctx.fillStyle='#555';ctx.font='10px VT323';ctx.textAlign='center';ctx.fillText('PIZZA!',ex,y-44);break;
       }
+      case 'pizza_boat': {
+        const bob = Math.sin(this._frame * 0.08 + ex * 0.02) * 3;
+        const by = y + bob;
+        // Rowboat hull, sitting right on the water line
+        ctx.fillStyle = '#8b4a2b';
+        ctx.beginPath();
+        ctx.moveTo(ex - 26, by); ctx.lineTo(ex - 20, by + 9); ctx.lineTo(ex + 20, by + 9);
+        ctx.lineTo(ex + 26, by); ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = '#5a2e18'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(ex - 22, by + 3); ctx.lineTo(ex + 22, by + 3); ctx.stroke();
+        // Guy standing in the boat, mid-throw
+        ctx.fillStyle = '#d4a574'; ctx.beginPath(); ctx.arc(ex, by - 24, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3d6a8a'; ctx.fillRect(ex - 6, by - 18, 12, 16);
+        ctx.strokeStyle = '#d4a574'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.moveTo(ex + 6, by - 14); ctx.lineTo(ex + 17, by - 27); ctx.stroke();
+        ctx.fillStyle = '#f5c842'; ctx.beginPath(); ctx.arc(ex + 19, by - 30, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(ex + 17, by - 32, 2, 0, Math.PI * 2); ctx.fill();
+        // Little wake ripples off the bow
+        ctx.strokeStyle = 'rgba(150,200,240,0.5)'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(ex - 30, by + 6); ctx.quadraticCurveTo(ex - 36, by + 2, ex - 42, by + 8); ctx.stroke();
+        ctx.fillStyle = '#555'; ctx.font = '10px VT323'; ctx.textAlign = 'center';
+        ctx.fillText('AHOY PIZZA', ex, by - 38);
+        break;
+      }
       case 'drunk_vomit': {
         const sw=Math.sin(this._frame*0.07)*4;
         ctx.fillStyle='#c49870';ctx.beginPath();ctx.arc(ex+sw,y-30,8,0,Math.PI*2);ctx.fill();
@@ -1403,9 +1488,10 @@ class CannonGame {
 
   renderHUD(W, H, f) {
     const ctx = this.ctx;
+    const showHeat = f.suitId === 'jetpack' && !f.ratMode;
 
     // Top-left panel
-    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, 245, 72);
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, 245, showHeat ? 92 : 72);
     ctx.fillStyle = '#fff'; ctx.font = '20px VT323'; ctx.textAlign = 'left';
     ctx.fillText('Distance: ' + Math.floor(f.distance) + ' blocks', 10, 22);
 
@@ -1424,9 +1510,18 @@ class CannonGame {
         ? (cdPct >= 1 ? 'FLAP (weak)' : 'cooling...')
         : (cdPct >= 1 ? 'FLAP READY' : 'FLAP: ' + Math.round(cdPct * 100) + '%');
       ctx.fillText(fLabel, 10, 52);
+
+      if (showHeat) {
+        const heatPct = f.jetpackHeat / 100;
+        ctx.fillStyle = '#111'; ctx.fillRect(10, 60, bw, 13);
+        ctx.fillStyle = heatPct < 0.6 ? '#3498db' : heatPct < 0.85 ? '#f39c12' : '#e74c3c';
+        ctx.fillRect(10, 60, bw * heatPct, 13);
+        ctx.fillStyle = heatPct > 0.85 ? '#e74c3c' : '#ccc'; ctx.font = '14px VT323';
+        ctx.fillText(heatPct > 0.85 ? "DON'T FLAP! OVERHEATING" : 'JETPACK HEAT', 10, 84);
+      }
     }
 
-    if (f.coins > 0) { ctx.fillStyle = '#f1c40f'; ctx.font = '17px VT323'; ctx.fillText('Coins: ' + f.coins, 10, 68); }
+    if (f.coins > 0) { ctx.fillStyle = '#f1c40f'; ctx.font = '17px VT323'; ctx.fillText('Coins: ' + f.coins, 10, showHeat ? 100 : 68); }
 
     if (f.damage > 0) {
       ctx.fillStyle = f.damage < 40 ? '#f39c12' : '#e74c3c';
@@ -1477,15 +1572,18 @@ class CannonGame {
 
     const distance = Math.floor(this.flight.distance);
     const splashed = this.flight.splashed;
-    // A splash still earns Borough Bucks for the distance you did cover — the
-    // failure is not reaching the borough, not the attempt being worthless.
+    const exploded = this.flight.exploded;
+    const failed   = splashed || exploded;
+    // A failed attempt still earns Borough Bucks for the distance you did
+    // cover — the failure is not reaching the borough, not the run being
+    // worthless.
     const earned   = Math.floor(distance * 1.2);
     this.ts.boroughBucks  += earned;
     this.ts.totalDistance += distance;
 
     // High score
     const bid = this.ts.targetBorough;
-    if (bid && !splashed) {
+    if (bid && !failed) {
       const prev = this.ts.highScores[bid] || 0;
       if (distance > prev) this.ts.highScores[bid] = distance;
     }
@@ -1495,16 +1593,16 @@ class CannonGame {
     // Reaching a borough now requires actually having crossed its river, not
     // just accumulating a big enough distance number while still short of it.
     const crossedRiver = !aimed || !aimed.river || (this.flight.river && this.flight.river.crossed);
-    if (aimed && !splashed && crossedRiver && distance >= aimed.minBlocks && !this.ts.unlocks.includes(aimed.id)) {
+    if (aimed && !failed && crossedRiver && distance >= aimed.minBlocks && !this.ts.unlocks.includes(aimed.id)) {
       this.ts.unlocks.push(aimed.id);
       newUnlock = aimed;
     }
 
     this.flight = null;
-    this.showTurnResults(distance, earned, newUnlock, splashed, aimed);
+    this.showTurnResults(distance, earned, newUnlock, splashed, exploded, aimed);
   }
 
-  showTurnResults(distance, earned, newUnlock, splashed, aimed) {
+  showTurnResults(distance, earned, newUnlock, splashed, exploded, aimed) {
     this.showOverlay('cannon-results');
     document.getElementById('cannon-results-distance').textContent = distance;
     document.getElementById('cannon-results-earned').textContent   = earned;
@@ -1519,6 +1617,13 @@ class CannonGame {
         <div class="cannon-unlock-title">${newUnlock.unlock.title}</div>
         <div class="cannon-unlock-text">${newUnlock.unlock.text}</div>`;
       unlockEl.classList.remove('hidden');
+    } else if (exploded) {
+      unlockEl.innerHTML = `
+        <div class="cannon-unlock-borough" style="border-color:#e67e22;color:#e74c3c">
+          THE JETPACK EXPLODED
+        </div>
+        <div class="cannon-unlock-text">You mashed it too hard. It let you know. ${aimed ? `Didn't make it to ${aimed.name} this time.` : ''}</div>`;
+      unlockEl.classList.remove('hidden');
     } else if (splashed && aimed) {
       unlockEl.innerHTML = `
         <div class="cannon-unlock-borough" style="border-color:#4a8ac4;color:#5dade2">
@@ -1529,12 +1634,32 @@ class CannonGame {
     } else { unlockEl.classList.add('hidden'); }
 
     const allDone = this.ts.unlocks.length === TARGET_BOROUGHS.length;
+    // The moment newUnlock is the 4th and final borough, route to the wisemen
+    // instead of the shop — this only fires once, since newUnlock is only set
+    // for a borough's first-ever unlock.
+    const justCompletedAll = newUnlock && allDone;
     document.getElementById('cannon-results-next-label').textContent =
       allDone ? 'Keep flying (you legend)' : 'Upgrade gear';
     document.getElementById('cannon-results-continue').onclick = () => {
       this.ts.currentTurn++;
-      this.showUpgradeShop();
+      if (justCompletedAll) this.showVictoryScreen();
+      else this.showUpgradeShop();
     };
+  }
+
+  // ============================================
+  // VICTORY — all four boroughs collected
+  // ============================================
+
+  showVictoryScreen() {
+    this.showOverlay('cannon-victory');
+    document.getElementById('cannon-victory-highscore').onclick = () => this.showUpgradeShop();
+    document.getElementById('cannon-victory-continue').onclick = () => this.onComplete({
+      boroughBucks: this.ts.boroughBucks,
+      unlocks: this.ts.unlocks.slice(),
+      totalDistance: this.ts.totalDistance,
+      wisemenJoined: true,
+    });
   }
 
   // ============================================
