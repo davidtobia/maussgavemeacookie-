@@ -77,6 +77,23 @@ class TransplantTrail {
       screen.classList.add('active');
       this.state.currentScreen = screenId;
     }
+
+    // The canvas mini-games (cannon, heist, bodega) all have touch-action:
+    // none on the canvas itself, but a stray double-tap landing on a gap
+    // between HUD elements could still trigger the browser's own
+    // double-tap/pinch zoom -- and once zoomed, a "fixed" full-screen
+    // canvas UI has no way to get back to normal size from inside the
+    // page ("I keep accidentally zooming in and then I can't get back").
+    // Lock the viewport's own zoom out entirely while one of these is
+    // open, and restore normal pinch/double-tap zoom everywhere else
+    // (the blog posts still want it for reading).
+    const CANVAS_GAME_SCREENS = new Set(['cannon-game', 'heist-game', 'bodega-game']);
+    const viewport = document.querySelector('meta[name="viewport"]');
+    if (viewport) {
+      viewport.setAttribute('content', CANVAS_GAME_SCREENS.has(screenId)
+        ? 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'
+        : 'width=device-width, initial-scale=1.0');
+    }
   }
 
   // ============================================

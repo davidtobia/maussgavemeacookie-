@@ -807,6 +807,9 @@ body {
 #bodega-game.active {
   display: flex;
   position: relative; /* needed for overlay positioning */
+  /* Backstop against a stray double-tap/pinch triggering the browser's
+     own zoom from a gap between HUD elements, not just the canvas. */
+  touch-action: none;
 }
 
 .game-container:has(#bodega-game.active) {
@@ -909,6 +912,9 @@ body {
 
 #cannon-game.active {
   display: block;
+  /* Backstop against a stray double-tap/pinch triggering the browser's
+     own zoom from a gap between HUD elements, not just the canvas. */
+  touch-action: none;
 }
 
 .game-container:has(#cannon-game.active) {
@@ -1474,6 +1480,9 @@ button.menu-option.cannon-shop-exit-btn:hover {
 
 #heist-game.active {
   display: block;
+  /* Backstop against a stray double-tap/pinch triggering the browser's
+     own zoom from a gap between HUD elements, not just the canvas. */
+  touch-action: none;
 }
 
 .game-container:has(#heist-game.active) {
