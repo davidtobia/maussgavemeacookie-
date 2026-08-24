@@ -1759,13 +1759,13 @@ class HeistGame {
       // Pickups: nitro charges (burn for a speed burst), stacked permanent
       // speed bonus from speed powerups (each one also lights the exhaust
       // for good), gun/rocket ammo, live shots in flight, explosion
-      // particles, the helicopter (null until it shows up), a separate
-      // cop-spawn clock (cops come from behind now, not the normal ahead
-      // traffic), jumped-off flag.
+      // particles, the helicopter (null until it shows up), jumped-off
+      // flag. Cop cars spawn in the normal obstacle mix and flip into
+      // "chasing" once they're actually behind you -- no separate spawn
+      // clock needed.
       nitro: 0, nitroActive: 0, speedBonus: 0, fireTrail: false,
       gunAmmo: 0, rocketAmmo: 0, shots: [], particles: [],
       heli: null, heliDone: false, jumpedOff: false,
-      copSpawnTimer: 90,
       // Guaranteed pickups: relying purely on random spawn chance meant a
       // run could easily end without ever handing you a gun (confirmed --
       // "I never got the ability to shoot the guns" was bad luck on a
@@ -1914,17 +1914,6 @@ class HeistGame {
         g.nextGuaranteedAt += g.durationFrames * 0.20;
       }
 
-      // The actual pursuit: only one active chaser at a time -- once it's
-      // shot down or gives up (drives past and off), another one picks up
-      // the chase after a beat.
-      const chaserActive = g.obstacles.some(o => o.kind === 'cop' && !o.destroyed);
-      if (!chaserActive) {
-        g.copSpawnTimer--;
-        if (g.copSpawnTimer <= 0) {
-          g.copSpawnTimer = 200 + Math.floor(Math.random() * 160);
-          this.spawnGetawayCop();
-        }
-      }
     }
 
     // The helicopter shows up once the heat's high enough and stays for
@@ -1954,11 +1943,28 @@ class HeistGame {
     g.particles = g.particles.filter(p => p.life > 0);
 
     const px = this.canvas.width * 0.22;
+    // Cop cars join the chase the moment they're actually behind you --
+    // direct feedback on the previous version (which spawned them behind
+    // and had them close in fast): "it would make sense to have them
+    // sitting in the road and then they join the chase when you pass
+    // them. Then you can shoot multiple of them." So a cop approaches
+    // like any other hazard, and the instant it crosses behind your
+    // position it stops scrolling with the world and eases into a
+    // trailing slot instead -- staying there indefinitely, shootable,
+    // instead of zipping past and despawning. Multiple can stack up.
+    const chasingCops = g.obstacles.filter(o => o.kind === 'cop' && o.chasing && !o.destroyed);
     g.obstacles.forEach(o => {
-      // The chaser closes in from behind on its own clock, independent of
-      // the world-scroll speed everything ahead of you moves at.
-      if (o.kind === 'cop' && !o.destroyed) o.x += o.chaseSpeed * slow;
-      else o.x -= g.speed * slow;
+      if (o.kind === 'cop' && o.chasing && !o.destroyed) {
+        const idx = chasingCops.indexOf(o);
+        const slot = idx === -1 ? chasingCops.length : idx;
+        const targetX = px - 60 - slot * 42;
+        o.x += (targetX - o.x) * 0.05 * slow;
+      } else {
+        o.x -= g.speed * slow;
+      }
+      if (o.kind === 'cop' && !o.chasing && !o.destroyed && o.x < px - 20 && chasingCops.length < 5) {
+        o.chasing = true;
+      }
       if (o.destroyed) return;
       if (g.aiming) return; // attention's on the reticle, not the road
       if (o.hit || g.airborne) return; // jumped clean over it
@@ -1982,10 +1988,10 @@ class HeistGame {
       }
     });
     g.obstacles = g.obstacles.filter(o => {
-      // A chaser that overtook you without getting shot down just gives
-      // up and peels off eventually, instead of drifting rightward
-      // forever off the edge of the world.
-      if (o.kind === 'cop' && !o.destroyed) return o.x < px + 260;
+      // Actively chasing cops persist regardless of x -- that's the whole
+      // point, they hang back instead of scrolling off like everything
+      // else.
+      if (o.kind === 'cop' && o.chasing && !o.destroyed) return true;
       return o.x > -120 && !(o.destroyed && o.x < px - 40);
     });
 
@@ -2012,11 +2018,15 @@ class HeistGame {
   }
 
   spawnGetawayObstacle() {
-    // Cop cars used to be mixed in here, approaching from ahead like
-    // everything else -- but the actual pursuit is supposed to be coming
-    // from BEHIND you, and that's a separate spawn/movement system now
-    // (spawnGetawayCop()). This list is only the ahead-of-you road hazards.
-    const hazardKinds = ['cab', 'cart', 'pothole', 'dumpster', 'cones', 'cones', 'cab', 'spikes'];
+    // Cop cars are back in the normal ahead-of-you traffic mix -- direct
+    // feedback on the behind-spawning version: "I didn't have a problem
+    // with them chasing you... it would make sense to have them sitting
+    // in the road and then they join the chase when you pass them." So a
+    // cop spawns and approaches exactly like any other hazard; it's the
+    // getawayLoop movement code that turns it into a real chaser the
+    // moment it's actually behind you (see the "joins the chase" comment
+    // there) -- not a separate spawn system.
+    const hazardKinds = ['cab', 'cart', 'pothole', 'dumpster', 'cones', 'cones', 'cab', 'spikes', 'cop'];
     const roll = Math.random();
     const lane = Math.floor(Math.random() * 3);
     const W = this.canvas.width;
@@ -2028,7 +2038,9 @@ class HeistGame {
       return;
     }
     const type = hazardKinds[Math.floor(Math.random() * hazardKinds.length)];
-    this.mech.obstacles.push({ kind: 'hazard', type, lane, x: W + 80, hit: false, destroyed: false });
+    this.mech.obstacles.push({
+      kind: type === 'cop' ? 'cop' : 'hazard', type, lane, x: W + 80, hit: false, destroyed: false, chasing: false,
+    });
     // A second obstacle sometimes, but never filling every lane — there is
     // always a gap to steer into.
     if (Math.random() < 0.35) {
@@ -2036,24 +2048,10 @@ class HeistGame {
       if (other === lane) other = (lane + 1) % 3;
       const type2 = hazardKinds[Math.floor(Math.random() * hazardKinds.length)];
       this.mech.obstacles.push({
-        kind: 'hazard', type: type2,
-        lane: other, x: W + 80 + 40 + Math.random() * 90, hit: false, destroyed: false,
+        kind: type2 === 'cop' ? 'cop' : 'hazard', type: type2,
+        lane: other, x: W + 80 + 40 + Math.random() * 90, hit: false, destroyed: false, chasing: false,
       });
     }
-  }
-
-  // The actual pursuit car -- comes from BEHIND (off-screen left) and
-  // closes in, independent of the world-scroll speed everything else
-  // moves at. This is the real, hittable thing the flashing lights
-  // belong to now; the old version was a decorative glow with no object
-  // behind it at all, which is why shooting "the car chasing you" used
-  // to do nothing.
-  spawnGetawayCop() {
-    const lane = Math.floor(Math.random() * 3);
-    this.mech.obstacles.push({
-      kind: 'cop', type: 'cop', lane, x: -70, hit: false, destroyed: false,
-      chaseSpeed: 2.2 + Math.random() * 1.3,
-    });
   }
 
   // Cop car destroyed by gunfire doesn't just vanish -- radio traffic, and
@@ -2586,22 +2584,20 @@ class HeistGame {
     const shake = g.hitFlash > 0 ? (Math.random() - 0.5) * 8 : 0;
     this.drawGetawayCar(px + shake, g.laneY + shake, g);
 
-    // Light-bar glow around the real pursuing cop car -- it used to be a
-    // fixed decorative car-shape with no object behind it at all (which
-    // is exactly why shooting "the car chasing you" did nothing). Now the
-    // glow just follows whichever obstacle is actually the live chaser,
-    // and there's nothing drawn here at all when there isn't one --
-    // that gap is the beat before the next one picks up the chase.
-    const chaser = g.obstacles.find(o => o.kind === 'cop' && !o.destroyed);
-    if (chaser) {
-      const cy = this.laneCenterY(chaser.lane);
+    // Light-bar glow around every cop actively chasing (there can be
+    // several stacked up now) -- it used to be a fixed decorative shape
+    // with no object behind it at all, which is why shooting "the car
+    // chasing you" did nothing. Now it follows the real ones.
+    g.obstacles.forEach(o => {
+      if (o.kind !== 'cop' || !o.chasing || o.destroyed) return;
+      const cy = this.laneCenterY(o.lane);
       const blue = Math.floor(this._frame / 6) % 2 === 0;
-      const glow = ctx.createRadialGradient(chaser.x, cy - 20, 4, chaser.x, cy - 20, 130);
-      glow.addColorStop(0, blue ? 'rgba(74,123,216,0.30)' : 'rgba(216,74,74,0.30)');
+      const glow = ctx.createRadialGradient(o.x, cy - 20, 4, o.x, cy - 20, 110);
+      glow.addColorStop(0, blue ? 'rgba(74,123,216,0.28)' : 'rgba(216,74,74,0.28)');
       glow.addColorStop(1, 'rgba(0,0,0,0)');
       ctx.fillStyle = glow;
-      ctx.fillRect(chaser.x - 150, cy - 170, 300, 300);
-    }
+      ctx.fillRect(o.x - 130, cy - 150, 260, 260);
+    });
 
     // Heat bar -- not "how far to the finish," how close to caught. Always
     // drifting up; good play buys it back down, never stops it outright.
@@ -2838,19 +2834,19 @@ class HeistGame {
         ctx.fillRect(x - 32, y - 22, 64, 7);
         break;
       case 'spikes':
+        ctx.fillStyle = '#8a2a20';
+        ctx.fillRect(x - 34, y - 9, 68, 5);
         ctx.fillStyle = '#c8402f';
         ctx.fillRect(x - 34, y - 4, 68, 8);
         for (let i = -4; i <= 4; i++) {
           ctx.fillStyle = '#d8d8d0';
           ctx.beginPath();
-          ctx.moveTo(x + i * 8 - 3, y - 4);
-          ctx.lineTo(x + i * 8 + 3, y - 4);
-          ctx.lineTo(x + i * 8, y - 18);
+          ctx.moveTo(x + i * 8 - 3, y + 4);
+          ctx.lineTo(x + i * 8 + 3, y + 4);
+          ctx.lineTo(x + i * 8, y + 18);
           ctx.closePath();
           ctx.fill();
         }
-        ctx.fillStyle = '#8a2a20';
-        ctx.fillRect(x - 34, y + 4, 68, 5);
         break;
       case 'cones':
       default:
