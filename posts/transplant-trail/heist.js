@@ -925,8 +925,24 @@ class HeistGame {
   }
 
   floorBounds() {
+    // Found while auditing the floor phase: every position, speed, and
+    // guard "range" here is a single number used identically for both x
+    // and y in a 0-100 logical grid -- Math.hypot(dx, dy) straight up,
+    // same units on both axes. That's only correct if the rendered rect
+    // is actually square. It wasn't (independent 0.88*W / 0.76*H
+    // fractions), which on any real (non-square) phone screen means a
+    // guard's vision cone is drawn as a circle sized off the WIDTH scale
+    // alone, while the real hit-test -- measuring raw logical-unit
+    // distance -- reaches further in whichever axis has the larger
+    // pixels-per-unit ratio. Concretely: on a tall phone, the true
+    // detection range extends well below/above the visible cone, so you
+    // can get "seen" while standing outside it, or stand inside the
+    // drawn cone and not be seen. Same class of bug the maze board hit
+    // before it was forced square; same fix here.
     const W = this.canvas.width, H = this.canvas.height;
-    return { x: W * 0.06, y: H * 0.16, w: W * 0.88, h: H * 0.76 };
+    const availW = W * 0.88, availH = H * 0.76;
+    const side = Math.min(availW, availH);
+    return { x: (W - side) / 2, y: H * 0.16 + (availH - side) / 2, w: side, h: side };
   }
 
   floorClick(px, py) {
@@ -1079,8 +1095,13 @@ class HeistGame {
           g.y += (dy / dist) * g.runSpeed;
         } else {
           g.state = 'pause';
+          g.pauseBaseAngle = g.angle; // sweep around this while paused, not just hold it
         }
       } else if (g.state === 'pause') {
+        // Actually look around instead of freezing at whatever direction
+        // it happened to be running when it arrived -- the comment above
+        // already claimed this, the code just never did it.
+        g.angle = g.pauseBaseAngle + Math.sin(this._frame * 0.07) * 0.7;
         g.pauseTimer--;
         if (g.pauseTimer <= 0) g.state = 'return';
       } else if (g.state === 'return') {
