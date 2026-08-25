@@ -788,23 +788,23 @@ class HeistGame {
       tony: {
         deli: 'How does a deli run out of prosciutto?',
         fish: 'I need calamari. For my mother.',
-        produce: '[Tony at the produce section — line to be written]',
-        frozen: '[Tony at the frozen aisle — line to be written]',
-        checkout: '[Tony at self-checkout — line to be written]',
+        produce: 'This lettuce? This is an insult. Somebody get me the manager.',
+        frozen: "Where's the good ice cream? Not this. The GOOD ice cream.",
+        checkout: "This thing wants me to scan my own bananas? I didn't go to school for this.",
       },
       ruhul: {
-        deli: '[Ruhul at the deli counter — line to be written]',
-        fish: '[Ruhul at the fish counter — line to be written]',
-        produce: '[Ruhul at the produce section — line to be written]',
-        frozen: '[Ruhul at the frozen aisle — line to be written]',
-        checkout: '[Ruhul at self-checkout — line to be written]',
+        deli: 'He asks the guy behind the counter a genuinely good question about the pastrami, and just keeps asking follow-ups.',
+        fish: 'Ruhul strikes up a conversation about wholesale pricing the guy behind the counter did not expect to enjoy this much.',
+        produce: "He's helping a total stranger pick a ripe avocado like it's the most important decision either of them will make today.",
+        frozen: "Ruhul's deep in a genuinely useful conversation about which freezer brand doesn't die after two years.",
+        checkout: 'He talks the self-checkout attendant through a coupon situation so complicated it becomes personal for both of them.',
       },
       dmitri: {
-        deli: '[Dmitri at the deli counter — line to be written]',
-        fish: '[Dmitri at the fish counter — line to be written]',
-        produce: '[Dmitri at the produce section — line to be written]',
-        frozen: '[Dmitri at the frozen aisle — line to be written]',
-        checkout: '[Dmitri at self-checkout — line to be written]',
+        deli: 'Dmitri stands very still near the deli counter. Somehow this is enough.',
+        fish: 'He studies the fish like it owes him money. The nearby guard forgets to move.',
+        produce: 'Dmitri picks up an apple, looks at it for what feels like a geological era, puts it back.',
+        frozen: "He's just standing in front of the freezer case. Not buying. Not leaving.",
+        checkout: "Dmitri is \"having trouble\" with the self-checkout in a way that never actually resolves.",
       },
     };
     return lines[crewId][zoneId];
@@ -1559,13 +1559,6 @@ class HeistGame {
       p.textContent = line;
       body.appendChild(p);
     });
-    // Anything an Eric actually SAYS is the author's to write, not this file's.
-    if (cfg.who) {
-      const q = document.createElement('p');
-      q.className = 'cannon-wiseman-line';
-      q.textContent = '[Dialogue — to be written]';
-      body.appendChild(q);
-    }
     const stats = document.getElementById('heist-result-stats');
     stats.innerHTML = '';
     (cfg.stats || []).forEach(([label, value]) => {

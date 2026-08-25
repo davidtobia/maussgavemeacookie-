@@ -753,7 +753,7 @@ class TrailGame {
 
   showWiseEricsPitch() {
     this.showEvent(
-      '[The Wise Erics notice how broke you are and pitch an idea — dialogue to be written]',
+      `Big Tony, Ruhul, and Dmitri find you on a stoop doing math on your phone that isn't working out. "We got an idea," Tony says, sitting down uninvited. "You're gonna love it. Or you already hate it. Either way, sit down." (You're already sitting.)`,
       () => this.showWiseEricsChoice()
     );
   }
