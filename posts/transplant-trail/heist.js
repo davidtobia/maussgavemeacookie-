@@ -115,7 +115,19 @@ const HEIST_TUNING = {
     dmitri: { speed: 6.6, spawn: 56, label: 'Dmitri drives. Dmitri always drives like this.' },
     heat: {
       start: 22,
-      driftPerSecond: 0.88, // ~66 of drift alone over 75s -- capture is coming regardless
+      // Drift alone over the actual 55s run: 22 + 0.6*55 = ~55 -- lands
+      // you mid-bar just for surviving, not already deep in the red
+      // before the run's half over. Used to be 0.88 (tuned for a 75s
+      // run that got cut to 55 without this being revisited), which put
+      // passive drift alone at 22+0.88*55=~70 -- already past the "bad"
+      // threshold, and one crash away from pinned at the 100 cap with
+      // 20+ seconds still to play. Once capped, nothing you do shows up
+      // on the bar -- which is exactly the "I hit obstacle after
+      // obstacle and it doesn't matter" complaint. copKillSub/
+      // heliKillSub also existed here but were never actually applied
+      // anywhere (fixed alongside this) -- shooting cops/the chopper did
+      // real cash, but had never once touched heat.
+      driftPerSecond: 0.6,
       crashAdd: 8,
       copKillSub: 6,
       heliKillSub: 20,
@@ -296,11 +308,16 @@ class HeistGame {
       g.heli.destroyed = true; g.heliDone = true;
       g.heli.fallVy = -2; g.heli.fallSpin = (Math.random() < 0.5 ? -1 : 1) * 0.1;
       this.cash += 80;
+      // Same dead-tuning bug as the cop kill below -- heliKillSub existed
+      // but nothing ever read it, so downing the chopper (the single
+      // biggest possible play) had zero effect on heat.
+      g.heat = Math.max(0, g.heat - HEIST_TUNING.getaway.heat.heliKillSub);
       this.spawnGetawayBurst(g.heli.x, g.heli.y);
       this.setHudHint('Direct hit! The helicopter goes down in flames.', g.cfg.label);
     } else if (hitCop) {
       hitCop.destroyed = true;
       this.cash += 25;
+      g.heat = Math.max(0, g.heat - HEIST_TUNING.getaway.heat.copKillSub);
       this.spawnGetawayBurst(hitCop.x, this.laneCenterY(hitCop.lane));
       this.setHudHint('Direct hit. Cruiser down.', g.cfg.label);
     } else {
@@ -2191,6 +2208,12 @@ class HeistGame {
         if (Math.abs(s.x - o.x) < 30 && o.lane === s.lane) {
           o.destroyed = true; s.dead = true;
           this.cash += 25;
+          // Taking out a chaser is supposed to buy the heat back down --
+          // was defined in HEIST_TUNING but never actually applied here,
+          // so shooting cops did nothing but earn cash. Heat just kept
+          // climbing regardless, which is why it stopped feeling like it
+          // mattered.
+          g.heat = Math.max(0, g.heat - HEIST_TUNING.getaway.heat.copKillSub);
           this.spawnGetawayBurst(o.x, this.laneCenterY(o.lane));
           this.setHudHint('Cruiser down. Another one’s already rolling.', g.cfg.label);
         }
@@ -3200,25 +3223,36 @@ class HeistGame {
         ctx.fillStyle = '#2e5135';
         ctx.fillRect(x - 32, y - 22, 64, 7);
         break;
-      case 'spikes':
-        // Perpendicular to the ground -- spikes stand straight up off the
-        // strip, same as a real tire-shredder, not hanging down off it.
-        // Sitting at ground level (same baseline as the cones/pothole
-        // below) instead of floating mid-lane.
-        ctx.fillStyle = '#c8402f';
-        ctx.fillRect(x - 34, y + 6, 68, 7);
+      case 'spikes': {
+        // This is a top-down road with lanes stacked vertically on
+        // screen and the car driving along x -- a strip laid along x
+        // (the old version) only blocked a car-length of travel, not
+        // the lane itself. A real spike strip goes *across* the lane it
+        // sits in, ends touching the lane's top/bottom edges, so there's
+        // no way through that lane without rolling over it. Reoriented
+        // to run along y instead, spikes fanned out sideways (into the
+        // direction a tire would actually cross them) off a center rail.
+        const H = this.canvas.height;
+        const roadTop = H * 0.52, roadBot = H * 0.94;
+        const laneH = (roadBot - roadTop) / 3;
+        const half = laneH / 2 - 4; // just short of the lane divider lines
         ctx.fillStyle = '#8a2a20';
-        ctx.fillRect(x - 34, y + 13, 68, 4);
-        for (let i = -4; i <= 4; i++) {
+        ctx.fillRect(x - 5, y - half, 10, half * 2);
+        ctx.fillStyle = '#c8402f';
+        ctx.fillRect(x - 2, y - half, 4, half * 2);
+        const n = Math.max(3, Math.round((half * 2) / 10));
+        for (let i = 0; i < n; i++) {
+          const sy = y - half + (i + 0.5) * (half * 2 / n);
           ctx.fillStyle = '#d8d8d0';
           ctx.beginPath();
-          ctx.moveTo(x + i * 8 - 3, y + 6);
-          ctx.lineTo(x + i * 8 + 3, y + 6);
-          ctx.lineTo(x + i * 8, y - 8);
-          ctx.closePath();
-          ctx.fill();
+          ctx.moveTo(x - 5, sy - 3); ctx.lineTo(x - 5, sy + 3); ctx.lineTo(x - 17, sy);
+          ctx.closePath(); ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(x + 5, sy - 3); ctx.lineTo(x + 5, sy + 3); ctx.lineTo(x + 17, sy);
+          ctx.closePath(); ctx.fill();
         }
         break;
+      }
       case 'cones':
       default:
         for (let i = -1; i <= 1; i++) {
