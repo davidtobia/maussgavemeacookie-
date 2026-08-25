@@ -744,13 +744,16 @@ class HeistGame {
   //            that's already looking somewhere safe.
   // ------------------------------------------------
 
+  // Real counters on the outer edges now, not point-markers floating in
+  // open floor -- see the rebuilt startFloor() for why. Coordinates are in
+  // the store's actual (much bigger) world space.
   floorZones() {
     return [
-      { id: 'deli',     name: 'Deli Counter',   x: 34, y: 24 },
-      { id: 'fish',     name: 'Fish Counter',   x: 58, y: 22 },
-      { id: 'produce',  name: 'Produce Section', x: 30, y: 78 },
-      { id: 'frozen',   name: 'Frozen Aisle',   x: 62, y: 80 },
-      { id: 'checkout', name: 'Self-Checkout',  x: 78, y: 30 },
+      { id: 'deli',     name: 'Deli Counter',    x: 68,  y: 18,  edge: 'top' },
+      { id: 'fish',     name: 'Fish Counter',    x: 172, y: 18,  edge: 'top' },
+      { id: 'produce',  name: 'Produce Section', x: 68,  y: 132, edge: 'bottom' },
+      { id: 'frozen',   name: 'Frozen Aisle',    x: 172, y: 132, edge: 'bottom' },
+      { id: 'checkout', name: 'Self-Checkout',   x: 226, y: 40,  edge: 'right' },
     ];
   }
 
@@ -784,73 +787,101 @@ class HeistGame {
     return lines[crewId][zoneId];
   }
 
+  // A real store now, not an open square: direct feedback was "it isn't
+  // fun, there's no real stakes... you can walk directly through the
+  // middle. There should be rows of groceries like a grocery store...
+  // I need the scale to be bigger." Six aisle shelves run nearly the full
+  // height, leaving only a cross-aisle at the very top and another at the
+  // very bottom to get from one side of the store to the other -- exactly
+  // where the patrols live, so going around isn't a free pass, it's the
+  // guarded route. World is 240x150 (vs. the old single-screen 100x100),
+  // camera follows whoever you're controlling.
+  floorAisleLayout() {
+    const cols = [40, 76, 112, 148, 184, 214];
+    const shelfTop = 35, shelfBottom = 115;
+    const shelves = cols.map(x => ({ x: x - 4.5, y: shelfTop, w: 9, h: shelfBottom - shelfTop }));
+    return { shelves, cols, shelfTop, shelfBottom, worldW: 240, worldH: 150 };
+  }
+
   startFloor() {
     this.stopLoop();
     this.hideOverlays();
     this.hideHud();
     this.phase = 'floor';
 
+    const layout = this.floorAisleLayout();
+    this.floorShelves = layout.shelves;
+    this.floorWorldW = layout.worldW;
+    this.floorWorldH = layout.worldH;
+
     const distractors = HEIST_ROLES.filter(r => r.id !== 'lookout')
       .map(r => getHeistCrew(this.assign[r.id]));
 
-    // Everyone present starts at the entrance, staggered a little so they
-    // aren't stacked on the same pixel.
+    // Everyone present starts at the entrance -- the open left margin
+    // before the first shelf, not inside the aisle block itself.
+    const entX = 12, entY = 75;
     this.floorChars = [
       { id: 'thief', name: this.gameState.playerName || 'You', color: '#d4a574',
-        x: 8, y: 50, tx: 8, ty: 50, speed: 0.62, heat: 0, pulled: false, isThief: true },
+        x: entX, y: entY, tx: entX, ty: entY, speed: 0.62, heat: 0, pulled: false, isThief: true },
       ...distractors.map((c, i) => ({
         id: c.id, name: c.name, color: c.color, crew: c,
-        x: 8, y: 50 + (i === 0 ? -8 : 8), tx: 8, ty: 50 + (i === 0 ? -8 : 8),
+        x: entX, y: entY + (i === 0 ? -8 : 8), tx: entX, ty: entY + (i === 0 ? -8 : 8),
         speed: c.id === 'tony' ? 0.74 : c.id === 'dmitri' ? 0.5 : 0.62,
         heat: 0, pulled: false, isThief: false,
       })),
     ];
     this.floorActiveId = 'thief';
+    this.floorCamX = entX; this.floorCamY = entY;
 
-    // Each distractor gets one hotspot per zone, offset slightly so two
-    // colors at the "same" zone don't sit on top of each other.
+    // Each distractor gets one hotspot per counter, offset slightly so two
+    // colors at the "same" counter don't sit on top of each other.
     this.floorHotspots = [];
     distractors.forEach((c, i) => {
-      const jitter = i === 0 ? -3.5 : 3.5;
+      const jitter = i === 0 ? -4 : 4;
       this.floorZones().forEach(z => {
         this.floorHotspots.push({
           crewId: c.id, color: c.color, zoneId: z.id, zoneName: z.name,
-          x: z.x + jitter, y: z.y + jitter * 0.6,
+          x: z.x + jitter, y: z.y,
           triggered: false,
         });
       });
     });
 
-    this.floorRegister = { x: 90, y: 50, r: 6 };
+    // The open right margin, past the last shelf column -- the mirror of
+    // the entrance on the other side of the whole aisle block.
+    this.floorRegister = { x: layout.worldW - 12, y: 75, r: 9 };
 
-    // Fixed posts, each sweeping its own cone on its own clock so they don't
-    // all turn in sync.
-    // Two edge patrols (walking the full height, facing inward) so hugging a
-    // wall isn't a free path anymore, plus one center patrol so the middle
-    // still needs real timing rather than being the obviously-safe route.
-    // axis 'y' walks a fixed X up/down between min/max; axis 'x' walks a
-    // fixed Y left/right between min/max. facing is the cone direction while
-    // on patrol (kept fixed rather than tied to walk direction, so it reads
-    // as "watching a lane" rather than just looking where they're going).
+    // Fixed posts, each sweeping its own cone on its own clock so they
+    // don't all turn in sync. axis 'y' walks a fixed X up/down between
+    // min/max; axis 'x' walks a fixed Y left/right between min/max.
+    // facing is the cone direction while on patrol (kept fixed rather
+    // than tied to walk direction, so it reads as "watching a lane"
+    // rather than just looking where they're going).
     const makeGuard = ({ axis, fixed, min, max, speed, facing, range, halfAngle, dir }) => {
       const x = axis === 'y' ? fixed : min, y = axis === 'y' ? min : fixed;
       return {
         x, y, patrolAxis: axis, patrolMin: min, patrolMax: max, patrolDir: dir || 1,
-        speed, facing, angle: facing, range: range || 24, halfAngle: halfAngle || 0.55,
+        speed, facing, angle: facing, range: range || 26, halfAngle: halfAngle || 0.55,
         state: 'patrol', targetX: 0, targetY: 0, pauseTimer: 0, runSpeed: 0,
         homeX: x, homeY: y, frozen: false, freezeTimer: 0,
       };
     };
 
-    // Five now, not three: two edge patrols, a center vertical, and two more
-    // horizontal sweeps top and bottom, so there's real coverage everywhere,
-    // not just a safe gap down the middle once you're past the edges.
+    // Eight now: two walking the top cross-aisle (facing down into the
+    // shelves), two walking the bottom cross-aisle (facing up into them)
+    // -- the two chokepoints any full crossing has to use -- plus two
+    // patrolling specific aisle lanes between shelf columns (so ducking
+    // into just any aisle isn't automatically safe either), plus two
+    // more working the open side margins near the entrance and register.
     this.floorGuards = [
-      makeGuard({ axis: 'y', fixed: 15, min: 14, max: 86, speed: 0.34, facing: 0 }),
-      makeGuard({ axis: 'y', fixed: 85, min: 14, max: 86, speed: 0.34, facing: Math.PI, dir: -1 }),
-      makeGuard({ axis: 'y', fixed: 50, min: 18, max: 82, speed: 0.30, facing: Math.PI, dir: -1 }),
-      makeGuard({ axis: 'x', fixed: 28, min: 22, max: 78, speed: 0.27, facing: Math.PI / 2 }),
-      makeGuard({ axis: 'x', fixed: 72, min: 22, max: 78, speed: 0.27, facing: -Math.PI / 2, dir: -1 }),
+      makeGuard({ axis: 'x', fixed: 22, min: 20, max: 220, speed: 0.36, facing: Math.PI / 2 }),
+      makeGuard({ axis: 'x', fixed: 26, min: 20, max: 220, speed: 0.34, facing: Math.PI / 2, dir: -1 }),
+      makeGuard({ axis: 'x', fixed: 124, min: 20, max: 220, speed: 0.36, facing: -Math.PI / 2 }),
+      makeGuard({ axis: 'x', fixed: 128, min: 20, max: 220, speed: 0.34, facing: -Math.PI / 2, dir: -1 }),
+      makeGuard({ axis: 'y', fixed: 94, min: 38, max: 112, speed: 0.3, facing: 0 }),
+      makeGuard({ axis: 'y', fixed: 166, min: 38, max: 112, speed: 0.3, facing: Math.PI, dir: -1 }),
+      makeGuard({ axis: 'y', fixed: 26, min: 30, max: 120, speed: 0.28, facing: Math.PI / 2 }),
+      makeGuard({ axis: 'y', fixed: 226, min: 30, max: 120, speed: 0.28, facing: -Math.PI / 2, dir: -1 }),
     ];
 
     this.floorHeatGain = 1.15;
@@ -864,7 +895,7 @@ class HeistGame {
     this.buildFloorRosterDOM();
     document.getElementById('heist-floor-hud').classList.remove('hidden');
     document.getElementById('heist-floor-hint').textContent =
-      'Tap a crew icon above to take control of them, then tap the floor to send them there.';
+      'Tap a crew icon above to take control of them, then tap the floor to send them there. Shelves block sightlines -- duck behind one.';
 
     this.input.onDown = (x, y) => this.floorClick(x, y);
     this.input.onUp = null;
@@ -948,14 +979,18 @@ class HeistGame {
   floorClick(px, py) {
     if (this.phase !== 'floor') return;
 
+    // Screen tap -> world coordinates, through the camera window (the
+    // store is bigger than one screen now, same pattern as the maze).
     const b = this.floorBounds();
-    const x = ((px - b.x) / b.w) * 100;
-    const y = ((py - b.y) / b.h) * 100;
-    if (x < -5 || x > 105 || y < -5 || y > 105) return;
+    const view = this.floorCamView;
+    const camMinX = this.floorCamX - view / 2, camMinY = this.floorCamY - view / 2;
+    const x = camMinX + ((px - b.x) / b.w) * view;
+    const y = camMinY + ((py - b.y) / b.h) * view;
+    if (x < -10 || x > this.floorWorldW + 10 || y < -10 || y > this.floorWorldH + 10) return;
 
     // Tapping directly on a character's dot on the floor selects them --
     // just as valid as tapping their chip in the roster above.
-    const tapped = this.floorChars.find(c => !c.pulled && Math.hypot(c.x - x, c.y - y) < 6);
+    const tapped = this.floorChars.find(c => !c.pulled && Math.hypot(c.x - x, c.y - y) < 7);
     if (tapped) {
       this.floorActiveId = tapped.id;
       this.updateFloorRosterDOM();
@@ -968,14 +1003,14 @@ class HeistGame {
     // Hit-test the active character's own, untriggered hotspots first.
     if (!active.isThief) {
       const spot = this.floorHotspots.find(h =>
-        h.crewId === active.id && !h.triggered && Math.hypot(h.x - x, h.y - y) < 5);
+        h.crewId === active.id && !h.triggered && Math.hypot(h.x - x, h.y - y) < 6);
       if (spot) {
         active.tx = spot.x; active.ty = spot.y; active.pendingHotspot = spot;
         return;
       }
     }
-    active.tx = Math.max(2, Math.min(98, x));
-    active.ty = Math.max(2, Math.min(98, y));
+    active.tx = Math.max(2, Math.min(this.floorWorldW - 2, x));
+    active.ty = Math.max(2, Math.min(this.floorWorldH - 2, y));
     active.pendingHotspot = null;
   }
 
@@ -1001,18 +1036,22 @@ class HeistGame {
       g.pauseTimer = pauseFrames;
     };
 
+    // Reach thresholds scaled up for the bigger store (was a 100x100
+    // space, now 240x150 -- roughly 2x the diagonal) so a distraction can
+    // still actually pull a guard from a realistic patrol distance
+    // instead of only the one standing right on top of it.
     if (char.id === 'tony') {
       // Loud: everyone within range runs over, hard and short.
-      nearGuards.filter(({ d }) => d < 42).forEach(({ g }) => sendToInvestigate(g, 90));
+      nearGuards.filter(({ d }) => d < 90).forEach(({ g }) => sendToInvestigate(g, 90));
       this.cash += 70;
     } else if (char.id === 'ruhul') {
       // Charm: just the nearest one, but they stick around much longer.
-      if (nearGuards[0] && nearGuards[0].d < 55) sendToInvestigate(nearGuards[0].g, 260);
+      if (nearGuards[0] && nearGuards[0].d < 115) sendToInvestigate(nearGuards[0].g, 260);
       this.cash += 85;
     } else {
       // The stall: doesn't lure anyone anywhere. Freezes the nearest guard
       // in place, wherever they currently are — they just stop walking.
-      if (nearGuards[0] && nearGuards[0].d < 50) {
+      if (nearGuards[0] && nearGuards[0].d < 105) {
         const g = nearGuards[0].g;
         g.frozen = true;
         g.freezeTimer = 320;
@@ -1044,12 +1083,44 @@ class HeistGame {
     this.floorAmbient = this.floorAmbient.filter(a => a.t < a.duration);
   }
 
+  // Position-only push-out of a shelf rectangle -- characters here move
+  // straight toward a target each frame rather than carrying velocity, so
+  // the maze's velocity-aware resolveWallCollision doesn't apply as-is.
+  floorPushOffShelves(entity, r) {
+    this.floorShelves.forEach(w => {
+      const closestX = Math.max(w.x, Math.min(entity.x, w.x + w.w));
+      const closestY = Math.max(w.y, Math.min(entity.y, w.y + w.h));
+      const dx = entity.x - closestX, dy = entity.y - closestY;
+      const dist = Math.hypot(dx, dy);
+      if (dist >= r || dist < 0.0001) return;
+      const push = r - dist;
+      entity.x += (dx / dist) * push;
+      entity.y += (dy / dist) * push;
+    });
+  }
+
+  // Sample points along a guard-to-character sightline and check whether
+  // any of them land inside a shelf -- a real line-of-sight check, cheap
+  // enough at this scale. Ducking down an aisle actually breaks sight now,
+  // not just distance/angle math with nothing physical in the way.
+  floorSightBlocked(x1, y1, x2, y2) {
+    const steps = 10;
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const px = x1 + (x2 - x1) * t, py = y1 + (y2 - y1) * t;
+      if (this.floorShelves.some(w => px > w.x && px < w.x + w.w && py > w.y && py < w.y + w.h)) return true;
+    }
+    return false;
+  }
+
   floorLoop() {
     if (this.phase !== 'floor') return;
     this._frame++;
     this.updateAmbient();
 
-    // Move every present, un-pulled character toward its own target.
+    // Move every present, un-pulled character toward its own target, then
+    // push back out of any shelf it walked into -- the shelves are real
+    // obstacles now, not decoration.
     this.floorChars.forEach(ch => {
       if (ch.pulled) return;
       const dx = ch.tx - ch.x, dy = ch.ty - ch.y;
@@ -1060,7 +1131,16 @@ class HeistGame {
       } else if (ch.pendingHotspot && !ch.pendingHotspot.triggered) {
         this.triggerHotspot(ch, ch.pendingHotspot);
       }
+      this.floorPushOffShelves(ch, 2.2);
     });
+
+    // Camera follows whoever's actually being directed right now.
+    {
+      const active = this.floorChars.find(c => c.id === this.floorActiveId) || this.floorChars[0];
+      const view = this.floorCamView;
+      this.floorCamX = Math.max(view / 2, Math.min(this.floorWorldW - view / 2, active.x));
+      this.floorCamY = Math.max(view / 2, Math.min(this.floorWorldH - view / 2, active.y));
+    }
 
     // Guards actually walk now, not just stand and swivel:
     //   patrol      — walking their route, facing into the store.
@@ -1115,10 +1195,16 @@ class HeistGame {
           g.state = 'patrol';
         }
       }
+      // Guards mostly patrol bands/lanes that don't cross a shelf, but an
+      // investigate/return beeline toward an arbitrary hotspot could --
+      // push back out rather than let a guard visibly clip through solid
+      // shelving.
+      this.floorPushOffShelves(g, 2.5);
     });
 
-    // Heat: anyone (present, un-pulled) inside any guard's cone heats up;
-    // otherwise cools down.
+    // Heat: anyone (present, un-pulled) inside any guard's cone AND with an
+    // actual clear sightline heats up; otherwise cools down. Ducking
+    // behind a shelf really does break line of sight now.
     this.floorChars.forEach(ch => {
       if (ch.pulled) return;
       const seen = this.floorGuards.some(g => {
@@ -1130,7 +1216,8 @@ class HeistGame {
         let diff = a - g.angle;
         while (diff > Math.PI) diff -= Math.PI * 2;
         while (diff < -Math.PI) diff += Math.PI * 2;
-        return Math.abs(diff) < g.halfAngle;
+        if (Math.abs(diff) >= g.halfAngle) return false;
+        return !this.floorSightBlocked(g.x, g.y, ch.x, ch.y);
       });
       ch.heat = Math.max(0, Math.min(100, ch.heat + (seen ? this.floorHeatGain : -this.floorHeatDecay)));
 
@@ -1195,47 +1282,83 @@ class HeistGame {
   drawFloorScene() {
     const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
     const b = this.floorBounds();
-    const toPx = (x, y) => [b.x + (x / 100) * b.w, b.y + (y / 100) * b.h];
 
     ctx.fillStyle = '#0e1416';
     ctx.fillRect(0, 0, W, H);
 
+    // Camera-relative projection -- the store is much bigger than the
+    // viewport now, same pattern as the maze's scrolling camera.
+    const view = this.floorCamView;
+    const camMinX = this.floorCamX - view / 2, camMinY = this.floorCamY - view / 2;
+    const toPx = (x, y) => [b.x + ((x - camMinX) / view) * b.w, b.y + ((y - camMinY) / view) * b.h];
+    const toPxLen = (v) => (v / view) * b.w;
+    const margin = 8;
+    const visible = (x, y) => x > camMinX - margin && x < camMinX + view + margin && y > camMinY - margin && y < camMinY + view + margin;
+
+    ctx.save();
+    ctx.beginPath(); ctx.rect(b.x, b.y, b.w, b.h); ctx.clip();
     ctx.fillStyle = '#1c2528';
     ctx.fillRect(b.x, b.y, b.w, b.h);
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(b.x, b.y, b.w, b.h);
-    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-    ctx.lineWidth = 1;
-    for (let gx = 10; gx < 100; gx += 10) {
-      const [px] = toPx(gx, 0);
-      ctx.beginPath(); ctx.moveTo(px, b.y); ctx.lineTo(px, b.y + b.h); ctx.stroke();
-    }
 
-    ctx.font = '13px VT323, monospace';
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
-    ctx.textAlign = 'center';
-    this.floorZones().forEach(z => {
-      const [zx, zy] = toPx(z.x, z.y);
-      ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-      ctx.strokeRect(zx - 30, zy - 22, 60, 44);
-      ctx.fillText(z.name.toUpperCase(), zx, zy - 28);
+    // Shelves -- the actual store structure. Real obstacles: block
+    // movement AND sightlines, so ducking down an aisle is a genuine move.
+    this.floorShelves.forEach(s => {
+      if (!visible(s.x + s.w / 2, s.y + s.h / 2)) return;
+      const [sx, sy] = toPx(s.x, s.y);
+      const sw = toPxLen(s.w), sh = toPxLen(s.h);
+      ctx.fillStyle = '#3a4a3a';
+      ctx.fillRect(sx, sy, sw, sh);
+      ctx.strokeStyle = '#243024'; ctx.lineWidth = 2;
+      ctx.strokeRect(sx, sy, sw, sh);
+      // Shelf rows -- a few horizontal ticks read as stocked shelving
+      ctx.strokeStyle = 'rgba(212,165,116,0.25)'; ctx.lineWidth = 1;
+      for (let ty = sy + sh * 0.16; ty < sy + sh * 0.95; ty += sh * 0.16) {
+        ctx.beginPath(); ctx.moveTo(sx + 2, ty); ctx.lineTo(sx + sw - 2, ty); ctx.stroke();
+      }
     });
 
-    const [ex, ey] = toPx(6, 50);
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.fillText('ENTRANCE', ex, ey - 40);
-    const [rx, ry] = toPx(this.floorRegister.x, this.floorRegister.y);
-    ctx.fillStyle = '#d4a574';
-    ctx.fillRect(rx - 16, ry - 22, 32, 44);
-    ctx.fillStyle = '#0e1416';
-    ctx.font = '11px VT323, monospace';
-    ctx.fillText('REGISTER', rx, ry + 40);
+    // Counters along the outer edges, each with a clerk standing there --
+    // where a distraction actually happens now, not a point marker in
+    // open floor.
+    ctx.font = '12px VT323, monospace';
+    ctx.textAlign = 'center';
+    this.floorZones().forEach(z => {
+      if (!visible(z.x, z.y)) return;
+      const [zx, zy] = toPx(z.x, z.y);
+      const cw = toPxLen(30), ch2 = toPxLen(10);
+      ctx.fillStyle = '#8a6a3f';
+      ctx.fillRect(zx - cw / 2, zy - ch2 / 2, cw, ch2);
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)'; ctx.lineWidth = 1.5;
+      ctx.strokeRect(zx - cw / 2, zy - ch2 / 2, cw, ch2);
+      // The clerk -- a small standing figure behind the counter
+      const clerkY = z.edge === 'bottom' ? zy + ch2 * 0.9 : zy - ch2 * 0.9;
+      ctx.fillStyle = 'rgba(20,16,12,0.9)';
+      ctx.beginPath(); ctx.arc(zx, clerkY - 6, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillRect(zx - 3, clerkY - 3, 6, 9);
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.fillText(z.name.toUpperCase(), zx, z.edge === 'bottom' ? zy + ch2 * 1.6 + 10 : zy - ch2 * 1.6 - 4);
+    });
+
+    if (visible(12, 75)) {
+      const [ex, ey] = toPx(12, 75);
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.fillText('ENTRANCE', ex, ey - 20);
+    }
+    if (visible(this.floorRegister.x, this.floorRegister.y)) {
+      const [rx, ry] = toPx(this.floorRegister.x, this.floorRegister.y);
+      const rw = toPxLen(14), rh = toPxLen(22);
+      ctx.fillStyle = '#d4a574';
+      ctx.fillRect(rx - rw / 2, ry - rh / 2, rw, rh);
+      ctx.fillStyle = '#0e1416';
+      ctx.font = '10px VT323, monospace';
+      ctx.fillText('REGISTER', rx, ry + rh / 2 + 14);
+    }
 
     // Cones, drawn before the guard bodies that own them
     this.floorGuards.forEach(g => {
+      if (!visible(g.x, g.y)) return;
       const [gx, gy] = toPx(g.x, g.y);
-      const rangePx = (g.range / 100) * b.w;
+      const rangePx = toPxLen(g.range);
       ctx.save();
       ctx.translate(gx, gy);
       ctx.rotate(g.angle);
@@ -1250,6 +1373,7 @@ class HeistGame {
     });
 
     this.floorHotspots.forEach(h => {
+      if (!visible(h.x, h.y)) return;
       const [hx, hy] = toPx(h.x, h.y);
       ctx.beginPath();
       ctx.arc(hx, hy, 7, 0, Math.PI * 2);
@@ -1260,9 +1384,10 @@ class HeistGame {
       ctx.stroke();
     });
 
-    this.floorAmbient.forEach(a => this.drawAmbientEvent(a, toPx));
+    this.floorAmbient.forEach(a => { if (visible(a.x, a.y)) this.drawAmbientEvent(a, toPx); });
 
     this.floorGuards.forEach(g => {
+      if (!visible(g.x, g.y)) return;
       const [gx, gy] = toPx(g.x, g.y);
       if (g.state === 'investigate' || g.state === 'return') {
         // Motion streak trailing behind the direction of travel — makes a
@@ -1327,6 +1452,8 @@ class HeistGame {
       ctx.lineWidth = 1.5;
       ctx.stroke();
     });
+
+    ctx.restore();
   }
 
   // Purely cosmetic — a tomato that rolls off a display and squishes, or a
@@ -1456,6 +1583,7 @@ class HeistGame {
   // reaching the end fast. The goal is a diamond.
   mazeCols = 10; mazeRows = 24; mazeCell = 15; mazeWallT = 2.2;
   mazeCamView = 80; // world units visible in the viewport at once
+  floorCamView = 100; // ditto, for the store floor
 
   mazeCellCenter(r, c) {
     const s = this.mazeCell;
