@@ -51,6 +51,7 @@ class TransplantTrail {
       wiseEricsPitched: false,
       heistDone: false,
       heistAssignments: null,
+      jailDone: false,
       jailWon: false,
       jailPath: null,
       aura: 100,
@@ -448,6 +449,7 @@ class TransplantTrail {
       wiseEricsPitched: this.state.wiseEricsPitched,
       heistDone: this.state.heistDone || false,
       heistAssignments: this.state.heistAssignments || null,
+      jailDone: this.state.jailDone || false,
       jailWon: this.state.jailWon || false,
       jailPath: this.state.jailPath || null,
       aura: this.state.aura,
@@ -485,6 +487,7 @@ class TransplantTrail {
     this.state.wiseEricsPitched   = save.wiseEricsPitched || false;
     this.state.heistDone          = save.heistDone || false;
     this.state.heistAssignments   = save.heistAssignments || null;
+    this.state.jailDone           = save.jailDone || false;
     this.state.jailWon            = save.jailWon || false;
     this.state.jailPath           = save.jailPath || null;
     this.state.aura               = save.aura;

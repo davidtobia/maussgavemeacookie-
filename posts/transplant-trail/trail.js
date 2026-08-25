@@ -731,6 +731,7 @@ class TrailGame {
   startJailGame() {
     game.showScreen('jail-game');
     jailGame = new JailGame(this.gameState, (result) => {
+      this.gameState.jailDone = true;
       this.gameState.jailWon = !!(result && result.jailWon);
       this.gameState.jailPath = result ? result.jailPath : null;
       // Chapter 6: the jail arc is its own checkpoint too, same reasoning
@@ -1033,7 +1034,8 @@ class TrailGame {
     // boundaries the save system checkpoints at (see CHAPTERS in
     // game.js / saveChapter call sites) so "Chapter 3" here always means
     // the same thing as chapter 3 in the chapter-select menu.
-    const chapterNum = this.gameState.heistDone ? 5
+    const chapterNum = this.gameState.jailDone ? 6
+      : this.gameState.heistDone ? 5
       : this.state.landmarkIndex >= 7 ? 4
       : this.state.landmarkIndex >= 3 ? 3
       : this.state.landmarkIndex >= 1 ? 2
