@@ -1766,9 +1766,43 @@ class CannonGame {
     this.showOverlay('cannon-victory');
     document.getElementById('cannon-victory-final-btns').classList.add('hidden');
     document.getElementById('cannon-victory-next').classList.remove('hidden');
+    document.getElementById('cannon-victory-highscore').classList.remove('hidden');
+    const cont = document.getElementById('cannon-victory-continue');
+    cont.textContent = 'Continue to the trail — they join you';
     this.showVictoryScene(0);
     document.getElementById('cannon-victory-highscore').onclick = () => this.showUpgradeShop();
-    document.getElementById('cannon-victory-continue').onclick = () => this.onComplete({
+    cont.onclick = () => this.onComplete({
+      boroughBucks: this.ts.boroughBucks,
+      unlocks: this.ts.unlocks.slice(),
+      totalDistance: this.ts.totalDistance,
+      wisemenJoined: true,
+    });
+  }
+
+  // "Exit to trail" in the upgrade shop used to leave without ever
+  // setting wisemenJoined -- and that flag is the *only* thing that
+  // arms the heist pitch later (trail.js: wisemenJoined &&
+  // checkingAccount <= 150). Washington Square Park only fires once, so
+  // leaving early here -- one tap away after literally your first shot --
+  // silently and permanently locked a player out of the heist and
+  // everything past it for that entire playthrough. Confirmed live:
+  // "I actually reached the Brooklyn Mirage without doing the fun parts
+  // of the game." Full completion shouldn't be the only door in --
+  // gives the early-exit path its own short beat instead of the full
+  // victory sequence, but still ends with the wisemen joining.
+  showEarlyExitScene() {
+    this.showOverlay('cannon-victory');
+    document.getElementById('cannon-victory-img').src = 'images/wsp-cannon.png';
+    document.getElementById('cannon-victory-name').textContent = "That's Plenty";
+    document.getElementById('cannon-victory-origin').textContent = '';
+    document.getElementById('cannon-victory-line').textContent =
+      '"Eh, we\'ve seen enough," Big Tony says, waving a hand. Ruhul\'s already folding up the trajectory tables. Dmitri just nods, like he expected this outcome and several others equally. "C\'mon," Tony says. "Streets is streets. Let\'s go."';
+    document.getElementById('cannon-victory-next').classList.add('hidden');
+    document.getElementById('cannon-victory-final-btns').classList.remove('hidden');
+    document.getElementById('cannon-victory-highscore').classList.add('hidden');
+    const cont = document.getElementById('cannon-victory-continue');
+    cont.textContent = 'Continue to the trail';
+    cont.onclick = () => this.onComplete({
       boroughBucks: this.ts.boroughBucks,
       unlocks: this.ts.unlocks.slice(),
       totalDistance: this.ts.totalDistance,
@@ -1865,11 +1899,7 @@ class CannonGame {
     document.getElementById('cannon-shop-continue').onclick = () => this.showLocationSelect();
     document.getElementById('cannon-shop-continue').textContent = 'Keep flying';
     const exitBtn = document.getElementById('cannon-shop-exit');
-    if (exitBtn) exitBtn.onclick = () => this.onComplete({
-      boroughBucks: this.ts.boroughBucks,
-      unlocks: this.ts.unlocks.slice(),
-      totalDistance: this.ts.totalDistance,
-    });
+    if (exitBtn) exitBtn.onclick = () => this.showEarlyExitScene();
   }
 
   drawWSPNight() {

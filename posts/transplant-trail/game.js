@@ -190,11 +190,21 @@ class TransplantTrail {
   maybeDebugJump() {
     const params = new URLSearchParams(window.location.search);
     if (params.get('jail') !== '1') return false;
-    this.selectCharacter('remote-worker');
-    this.state.playerName = 'Tester';
-    this.state.departureMonth = 'May';
-    trailGame = new TrailGame(this.state);
-    trailGame.startJailGame();
+    // This runs synchronously inside the TransplantTrail constructor --
+    // but `game = new TransplantTrail()` (bottom of this file) hasn't
+    // finished assigning the global yet at this point, and
+    // startJailGame() (trail.js) calls game.showScreen(...). Calling it
+    // from here directly hit `game` still undefined, threw, and silently
+    // aborted before any screen change -- which looked exactly like
+    // "the link just goes to the beginning of the game." Deferring one
+    // tick lets the constructor finish and `game` get assigned first.
+    setTimeout(() => {
+      this.selectCharacter('remote-worker');
+      this.state.playerName = 'Tester';
+      this.state.departureMonth = 'may';
+      trailGame = new TrailGame(this.state);
+      trailGame.startJailGame();
+    }, 0);
     return true;
   }
 
