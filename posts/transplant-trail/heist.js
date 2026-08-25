@@ -201,11 +201,17 @@ class HeistGame {
     });
 
     window.addEventListener('pointerup', () => {
-      const g = this.mech;
-      if (g && g.kind === 'getaway' && g.aiming) { this.confirmGetawayAim(); return; }
       // No tap-on-half fallback -- swipe only. Direct feedback: "take out
       // the tap option, the swiping is much better." Desktop still has
       // ArrowUp/ArrowDown wired in bindInput().
+      //
+      // Firing used to happen here too (confirm on whatever pointerup
+      // came next while aiming) -- but pointerup fires globally, so the
+      // very release of the ROCKET button that just started the aim
+      // satisfied that condition immediately. Confirmed bug: "when you
+      // press the rocket, it automatically shoots." Dragging the reticle
+      // on the canvas no longer fires anything on release; only a second,
+      // deliberate press of the ROCKET/FIRE button does now.
       startY = null;
     });
 
@@ -241,7 +247,14 @@ class HeistGame {
     };
     wireTap('heist-nitro-btn', () => this.triggerGetawayNitro());
     wireTap('heist-fire-btn', () => this.triggerGetawayFire());
-    wireTap('heist-rocket-btn', () => this.startGetawayAim());
+    // A real two-press action: first press arms the aim (bullet-time,
+    // reticle appears), second press on the same button fires it. Not a
+    // single tap-and-forget.
+    wireTap('heist-rocket-btn', () => {
+      const g = this.mech;
+      if (g && g.aiming) this.confirmGetawayAim();
+      else this.startGetawayAim();
+    });
     wireTap('heist-jumpout-btn', () => this.jumpOffBridge());
   }
 
@@ -252,28 +265,18 @@ class HeistGame {
   // slows way down, a bullseye appears, and you get ~3 real seconds to
   // drag it over the cop car or helicopter before it fires -- direct hit
   // if the reticle's on target when it goes, a wasted rocket if it isn't.
+  // First press only ARMS the aim -- bullet-time, a reticle appears, live
+  // targets get highlighted so you can see what's actually hittable. It
+  // does NOT snap onto anything for you: "don't auto aim... it's on them
+  // to move it properly." You get 5 real seconds (300 frames, ticking
+  // regardless of the bullet-time slowdown) to drag it yourself before it
+  // auto-fires wherever it's sitting; a second press of the same button
+  // fires early.
   startGetawayAim() {
     const g = this.mech;
     if (!g || g.kind !== 'getaway' || g.aiming || g.rocketAmmo <= 0) return;
     g.rocketAmmo--;
-    // Snap the reticle to a real target to start, not empty road -- the
-    // helicopter barely moves so it was always easy, but cop cars are
-    // fast-moving and the reticle used to default to screen-center, miles
-    // from wherever a cruiser actually was (confirmed: "the rocket didn't
-    // work on the cops, it did on the helicopter" -- this is why).
-    let startPoint = null;
-    if (g.heli && !g.heli.destroyed) startPoint = { x: g.heli.x, y: g.heli.y };
-    else {
-      let best = null, bestDist = Infinity;
-      g.obstacles.forEach(o => {
-        if (o.kind !== 'cop' || o.destroyed) return;
-        const oy = this.laneCenterY(o.lane);
-        const d = Math.abs(o.x - this.canvas.width * 0.22);
-        if (d < bestDist) { bestDist = d; best = { x: o.x, y: oy }; }
-      });
-      startPoint = best || { x: this.canvas.width * 0.6, y: this.canvas.height * 0.6 };
-    }
-    g.aiming = { x: startPoint.x, y: startPoint.y, timer: 180 };
+    g.aiming = { x: this.canvas.width * 0.55, y: this.canvas.height * 0.4, timer: 300 };
     this.updateGetawayButtons();
   }
 
@@ -350,7 +353,8 @@ class HeistGame {
   // funnier than not being able to.
   jumpOffBridge() {
     const g = this.mech;
-    if (!g || g.kind !== 'getaway' || g.sirens >= 0.5 || g.jumpedOff) return;
+    if (!g || g.kind !== 'getaway' || g.jumpedOff) return;
+    if (g.sirens < this.jumpOutMin || g.sirens > this.jumpOutMax) return;
     g.jumpedOff = true;
     this.jumpedOffBridge = true;
     this.stopLoop();
@@ -364,7 +368,9 @@ class HeistGame {
   // A short freeze-frame animation: the car keeps rolling empty while a
   // silhouette arcs off the rail toward the river, then straight to the
   // ending -- no crash risk for the rest of the run, but no flip bonus
-  // either, since there's no more run left to flip in.
+  // either, since there's no more run left to flip in. Doesn't get you
+  // away clean -- it's a different way to get caught, not an escape (see
+  // showEnding()).
   bridgeJumpLoop() {
     const g = this.mech;
     if (!g) return;
@@ -1584,6 +1590,10 @@ class HeistGame {
   mazeCols = 10; mazeRows = 24; mazeCell = 15; mazeWallT = 2.2;
   mazeCamView = 80; // world units visible in the viewport at once
   floorCamView = 100; // ditto, for the store floor
+  // The bridge jump-out is only offered for a window in the middle of the
+  // bridge stretch -- not from the moment the chase starts. sirens is a
+  // 0-1 progress fraction; the bridge is sirens < 0.5.
+  jumpOutMin = 0.16; jumpOutMax = 0.34;
 
   mazeCellCenter(r, c) {
     const s = this.mazeCell;
@@ -1762,6 +1772,11 @@ class HeistGame {
       maxPathIndex: 0,
       camX: layout.start.x, camY: layout.start.y,
       cashCollected: 0,
+      // Real stakes: three lives, not unlimited retries against the
+      // clock. Lose one every time you fall in a hole or get caught by a
+      // fire gate; lose all three and the job's over right there --
+      // straight to the getaway, same as running out of time.
+      lives: 3,
     };
 
     // Distraction work buys you a little breathing room — every hotspot the
@@ -1880,6 +1895,7 @@ class HeistGame {
         layout.gates.find(g2 => g2.active && this.pointRectDist(ball.x, ball.y, g2) < t.ballRadius);
       if (inHole) {
         m.resets++;
+        m.lives--;
         // Whatever cash you'd grabbed this run spills out right where you
         // fell -- real stakes for pushing your luck, but not gone for
         // good: it's sitting there as a pile if you make it back.
@@ -1891,9 +1907,18 @@ class HeistGame {
           layout.cash.push({ x: ball.x, y: ball.y, value: dropped, collected: false, dropped: true });
           dropLine = ` Dropped $${dropped} right there.`;
         }
+        if (m.lives <= 0) {
+          // Out of chances -- the job's over right here, straight to the
+          // getaway, same as running out of time.
+          m.outOfLives = true;
+          this.setHudHint(`Down through the floor.${dropLine} That was the last one.`, 'Out of chances.');
+          this.drawMazeScene();
+          this.endMaze();
+          return;
+        }
         ball.x = m.checkpoint.x; ball.y = m.checkpoint.y; ball.vx = 0; ball.vy = 0;
         this.setHudHint(
-          `Down through the floor.${dropLine} ${m.maxPathIndex > 0 ? 'Back to the last spot you cleared.' : 'Back to the start.'}`,
+          `Down through the floor.${dropLine} ${m.lives} ${m.lives === 1 ? 'life' : 'lives'} left.`,
           `+${m.bonusSeconds}s bought by the distractions`);
       }
 
@@ -1937,11 +1962,14 @@ class HeistGame {
     const lines = m.completed
       ? ['The ball drops onto the diamond and the whole thing lights up.',
          'You take what you grabbed on the way and the stone itself.']
+      : m.outOfLives
+      ? ['Down through the floor one too many times. Three strikes and the drawer stays shut.',
+         'Whatever you were holding when you fell the last time is gone with it.']
       : ['The ball is still rolling around in there when you run out of time.',
          'Somebody in the back has stopped talking. You keep what you already grabbed.'];
 
     this.showResult({
-      title: m.completed ? 'Got the diamond' : 'Out of time',
+      title: m.completed ? 'Got the diamond' : m.outOfLives ? 'Out of chances' : 'Out of time',
       who: null,
       lines,
       stats: [
@@ -2014,7 +2042,7 @@ class HeistGame {
 
     this.showHud(
       `Getaway — ${driver.name} driving`,
-      'Swipe up/down for lanes. FIRE shoots backward at whoever\'s chasing you. ROCKET drags a reticle -- line it up and let go.',
+      'Swipe up/down for lanes. FIRE shoots backward at whoever\'s chasing you. ROCKET arms an aim -- drag it yourself, press ROCKET again to fire.',
       cfg.label
     );
     this.input.onDown = null;
@@ -2024,7 +2052,9 @@ class HeistGame {
     // is there from the start, that should only come in later." Lanes and
     // dodging first, everything else layers on as the run goes.
     document.getElementById('heist-jump-btn').classList.add('hidden');
-    document.getElementById('heist-jumpout-btn').classList.remove('hidden');
+    // Jump-out button's actual visibility is handled by
+    // updateGetawayButtons() below, gated to the jumpOutMin/Max window --
+    // not available from the start.
     this.updateGetawayButtons();
     this.getawayLoop();
   }
@@ -2045,9 +2075,14 @@ class HeistGame {
     document.getElementById('heist-fire-count').textContent = g.gunAmmo;
     const rocketBtn = document.getElementById('heist-rocket-btn');
     rocketBtn.classList.toggle('hidden', g.rocketAmmo <= 0 && !g.aiming);
-    rocketBtn.disabled = !!g.aiming;
-    document.getElementById('heist-rocket-count').textContent = g.aiming ? '…' : g.rocketAmmo;
-    document.getElementById('heist-jumpout-btn').classList.toggle('hidden', g.sirens >= 0.5 || g.jumpedOff);
+    // Stays clickable while aiming -- pressing it again is what fires.
+    // (Was `disabled = !!g.aiming`, which meant the second press this
+    // whole mechanic depends on couldn't even register.)
+    rocketBtn.classList.toggle('armed', !!g.aiming);
+    document.getElementById('heist-rocket-label').textContent = g.aiming ? 'FIRE!' : 'ROCKET';
+    document.getElementById('heist-rocket-count').textContent = g.aiming ? '' : g.rocketAmmo;
+    document.getElementById('heist-jumpout-btn').classList.toggle('hidden',
+      g.jumpedOff || g.sirens < this.jumpOutMin || g.sirens > this.jumpOutMax);
     document.getElementById('heist-jump-btn').classList.toggle('hidden', !g.jumpUnlocked);
   }
 
@@ -2364,10 +2399,12 @@ class HeistGame {
     const driver = getHeistCrew(this.assign.lookout);
     let flavor;
     if (this.jumpedOffBridge) {
-      // No bust-lights scene here -- going over the rail is the one way
-      // out of the chase entirely, not a capture.
+      // A different way to get caught, not a way out of it -- "it should
+      // not make you get away, you still get caught." The river scene
+      // stays (it's a genuinely different visual beat), the outcome
+      // doesn't: no escape ending here anymore.
       this.riverLoop();
-      flavor = `${driver.name} watched the car go on without you. You and the bag went off the rail and into the East River instead -- cold, but nobody follows you in.`;
+      flavor = `${driver.name} doesn't slow down -- can't. You and the bag go off the rail and into the East River instead. They fish you out three blocks downstream, soaked through, with company already waiting on the bank.`;
     } else {
       this.bustLoop();
       const heat = this.finalHeat != null ? this.finalHeat : 100;
@@ -2800,6 +2837,22 @@ class HeistGame {
     ctx.fillRect(tx, ty, tw * frac, 14);
     ctx.strokeStyle = '#5a4a3a'; ctx.lineWidth = 2;
     ctx.strokeRect(tx, ty, tw, 14);
+
+    // Lives -- three hearts, one goes dark each time you fall. Lose the
+    // last one and it's straight to the getaway. Own row below the timer
+    // bar rather than beside it -- there's no room to the side on a
+    // narrow phone screen.
+    for (let i = 0; i < 3; i++) {
+      const hx = tx + 10 + i * 22, hy = ty + 28;
+      const filled = i < m.lives;
+      ctx.fillStyle = filled ? '#e05a4a' : 'rgba(90,74,58,0.4)';
+      ctx.beginPath();
+      ctx.moveTo(hx, hy + 5);
+      ctx.bezierCurveTo(hx - 9, hy - 4, hx - 9, hy + 8, hx, hy + 12);
+      ctx.bezierCurveTo(hx + 9, hy + 8, hx + 9, hy - 4, hx, hy + 5);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
 
   // --- the getaway street
@@ -2905,9 +2958,24 @@ class HeistGame {
   // A pulsing bullseye you drag over the target, plus a shrinking ring
   // showing how much of the 3 seconds is left before it fires anyway.
   drawGetawayReticle(aim, W, H) {
-    const ctx = this.ctx;
+    const ctx = this.ctx, g = this.mech;
     ctx.fillStyle = 'rgba(6,10,16,0.35)';
     ctx.fillRect(0, 0, W, H);
+
+    // Highlight anything actually hittable -- this is the "you can see
+    // what it can hit" part. It's still on the player to drag the
+    // reticle onto one; nothing here moves it for them.
+    const pulseRing = 22 + Math.sin(this._frame * 0.25) * 4;
+    const targets = [];
+    if (g.heli && !g.heli.destroyed) targets.push({ x: g.heli.x, y: g.heli.y });
+    g.obstacles.forEach(o => { if (o.kind === 'cop' && !o.destroyed) targets.push({ x: o.x, y: this.laneCenterY(o.lane) }); });
+    targets.forEach(tgt => {
+      ctx.beginPath(); ctx.arc(tgt.x, tgt.y, pulseRing, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(126,200,154,0.75)'; ctx.lineWidth = 2.5;
+      ctx.setLineDash([5, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    });
 
     const pulse = 1 + Math.sin(this._frame * 0.3) * 0.08;
     [26, 17, 8].forEach((r, i) => {
@@ -2919,8 +2987,9 @@ class HeistGame {
     ctx.beginPath(); ctx.moveTo(aim.x - 34, aim.y); ctx.lineTo(aim.x + 34, aim.y); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(aim.x, aim.y - 34); ctx.lineTo(aim.x, aim.y + 34); ctx.stroke();
 
-    // Countdown ring
-    const frac = aim.timer / 180;
+    // Countdown ring -- 5 real seconds (300 frames), ticking at normal
+    // speed regardless of the bullet-time slowdown around it.
+    const frac = aim.timer / 300;
     ctx.beginPath();
     ctx.arc(aim.x, aim.y, 40, -Math.PI / 2, -Math.PI / 2 + frac * Math.PI * 2);
     ctx.strokeStyle = frac > 0.3 ? '#7ec89a' : '#e05a4a';
@@ -2929,7 +2998,7 @@ class HeistGame {
 
     ctx.fillStyle = '#f0e8d8';
     ctx.font = '16px VT323, monospace'; ctx.textAlign = 'center';
-    ctx.fillText('drag onto the target, let go to fire', W / 2, H * 0.1);
+    ctx.fillText('drag onto a target, hit ROCKET again to fire', W / 2, H * 0.1);
   }
 
   // Gothic stone towers, catenary main cables, a fan of hanger cables --
@@ -3132,16 +3201,20 @@ class HeistGame {
         ctx.fillRect(x - 32, y - 22, 64, 7);
         break;
       case 'spikes':
-        ctx.fillStyle = '#8a2a20';
-        ctx.fillRect(x - 34, y - 9, 68, 5);
+        // Perpendicular to the ground -- spikes stand straight up off the
+        // strip, same as a real tire-shredder, not hanging down off it.
+        // Sitting at ground level (same baseline as the cones/pothole
+        // below) instead of floating mid-lane.
         ctx.fillStyle = '#c8402f';
-        ctx.fillRect(x - 34, y - 4, 68, 8);
+        ctx.fillRect(x - 34, y + 6, 68, 7);
+        ctx.fillStyle = '#8a2a20';
+        ctx.fillRect(x - 34, y + 13, 68, 4);
         for (let i = -4; i <= 4; i++) {
           ctx.fillStyle = '#d8d8d0';
           ctx.beginPath();
-          ctx.moveTo(x + i * 8 - 3, y + 4);
-          ctx.lineTo(x + i * 8 + 3, y + 4);
-          ctx.lineTo(x + i * 8, y + 18);
+          ctx.moveTo(x + i * 8 - 3, y + 6);
+          ctx.lineTo(x + i * 8 + 3, y + 6);
+          ctx.lineTo(x + i * 8, y - 8);
           ctx.closePath();
           ctx.fill();
         }
