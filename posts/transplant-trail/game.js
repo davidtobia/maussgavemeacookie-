@@ -24,6 +24,11 @@ const CHAPTERS = [
     title: 'You Get What You Give - Finding Love in an Unusual Place',
     landmarkIndex: 7,
   },
+  {
+    id: 5,
+    title: 'Three Strangers Named Eric Have a Proposal',
+    landmarkIndex: 7,
+  },
 ];
 
 class TransplantTrail {
@@ -39,6 +44,8 @@ class TransplantTrail {
       dadsAmexCancelled: false,
       wisemenJoined: false,
       wiseEricsPitched: false,
+      heistDone: false,
+      heistAssignments: null,
       aura: 100,
       inventory: {},
       bodegaScore: 0
@@ -432,6 +439,8 @@ class TransplantTrail {
       dadsAmexCancelled: this.state.dadsAmexCancelled,
       wisemenJoined: this.state.wisemenJoined,
       wiseEricsPitched: this.state.wiseEricsPitched,
+      heistDone: this.state.heistDone || false,
+      heistAssignments: this.state.heistAssignments || null,
       aura: this.state.aura,
       inventory: { ...this.state.inventory },
       bodegaScore: this.state.bodegaScore || 0,
@@ -465,6 +474,8 @@ class TransplantTrail {
     this.state.dadsAmexCancelled  = save.dadsAmexCancelled || false;
     this.state.wisemenJoined      = save.wisemenJoined || false;
     this.state.wiseEricsPitched   = save.wiseEricsPitched || false;
+    this.state.heistDone          = save.heistDone || false;
+    this.state.heistAssignments   = save.heistAssignments || null;
     this.state.aura               = save.aura;
     this.state.inventory          = { ...save.inventory };
     this.state.bodegaScore        = save.bodegaScore || 0;

@@ -713,6 +713,13 @@ class TrailGame {
       }
       this.gameState.heistDone = true;
       if (result) this.gameState.heistAssignments = result.assignments;
+      // The heist (maze + floor + getaway, easily the longest single
+      // set piece in the game) had no checkpoint of its own -- finishing
+      // it bought you nothing; quitting right after dropped you back to
+      // chapter 3 or 4 and made you replay the whole thing. Chapter 5
+      // saves right where the other mini-games already do, immediately
+      // on completion.
+      game.saveChapter(5, this.getTrailStateSnapshot());
       game.showScreen('trail-screen');
       this.showEvent(
         `You are out on your own recognizance with $${result ? result.heistCash : 0} you should not have. Act 3 is coming soon.`,
@@ -773,8 +780,12 @@ class TrailGame {
 
   reachDestination() {
     this.stop();
-    this.showEvent('🎉 You made it to the Brooklyn Mirage! Calculating your score...');
-    // TODO: Show final score screen
+    // Was "Calculating your score..." with no score screen ever following
+    // it -- a real dead end dressed up as if something was about to
+    // happen. Matches the honest framing already used at the end of the
+    // heist ("Act 3 is coming soon") instead of promising a screen that
+    // doesn't exist yet.
+    this.showEvent('🎉 You made it to the Brooklyn Mirage! That\'s as far as the trail goes right now -- the rest is coming soon.');
   }
 
   dailyExpenses() {
@@ -931,6 +942,18 @@ class TrailGame {
     this.showEvent('Work gig — coming soon.');
   }
 
+  // Was only reachable by fully backing out to the main menu and hitting
+  // "Choose chapter" -- no way to see or jump to a checkpoint without
+  // leaving the trail entirely. Same screen, reachable from the pause
+  // menu now. Jumping backward still means losing anything past your
+  // last save, same as "Continue" always has -- that's the save system,
+  // not new behavior.
+  returnToChapterSelect() {
+    this.closeMenu();
+    this.stop();
+    game.showChapterSelect();
+  }
+
   goOut() {
     this.toggleMenu();
     this.chargeExpense(50, 'chaseFreedom');
@@ -983,6 +1006,18 @@ class TrailGame {
     document.getElementById('trail-sapphire').textContent = `$${Math.floor(b.chaseSapphire)}`;
     document.getElementById('trail-dads-amex').textContent = `$${Math.floor(b.dadsAmex)}`;
     document.getElementById('trail-bilt').textContent = `$${Math.floor(b.bilt)}`;
+
+    // Chapter progress -- a live, always-visible readout (not another
+    // popup) of how far into the game you are, mirroring the same
+    // boundaries the save system checkpoints at (see CHAPTERS in
+    // game.js / saveChapter call sites) so "Chapter 3" here always means
+    // the same thing as chapter 3 in the chapter-select menu.
+    const chapterNum = this.gameState.heistDone ? 5
+      : this.state.landmarkIndex >= 7 ? 4
+      : this.state.landmarkIndex >= 3 ? 3
+      : this.state.landmarkIndex >= 1 ? 2
+      : 1;
+    document.getElementById('trail-chapter').textContent = `${chapterNum} of ${CHAPTERS.length}`;
 
     // Next landmark
     const nextLandmark = this.getNextLandmark();

@@ -415,54 +415,40 @@ class BodegaGame {
     clearInterval(this.timerInterval);
     if (this.animFrame)   cancelAnimationFrame(this.animFrame);
     if (this._keyHandler) document.removeEventListener('keydown', this._keyHandler);
-    this.showGamble();
+    this.showResults();
   }
 
   // ============================================
-  // GAMBLE PHASE
+  // RESULTS
   // ============================================
-
-  showGamble() {
+  // Used to be a two-step "gamble": pick a dialogue line, then a second
+  // popup to see what it "won" you. It wasn't actually a gamble --
+  // there was no randomness, option 3 was always strictly the best
+  // pick every single time, so it was just an extra required tap
+  // standing between the player and a score they'd already earned.
+  // Direct feedback: "the ones in the supermarket game... just got in
+  // the way." Down to one result, one button.
+  showResults() {
     this.showPhase('gamble');
-    document.getElementById('bodega-gamble-text').textContent =
-      `You got the goods. Score: ${this.score}. Now — what do you say to the bodega guy on the way out?`;
+    const earned = this.score;
+    this.gameState.bodegaScore = (this.gameState.bodegaScore || 0) + earned;
+    // Same reward pattern the cannon and heist mini-games use -- real
+    // cash on hand. Previously bodegaScore was tracked and saved but
+    // never actually spent or shown anywhere, so this catcher game was
+    // the only one of the three that didn't matter economically.
+    this.gameState.checkingAccount += earned;
+
+    document.getElementById('bodega-gamble-text').textContent = earned > 0
+      ? `Bag's packed. You made off with $${earned} worth of groceries.`
+      : `Bag's packed, but you dropped more than you caught. Nothing extra this trip.`;
 
     const choices = document.getElementById('bodega-gamble-choices');
     choices.innerHTML = '';
-
-    const options = [
-      { label: '1. "Thank you"',       multiplier: 1 },
-      { label: '2. "Thank you boss"',   multiplier: 2 },
-      { label: '3. "Habibi, shukran"', multiplier: 3 },
-    ];
-
-    options.forEach(opt => {
-      const btn = document.createElement('button');
-      btn.className = 'menu-option';
-      btn.textContent = opt.label;
-      btn.onclick = () => this.applyGamble(opt.multiplier);
-      choices.appendChild(btn);
-    });
-  }
-
-  applyGamble(multiplier) {
-    const finalScore = this.score * multiplier;
-    this.gameState.bodegaScore = (this.gameState.bodegaScore || 0) + finalScore;
-
-    const choices = document.getElementById('bodega-gamble-choices');
-    choices.innerHTML = '';
-
-    const result = document.createElement('p');
-    result.className = 'bodega-splash-text';
-    result.style.marginTop = '20px';
-    result.textContent = `Good choice. You get ${finalScore} points.`;
-    choices.appendChild(result);
-
     const btn = document.createElement('button');
     btn.className = 'menu-option';
     btn.style.marginTop = '20px';
     btn.textContent = 'Continue';
-    btn.onclick = () => this.onComplete(finalScore);
+    btn.onclick = () => this.onComplete(earned);
     choices.appendChild(btn);
   }
 }
