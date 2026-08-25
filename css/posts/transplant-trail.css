@@ -2073,3 +2073,160 @@ button.menu-option.cannon-shop-exit-btn:hover {
   .heist-hud-meta  { font-size: 15px; }
   .heist-narration { font-size: 17px; }
 }
+
+/* ============================================
+   ACT 3 — THE JAIL
+   Same screen/overlay skeleton as #heist-game -- see the comment above
+   .cannon-splash / .menu-option / .cannon-stat for the shared panel
+   furniture this reuses instead of duplicating.
+   ============================================ */
+
+#jail-game {
+  width: 100%;
+  height: 100vh;
+  display: none;
+  background: #000;
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+}
+
+#jail-game.active {
+  display: block;
+  touch-action: none;
+}
+
+.game-container:has(#jail-game.active) {
+  padding: 0;
+  align-items: stretch;
+}
+
+#jail-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+
+.jail-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.86);
+  z-index: 5;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.jail-overlay.hidden {
+  display: none;
+}
+
+.jail-fight-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  padding: 16px;
+}
+
+.jail-fight-hud.hidden {
+  display: none;
+}
+
+.jail-fight-bars {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.jail-fight-bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.jail-fight-label {
+  font-size: 15px;
+  color: #c8b89c;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.jail-fight-bar {
+  height: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid #3a322c;
+}
+
+.jail-fight-bar-fill {
+  height: 100%;
+  transition: width 0.15s ease-out;
+}
+
+.jail-fight-bar-player { background: #7ec89a; }
+.jail-fight-bar-opp    { background: #e05a4a; }
+
+.jail-fight-prompt {
+  align-self: center;
+  font-size: 32px;
+  font-weight: bold;
+  min-height: 40px;
+  text-align: center;
+  color: #d4a574;
+}
+
+.jail-prompt-attack  { color: #e05a4a; }
+.jail-prompt-opening { color: #7ec89a; }
+
+.jail-fight-log {
+  align-self: center;
+  font-size: 17px;
+  color: #9a8a76;
+  min-height: 22px;
+  text-align: center;
+}
+
+.jail-fight-controls {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  pointer-events: auto;
+}
+
+.jail-fight-btn {
+  flex: 1;
+  max-width: 160px;
+  padding: 22px 0;
+  font-family: 'VT323', monospace;
+  font-size: 22px;
+  letter-spacing: 0.05em;
+  border: 2px solid #3a322c;
+  background: rgba(20, 16, 12, 0.85);
+  color: #c8b89c;
+  cursor: pointer;
+}
+
+.jail-fight-btn.pressed {
+  transform: scale(0.95);
+}
+
+.jail-dodge-btn { border-color: #7ec89a; color: #7ec89a; }
+.jail-punch-btn { border-color: #e05a4a; color: #e05a4a; }
+
+@media (max-width: 768px) {
+  .jail-fight-prompt { font-size: 26px; }
+  .jail-fight-btn { font-size: 19px; padding: 18px 0; }
+}

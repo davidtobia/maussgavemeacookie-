@@ -29,6 +29,11 @@ const CHAPTERS = [
     title: 'Three Strangers Named Eric Have a Proposal',
     landmarkIndex: 7,
   },
+  {
+    id: 6,
+    title: 'Everybody in Here Wants Something From You',
+    landmarkIndex: 7,
+  },
 ];
 
 class TransplantTrail {
@@ -46,6 +51,8 @@ class TransplantTrail {
       wiseEricsPitched: false,
       heistDone: false,
       heistAssignments: null,
+      jailWon: false,
+      jailPath: null,
       aura: 100,
       inventory: {},
       bodegaScore: 0
@@ -98,7 +105,7 @@ class TransplantTrail {
     // finger can't be outside the locked subtree -- everything on screen
     // during a canvas game is inside it. Restored the moment you're back
     // on a reading screen, where pinch/double-tap zoom is still wanted.
-    const CANVAS_GAME_SCREENS = new Set(['cannon-game', 'heist-game', 'bodega-game']);
+    const CANVAS_GAME_SCREENS = new Set(['cannon-game', 'heist-game', 'bodega-game', 'jail-game']);
     const lockZoom = CANVAS_GAME_SCREENS.has(screenId);
     document.documentElement.classList.toggle('game-zoom-lock', lockZoom);
     document.body.classList.toggle('game-zoom-lock', lockZoom);
@@ -441,6 +448,8 @@ class TransplantTrail {
       wiseEricsPitched: this.state.wiseEricsPitched,
       heistDone: this.state.heistDone || false,
       heistAssignments: this.state.heistAssignments || null,
+      jailWon: this.state.jailWon || false,
+      jailPath: this.state.jailPath || null,
       aura: this.state.aura,
       inventory: { ...this.state.inventory },
       bodegaScore: this.state.bodegaScore || 0,
@@ -476,6 +485,8 @@ class TransplantTrail {
     this.state.wiseEricsPitched   = save.wiseEricsPitched || false;
     this.state.heistDone          = save.heistDone || false;
     this.state.heistAssignments   = save.heistAssignments || null;
+    this.state.jailWon            = save.jailWon || false;
+    this.state.jailPath           = save.jailPath || null;
     this.state.aura               = save.aura;
     this.state.inventory          = { ...save.inventory };
     this.state.bodegaScore        = save.bodegaScore || 0;

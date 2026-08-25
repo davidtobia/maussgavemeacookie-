@@ -720,13 +720,34 @@ class TrailGame {
       // saves right where the other mini-games already do, immediately
       // on completion.
       game.saveChapter(5, this.getTrailStateSnapshot());
+      // Straight into Act 3 -- no "out on your own recognizance" detour
+      // back to the trail anymore now that there's somewhere for the
+      // arrest to actually lead.
+      this.startJailGame();
+    });
+    heistGame.init();
+  }
+
+  startJailGame() {
+    game.showScreen('jail-game');
+    jailGame = new JailGame(this.gameState, (result) => {
+      this.gameState.jailWon = !!(result && result.jailWon);
+      this.gameState.jailPath = result ? result.jailPath : null;
+      // Chapter 6: the jail arc is its own checkpoint too, same reasoning
+      // as chapter 5 -- it's a real chunk of content (recruitment arc +
+      // two activity beats + a fight), not something you want to redo
+      // because you closed the tab right after finishing it.
+      game.saveChapter(6, this.getTrailStateSnapshot());
       game.showScreen('trail-screen');
+      const outcome = result && result.jailWon
+        ? 'You walk out of the yard still standing. Word travels fast in a building this size.'
+        : "You walk out of the yard, eventually, on your own legs. That's the part that counts.";
       this.showEvent(
-        `You are out on your own recognizance with $${result ? result.heistCash : 0} you should not have. Act 3 is coming soon.`,
+        `${outcome} Act 4 is coming soon.`,
         () => this.start()
       );
     });
-    heistGame.init();
+    jailGame.init();
   }
 
   showWiseEricsPitch() {
@@ -782,9 +803,9 @@ class TrailGame {
     this.stop();
     // Was "Calculating your score..." with no score screen ever following
     // it -- a real dead end dressed up as if something was about to
-    // happen. Matches the honest framing already used at the end of the
-    // heist ("Act 3 is coming soon") instead of promising a screen that
-    // doesn't exist yet.
+    // happen. This landmark sits past the jail arc in the sequence and
+    // still has nothing built for it, so the message is honest about
+    // that instead of promising a screen that doesn't exist.
     this.showEvent('🎉 You made it to the Brooklyn Mirage! That\'s as far as the trail goes right now -- the rest is coming soon.');
   }
 

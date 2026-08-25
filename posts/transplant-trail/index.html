@@ -679,16 +679,56 @@
         </div>
       </div>
 
-      <!-- Act 3 stub — nothing here yet, and it says so -->
+      <!-- The van ride over -- a short beat, then straight into Act 3 -->
       <div id="heist-act3" class="heist-overlay hidden">
         <div class="cannon-splash">
-          <h2 class="cannon-splash-title">Act 3: The Prison</h2>
-          <p class="heist-coming-soon">Coming soon</p>
+          <h2 class="cannon-splash-title">Booked</h2>
           <p class="heist-narration">
-            Your things go into a manila envelope. The money you managed to keep is still
-            technically yours, which nobody can quite explain.
+            The car ride to central booking is quiet in a way none of the last hour was.
+            Somebody up front reads your rights off a laminated card like it's the fortieth
+            time today, because it is.
           </p>
-          <button id="heist-act3-continue" class="menu-option" style="margin-top: 24px;">Back to the trail</button>
+          <button id="heist-act3-continue" class="menu-option" style="margin-top: 24px;">Through the gate</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================
+         ACT 3 — THE JAIL
+         ============================================ -->
+    <div id="jail-game" class="screen">
+      <canvas id="jail-canvas"></canvas>
+
+      <!-- Narrative overlay reused for intake, each recruiter's pitch, the
+           three-way choice, both "days before" activities, and the ending.
+           One reusable dialogue panel instead of a dedicated screen per
+           beat -- same pattern bodega's results panel uses. -->
+      <div id="jail-dialogue" class="jail-overlay">
+        <div class="cannon-splash cannon-splash-wide">
+          <h2 id="jail-dialogue-title" class="cannon-splash-title"></h2>
+          <p id="jail-dialogue-sub" class="cannon-splash-sub"></p>
+          <div id="jail-dialogue-body"></div>
+          <div id="jail-dialogue-choices" class="menu-options" style="margin-top: 20px;"></div>
+        </div>
+      </div>
+
+      <!-- Fight HUD -->
+      <div id="jail-fight-hud" class="jail-fight-hud hidden">
+        <div class="jail-fight-bars">
+          <div class="jail-fight-bar-wrap">
+            <span class="jail-fight-label">You</span>
+            <div class="jail-fight-bar"><div id="jail-fight-player-bar" class="jail-fight-bar-fill jail-fight-bar-player"></div></div>
+          </div>
+          <div class="jail-fight-bar-wrap">
+            <span class="jail-fight-label">Big Steve</span>
+            <div class="jail-fight-bar"><div id="jail-fight-opp-bar" class="jail-fight-bar-fill jail-fight-bar-opp"></div></div>
+          </div>
+        </div>
+        <p id="jail-fight-prompt" class="jail-fight-prompt"></p>
+        <p id="jail-fight-log" class="jail-fight-log"></p>
+        <div class="jail-fight-controls">
+          <button id="jail-dodge-btn" class="jail-fight-btn jail-dodge-btn">DODGE</button>
+          <button id="jail-punch-btn" class="jail-fight-btn jail-punch-btn">PUNCH</button>
         </div>
       </div>
     </div>
@@ -715,11 +755,12 @@
   <script src="characters.js?v=2"></script>
   <script src="store.js?v=2"></script>
   <script src="trail-data.js?v=3"></script>
-  <script src="trail.js?v=7"></script>
+  <script src="trail.js?v=8"></script>
   <script src="bodega.js?v=2"></script>
   <script src="cannon.js?v=13"></script>
   <script src="heist.js?v=27"></script>
-  <script src="game.js?v=8"></script>
+  <script src="jail.js?v=1"></script>
+  <script src="game.js?v=9"></script>
 
   <!-- GoatCounter Analytics -->
   <script data-goatcounter="https://maussgavemeacookie.goatcounter.com/count"
