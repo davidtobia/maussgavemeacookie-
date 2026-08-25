@@ -81,7 +81,6 @@ class JailGame {
     this.phase = 'idle';
     this.path = null;        // 'mangione' | 'diddy' | 'sbf'
     this.weapon = false;     // found during the activities beat
-    this.tookAmex = false;   // unused hook, mirrors the rest of the save shape
 
     this._af = null;
     this._frame = 0;
