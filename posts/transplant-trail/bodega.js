@@ -41,7 +41,12 @@ class BodegaGame {
     // Preload background image; render once ready
     this.bgImage = new Image();
     this.bgImage.onload = () => this.renderBackground();
-    this.bgImage.src = 'images/bodega-bg.png';
+    // Was a 2.3MB PNG at the same pixel dimensions -- on mobile it very
+    // plausibly never finished downloading inside a 45-second play
+    // session, so the black fallback fill in renderBackground() was all
+    // that ever showed. Recompressed to a ~410KB JPEG (no transparency
+    // needed for a background photo) at the same resolution.
+    this.bgImage.src = 'images/bodega-bg.jpg';
 
     this.showPhase('intro');
     document.getElementById('bodega-intro-text').textContent =
@@ -441,6 +446,20 @@ class BodegaGame {
     document.getElementById('bodega-gamble-text').textContent = earned > 0
       ? `Bag's packed. You made off with $${earned} worth of groceries.`
       : `Bag's packed, but you dropped more than you caught. Nothing extra this trip.`;
+
+    // Checking can go negative for the first time right here (rent plus a
+    // grocery run, this early), and nothing in the game had ever
+    // reassured the player that's expected, not a mistake. Eric isn't
+    // physically in this scene -- he sold the gear back at the very
+    // start -- so this plays as him checking in from wherever he is,
+    // same over-the-top voice as the opening shop.
+    const ericLine = document.getElementById('bodega-gamble-eric');
+    if (this.gameState.checkingAccount < 0) {
+      ericLine.textContent = `Somewhere, Eric feels this. "You're fine," he says, to no one in particular. "That's what the card's for. Don't even think about it. I love you."`;
+      ericLine.classList.remove('hidden');
+    } else {
+      ericLine.classList.add('hidden');
+    }
 
     const choices = document.getElementById('bodega-gamble-choices');
     choices.innerHTML = '';

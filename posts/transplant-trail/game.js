@@ -63,6 +63,8 @@ class TransplantTrail {
   }
 
   init() {
+    if (this.maybeDebugJump()) return;
+
     // Load screen - press any key or click to continue
     this.setupLoadScreen();
 
@@ -178,6 +180,22 @@ class TransplantTrail {
       case 'leaderboard': this.showLeaderboard(); break;
       case 'sound':       this.toggleSound(); break;
     }
+  }
+
+  // Dev-only shortcut for playtesting one chapter without playing the
+  // whole game up to it: ?jail=1 in the URL seeds a default character
+  // and boots straight into Act 3, skipping the trail/heist entirely.
+  // Not a real game feature -- just a fast way to get eyes on new
+  // content while it's actively being iterated on.
+  maybeDebugJump() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('jail') !== '1') return false;
+    this.selectCharacter('remote-worker');
+    this.state.playerName = 'Tester';
+    this.state.departureMonth = 'May';
+    trailGame = new TrailGame(this.state);
+    trailGame.startJailGame();
+    return true;
   }
 
   showMainMenu() {

@@ -335,6 +335,10 @@
       <div id="bodega-gamble" class="bodega-overlay hidden">
         <div class="bodega-splash">
           <p id="bodega-gamble-text" class="bodega-splash-text"></p>
+          <!-- Only filled in and shown if checking just went negative --
+               a reassurance line that credit is fine, before the player
+               has any reason to think it isn't. -->
+          <p id="bodega-gamble-eric" class="bodega-splash-text bodega-eric-line hidden"></p>
           <div id="bodega-gamble-choices" class="menu-options" style="margin-top: 30px;"></div>
         </div>
       </div>
@@ -351,29 +355,18 @@
         <button id="cannon-boost-btn" class="cannon-boost-btn">BOOST</button>
       </div>
 
-      <!-- Wisemen overlay -->
-      <div id="cannon-wisemen" class="cannon-overlay">
-        <div class="cannon-splash cannon-splash-wide">
-          <img src="images/wsp-cannon.png" alt="Da NeightOOd Explorer — three wisemen with a cannon at Washington Square Park" class="cannon-splash-img">
-          <div class="cannon-wisemen-grid">
-            <div class="cannon-wiseman">
-              <div class="cannon-wiseman-name">Big Tony</div>
-              <div class="cannon-wiseman-origin">New Jersey Italian</div>
-              <p class="cannon-wiseman-line">[Dialogue — to be written]</p>
-            </div>
-            <div class="cannon-wiseman">
-              <div class="cannon-wiseman-name">Ruhul</div>
-              <div class="cannon-wiseman-origin">Queens Bengali</div>
-              <p class="cannon-wiseman-line">[Dialogue — to be written]</p>
-            </div>
-            <div class="cannon-wiseman">
-              <div class="cannon-wiseman-name">Dmitri</div>
-              <div class="cannon-wiseman-origin">Coney Island Russian</div>
-              <p class="cannon-wiseman-line">[Dialogue — to be written]</p>
-            </div>
-          </div>
-          <p class="cannon-wiseman-message">[Central message from the three wisemen — to be written]</p>
-          <button id="cannon-wisemen-continue" class="menu-option" style="margin-top: 28px;">Enter the cannon.</button>
+      <!-- Wisemen overlay -- a sequence of full-bleed scenes (rendered by
+           renderWisemenScene() in cannon.js) instead of one cramped
+           three-column grid, which is what actually broke on mobile: three
+           name/origin/line blocks side by side had nowhere to go on a
+           phone-width screen. One scene at a time now, image full-bleed. -->
+      <div id="cannon-wisemen" class="cannon-overlay cannon-overlay-scene">
+        <img id="cannon-wisemen-img" src="images/wsp-cannon.png" alt="Three wisemen with a cannon at Washington Square Park" class="cannon-scene-img">
+        <div class="cannon-scene-panel">
+          <div id="cannon-wisemen-name" class="cannon-scene-name"></div>
+          <div id="cannon-wisemen-origin" class="cannon-scene-origin"></div>
+          <p id="cannon-wisemen-line" class="cannon-scene-line"></p>
+          <button id="cannon-wisemen-continue" class="menu-option cannon-scene-btn"></button>
         </div>
       </div>
 
@@ -525,33 +518,19 @@
         </div>
       </div>
 
-      <!-- Victory overlay — shown once, the moment the fourth borough is unlocked -->
-      <div id="cannon-victory" class="cannon-overlay hidden">
-        <div class="cannon-splash cannon-splash-wide">
-          <h2 class="cannon-splash-title">You Did It.</h2>
-          <img src="images/wsp-cannon.png" alt="The three wisemen at Washington Square Park" class="cannon-splash-img">
-          <div class="cannon-wisemen-grid">
-            <div class="cannon-wiseman">
-              <div class="cannon-wiseman-name">Big Tony</div>
-              <div class="cannon-wiseman-origin">New Jersey Italian</div>
-              <p class="cannon-wiseman-line">[Dialogue — to be written]</p>
-            </div>
-            <div class="cannon-wiseman">
-              <div class="cannon-wiseman-name">Ruhul</div>
-              <div class="cannon-wiseman-origin">Queens Bengali</div>
-              <p class="cannon-wiseman-line">[Dialogue — to be written]</p>
-            </div>
-            <div class="cannon-wiseman">
-              <div class="cannon-wiseman-name">Dmitri</div>
-              <div class="cannon-wiseman-origin">Coney Island Russian</div>
-              <p class="cannon-wiseman-line">[Dialogue — to be written]</p>
-            </div>
-          </div>
-          <p class="cannon-wiseman-message">[The three of them decide you've earned their respect and ask to join you — to be written]</p>
-          <div class="cannon-features-btns" style="margin-top: 20px;">
+      <!-- Victory overlay — shown once, the moment the fourth borough is
+           unlocked. Same scene-sequence pattern as #cannon-wisemen. -->
+      <div id="cannon-victory" class="cannon-overlay cannon-overlay-scene hidden">
+        <img id="cannon-victory-img" src="images/wsp-cannon.png" alt="The three wisemen at Washington Square Park" class="cannon-scene-img">
+        <div class="cannon-scene-panel">
+          <div id="cannon-victory-name" class="cannon-scene-name"></div>
+          <div id="cannon-victory-origin" class="cannon-scene-origin"></div>
+          <p id="cannon-victory-line" class="cannon-scene-line"></p>
+          <div id="cannon-victory-final-btns" class="cannon-features-btns hidden">
             <button id="cannon-victory-highscore" class="menu-option">Keep flying for a high score</button>
             <button id="cannon-victory-continue" class="menu-option">Continue to the trail — they join you</button>
           </div>
+          <button id="cannon-victory-next" class="menu-option cannon-scene-btn"></button>
         </div>
       </div>
     </div>
@@ -756,11 +735,11 @@
   <script src="store.js?v=2"></script>
   <script src="trail-data.js?v=3"></script>
   <script src="trail.js?v=9"></script>
-  <script src="bodega.js?v=2"></script>
-  <script src="cannon.js?v=13"></script>
+  <script src="bodega.js?v=3"></script>
+  <script src="cannon.js?v=14"></script>
   <script src="heist.js?v=27"></script>
   <script src="jail.js?v=2"></script>
-  <script src="game.js?v=10"></script>
+  <script src="game.js?v=11"></script>
 
   <!-- GoatCounter Analytics -->
   <script data-goatcounter="https://maussgavemeacookie.goatcounter.com/count"

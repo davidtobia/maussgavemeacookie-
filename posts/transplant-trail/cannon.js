@@ -70,6 +70,61 @@ const TARGET_BOROUGHS = [
   },
 ];
 
+// Both the pre-flight pitch and the after-the-4th-borough payoff walk
+// through the same three wisemen one at a time instead of cramming a
+// three-column grid into one screen -- that grid was fine on desktop but
+// had nowhere to go on a phone-width screen, which is most of how this
+// actually gets played. Same wsp-cannon.png hero image reused across the
+// sequence (no separate art per character yet); the text carries each
+// beat instead.
+const WISEMEN_INTRO_SCENES = [
+  {
+    name: 'Washington Square Park', origin: '11:40 PM, the arch lit up orange',
+    line: "There's a cannon under the arch. There are three men standing around it like it's the most normal thing in the world, because to them, at this point, it basically is.",
+  },
+  {
+    name: 'Big Tony', origin: 'New Jersey Italian',
+    line: '"You look like you need a lift," he says, patting the cannon like it\'s a family car. "Not a metaphor. An actual lift. Straight up, straight out, into whichever borough your rent can survive."',
+  },
+  {
+    name: 'Ruhul', origin: 'Queens Bengali',
+    line: 'Ruhul already has the trajectory tables out -- dog-eared, water-stained, clearly used a hundred times before you. "Wind\'s from the west tonight," he says, not looking up. "Means Queens is basically free. Everywhere else, you\'re gonna have to earn."',
+  },
+  {
+    name: 'Dmitri', origin: 'Coney Island Russian',
+    line: 'Dmitri doesn\'t say anything for a while. Then: "You will land somewhere. Everyone lands somewhere. Question is only how much it costs you to get up after." He lights a cigarette he does not smoke.',
+  },
+  {
+    name: 'The Pitch', origin: '',
+    line: 'Four boroughs. One cannon. However you land is however you land -- that\'s rent in this city for you. Get in.',
+    button: 'Enter the cannon.',
+  },
+];
+
+const WISEMEN_VICTORY_SCENES = [
+  {
+    name: 'You Did It.', origin: '',
+    line: 'Four boroughs, four landings, one increasingly dented cannon. The three of them look at you like you just passed some test you didn\'t know you were taking.',
+  },
+  {
+    name: 'Big Tony', origin: 'New Jersey Italian',
+    line: '"That\'s my kid," he says, to nobody, to everybody. "I\'m not crying, it\'s just -- the cannon\'s got smoke in it. From the cannon stuff."',
+  },
+  {
+    name: 'Ruhul', origin: 'Queens Bengali',
+    line: 'Ruhul is already folding the trajectory tables away for good. "You don\'t need these anymore," he says, and hands them to you anyway. "Keep them. You\'ll want to remember what it felt like to not know where you\'d land."',
+  },
+  {
+    name: 'Dmitri', origin: 'Coney Island Russian',
+    line: 'Dmitri nods once, which from Dmitri is the same as a standing ovation. "We come with you now," he says. "Not because you need us. Because it\'s funnier this way."',
+  },
+  {
+    name: 'The Wise Erics', origin: '',
+    line: "It's decided, apparently, without a vote. Big Tony, Ruhul, and Dmitri fall in step behind you. You've earned New York, or at least earned three men who are going to act like you did.",
+    final: true,
+  },
+];
+
 const GROUND_ENTITY_TYPES = new Set([
   'dumpster','rat_dumpster','hydrant','subway_grate','hotdog_cart','manhole','cab_ground',
   'pizza_man','drunk_vomit','stroller_launcher','greek_grandpa','pizza_boat',
@@ -117,7 +172,24 @@ class CannonGame {
     this.canvas.addEventListener('touchstart', dispatch, { passive: false });
     this.drawWSPNight();
     this.showOverlay('cannon-wisemen');
-    document.getElementById('cannon-wisemen-continue').onclick = () => this.afterWisemen();
+    this.showWisemenScene(0);
+  }
+
+  // Renders WISEMEN_INTRO_SCENES[i] into #cannon-wisemen and wires its
+  // button to either advance to the next scene or, on the last one, move
+  // on to the features screen -- one full-bleed beat at a time.
+  showWisemenScene(i) {
+    const scene = WISEMEN_INTRO_SCENES[i];
+    document.getElementById('cannon-wisemen-name').textContent = scene.name;
+    document.getElementById('cannon-wisemen-origin').textContent = scene.origin;
+    document.getElementById('cannon-wisemen-line').textContent = scene.line;
+    const btn = document.getElementById('cannon-wisemen-continue');
+    const isLast = i >= WISEMEN_INTRO_SCENES.length - 1;
+    btn.textContent = scene.button || (isLast ? 'Enter the cannon.' : 'Next');
+    btn.onclick = () => {
+      if (isLast) this.afterWisemen();
+      else this.showWisemenScene(i + 1);
+    };
   }
 
   showOverlay(id) {
@@ -1692,6 +1764,9 @@ class CannonGame {
 
   showVictoryScreen() {
     this.showOverlay('cannon-victory');
+    document.getElementById('cannon-victory-final-btns').classList.add('hidden');
+    document.getElementById('cannon-victory-next').classList.remove('hidden');
+    this.showVictoryScene(0);
     document.getElementById('cannon-victory-highscore').onclick = () => this.showUpgradeShop();
     document.getElementById('cannon-victory-continue').onclick = () => this.onComplete({
       boroughBucks: this.ts.boroughBucks,
@@ -1699,6 +1774,25 @@ class CannonGame {
       totalDistance: this.ts.totalDistance,
       wisemenJoined: true,
     });
+  }
+
+  showVictoryScene(i) {
+    const scene = WISEMEN_VICTORY_SCENES[i];
+    document.getElementById('cannon-victory-name').textContent = scene.name;
+    document.getElementById('cannon-victory-origin').textContent = scene.origin;
+    document.getElementById('cannon-victory-line').textContent = scene.line;
+    const nextBtn = document.getElementById('cannon-victory-next');
+    if (scene.final) {
+      // Last beat: swap the single "Next" button out for the real two-way
+      // choice (keep flying for a high score vs. move on) instead of
+      // stacking a fourth button underneath it.
+      nextBtn.classList.add('hidden');
+      document.getElementById('cannon-victory-final-btns').classList.remove('hidden');
+    } else {
+      nextBtn.classList.remove('hidden');
+      nextBtn.textContent = 'Next';
+      nextBtn.onclick = () => this.showVictoryScene(i + 1);
+    }
   }
 
   // ============================================
