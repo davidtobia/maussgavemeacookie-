@@ -1678,22 +1678,21 @@ class HeistGame {
       }
     }
 
-    // Extra obstacle types, all placed ON the solution path (a perfect
+    // Extra obstacle types, both placed ON the solution path (a perfect
     // maze has exactly one route through a given cell, so there's no way
-    // to dodge around any of these by taking a different corridor -- you
-    // have to actually deal with them):
+    // to dodge around either by taking a different corridor -- you have
+    // to actually deal with them). The jump-gap/ramp mechanic that used to
+    // be here got pulled entirely -- direct feedback was that the
+    // placements never read as coherent, and rather than keep guessing at
+    // it, it's gone.
     //
     // Moving holes: patrol back and forth across their cell instead of
     // sitting still -- a timing dodge, not a fixed-position one.
     //
-    // Jump gaps: a hole sized to fill almost the entire cell (nothing to
-    // thread around) with a ramp in the cell just before it -- touch the
-    // ramp to launch and sail over, same physics as the very first pass
-    // at this maze had before the whole tunnel rework.
-    //
-    // Fire gates: block the cell on a real timer, flame up/die down --
-    // you have to actually watch the rhythm and time your way through
-    // rather than solve it once and be done.
+    // Fire gates: a real vertical barrier, not a circle -- posts on both
+    // sides, filled with flame and impassable while closed, open and
+    // empty between posts the rest of the cycle. You watch the rhythm and
+    // time a roll through instead of solving it once and being done.
     const usedCells = new Set([startKey, goalKey, ...holeCells]);
     const pathInterior = path.slice(6, path.length - 6); // keep these off the immediate start/goal cells
 
@@ -1711,19 +1710,6 @@ class HeistGame {
       });
     }
 
-    const jumps = [];
-    for (let tries = 0; jumps.length < 3 && tries < 400 && pathInterior.length; tries++) {
-      const idx = 1 + Math.floor(Math.random() * (pathInterior.length - 2));
-      const chasmCell = pathInterior[idx], rampCell = pathInterior[idx - 1];
-      const ck = key(chasmCell.r, chasmCell.c), rk = key(rampCell.r, rampCell.c);
-      if (usedCells.has(ck) || usedCells.has(rk)) continue;
-      usedCells.add(ck); usedCells.add(rk);
-      const cp = this.mazeCellCenter(chasmCell.r, chasmCell.c);
-      const rp = this.mazeCellCenter(rampCell.r, rampCell.c);
-      holes.push({ x: cp.x, y: cp.y, r: CELL * 0.42, bigChasm: true });
-      jumps.push({ x: rp.x - CELL * 0.4, y: rp.y - CELL * 0.4, w: CELL * 0.8, h: CELL * 0.8 });
-    }
-
     const gates = [];
     for (let tries = 0; gates.length < 4 && tries < 400 && pathInterior.length; tries++) {
       const cell = pathInterior[Math.floor(Math.random() * pathInterior.length)];
@@ -1732,15 +1718,16 @@ class HeistGame {
       usedCells.add(k);
       const p = this.mazeCellCenter(cell.r, cell.c);
       const period = 130 + Math.floor(Math.random() * 60);
+      const gw = CELL * 0.62, gh = CELL * 0.86;
       gates.push({
-        x: p.x, y: p.y, r: CELL * 0.4, period,
+        x: p.x - gw / 2, y: p.y - gh / 2, w: gw, h: gh, period,
         openFrac: 0.4, phase: Math.floor(Math.random() * period), active: true,
       });
     }
 
     const startP = this.mazeCellCenter(start.r, start.c), goalP = this.mazeCellCenter(goal.r, goal.c);
     return {
-      grid, walls, holes, cash, path, pathKeys: pathSet, movingHoles, jumps, gates,
+      grid, walls, holes, cash, path, pathKeys: pathSet, movingHoles, gates,
       worldW: COLS * CELL, worldH: ROWS * CELL,
       start: startP, goal: { x: goalP.x, y: goalP.y, r: 4.5 },
     };
@@ -1762,7 +1749,7 @@ class HeistGame {
     this.mech = {
       kind: 'maze',
       layout,
-      ball: { x: layout.start.x, y: layout.start.y, vx: 0, vy: 0, airborne: false, airborneTimer: 0 },
+      ball: { x: layout.start.x, y: layout.start.y, vx: 0, vy: 0 },
       resets: 0,
       completed: false,
       // Falling in a hole sends you back to the furthest point on the
@@ -1810,6 +1797,15 @@ class HeistGame {
     if (vDotN < 0) { ball.vx -= vDotN * nx; ball.vy -= vDotN * ny; }
   }
 
+  // Distance from a point to the nearest edge of a rectangle (0 if the
+  // point is inside it) -- used for the fire gates, which are a real
+  // vertical barrier now instead of a circle.
+  pointRectDist(px, py, r) {
+    const closestX = Math.max(r.x, Math.min(px, r.x + r.w));
+    const closestY = Math.max(r.y, Math.min(py, r.y + r.h));
+    return Math.hypot(px - closestX, py - closestY);
+  }
+
   // Which cell (r, c) the ball is currently in, and if that cell is on the
   // solution path, its index there -- used both for the checkpoint and (via
   // maxPathIndex) so a hole can never bank a checkpoint ahead of where the
@@ -1850,27 +1846,6 @@ class HeistGame {
         g2.active = t2 > g2.period * g2.openFrac;
       });
 
-      if (ball.airborneTimer > 0) {
-        ball.airborneTimer--;
-        if (ball.airborneTimer <= 0) ball.airborne = false;
-      }
-
-      // Ramps: touch one to launch and sail over the chasm hole placed in
-      // the cell right after it. Boosts whatever direction you're already
-      // rolling, so it works regardless of which way the corridor turns.
-      if (!ball.airborne) {
-        const onRamp = layout.jumps.find(r =>
-          ball.x > r.x && ball.x < r.x + r.w && ball.y > r.y && ball.y < r.y + r.h);
-        if (onRamp) {
-          ball.airborne = true;
-          ball.airborneTimer = 50;
-          const spd = Math.hypot(ball.vx, ball.vy) || 0.6;
-          const boost = Math.max(spd, 1.1) * 2.4;
-          ball.vx = (ball.vx / spd) * boost;
-          ball.vy = (ball.vy / spd) * boost;
-        }
-      }
-
       // Camera follows the ball -- the maze is way bigger than any one
       // screen now, clamped so it never shows past the maze's own edges.
       const view = this.mazeCamView;
@@ -1895,17 +1870,16 @@ class HeistGame {
         const margin = 2;
         const nearHazard = layout.holes.some(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r + t.ballRadius + margin) ||
           layout.movingHoles.some(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r + t.ballRadius + margin) ||
-          layout.gates.some(g2 => g2.active && Math.hypot(ball.x - g2.x, ball.y - g2.y) < g2.r + t.ballRadius + margin);
+          layout.gates.some(g2 => g2.active && this.pointRectDist(ball.x, ball.y, g2) < t.ballRadius + margin);
         if (!nearHazard) { m.maxPathIndex = idx; m.checkpoint = { x: ball.x, y: ball.y }; }
       }
 
-      const inHole = !ball.airborne && (
+      const inHole =
         layout.holes.find(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r) ||
         layout.movingHoles.find(h => Math.hypot(ball.x - h.x, ball.y - h.y) < h.r) ||
-        layout.gates.find(g2 => g2.active && Math.hypot(ball.x - g2.x, ball.y - g2.y) < g2.r));
+        layout.gates.find(g2 => g2.active && this.pointRectDist(ball.x, ball.y, g2) < t.ballRadius);
       if (inHole) {
         m.resets++;
-        ball.airborne = false; ball.airborneTimer = 0;
         // Whatever cash you'd grabbed this run spills out right where you
         // fell -- real stakes for pushing your luck, but not gone for
         // good: it's sitting there as a pile if you make it back.
@@ -2679,24 +2653,17 @@ class HeistGame {
     });
 
     // Holes -- scattered randomly across every cell, correct path included,
-    // offset within the cell so there's room to thread past. A bigChasm
-    // one (part of a jump gap) fills almost the whole cell and reads as
-    // "jump this," not "dodge this" -- warm-tinted with a hazard ring
-    // instead of a plain black pit.
+    // offset within the cell so there's room to thread past.
     layout.holes.forEach(h => {
       if (!visible(h.x, h.y)) return;
       const [hx, hy] = toPx(h.x, h.y);
       const r = toPxLen(h.r);
       const g = ctx.createRadialGradient(hx, hy, r * 0.1, hx, hy, r);
-      if (h.bigChasm) { g.addColorStop(0, '#1a0a04'); g.addColorStop(1, '#3a1a08'); }
-      else { g.addColorStop(0, '#000'); g.addColorStop(1, '#1a1008'); }
+      g.addColorStop(0, '#000'); g.addColorStop(1, '#1a1008');
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(hx, hy, r, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = h.bigChasm ? '#c9752a' : '#000';
-      ctx.lineWidth = h.bigChasm ? 2.5 : 2;
-      if (h.bigChasm) ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = '#000'; ctx.lineWidth = 2;
       ctx.stroke();
-      ctx.setLineDash([]);
     });
 
     // Moving holes -- same pit, but it's actually sliding back and forth,
@@ -2715,40 +2682,44 @@ class HeistGame {
       ctx.setLineDash([]);
     });
 
-    // Ramps -- striped, unmistakably "launch off this." Sits in the cell
-    // right before a jump gap's chasm hole.
-    layout.jumps.forEach(r => {
-      if (!visible(r.x + r.w / 2, r.y + r.h / 2)) return;
-      const [rx, ry] = toPx(r.x, r.y);
-      const rw = toPxLen(r.w), rh = toPxLen(r.h);
-      ctx.fillStyle = '#c9a227';
-      ctx.fillRect(rx, ry, rw, rh);
-      ctx.strokeStyle = '#5a4a30'; ctx.lineWidth = 3;
-      ctx.beginPath();
-      for (let i = -1; i * 6 < rw + rh; i++) { ctx.moveTo(rx + i * 6, ry + rh); ctx.lineTo(rx + i * 6 + rh, ry); }
-      ctx.save(); ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip(); ctx.stroke(); ctx.restore();
-      ctx.fillStyle = '#3a2f10'; ctx.font = '9px VT323, monospace'; ctx.textAlign = 'center';
-      ctx.fillText('JUMP', rx + rw / 2, ry - 3);
-    });
-
-    // Fire gates -- a real wall of flame when closed, nothing at all when
-    // open. The cycle is the puzzle: watch it, time the roll through.
+    // Fire gates -- a real vertical barrier now, not a circle. Two dark
+    // posts always visible so you can see where the gate IS even when
+    // it's open; a wall of flame fills the gap between them while closed,
+    // and disappears (posts only, nothing blocking) when it isn't. Direct
+    // feedback: it needs to be obvious what this is at a glance.
     layout.gates.forEach(g2 => {
-      if (!visible(g2.x, g2.y)) return;
+      if (!visible(g2.x + g2.w / 2, g2.y + g2.h / 2)) return;
       const [gx2, gy2] = toPx(g2.x, g2.y);
-      const r2 = toPxLen(g2.r);
+      const gw = toPxLen(g2.w), gh = toPxLen(g2.h);
+      const postW = Math.max(3, gw * 0.14);
       if (g2.active) {
-        const flicker = 0.8 + Math.sin(this._frame * 0.9 + g2.phase) * 0.2;
-        const fg = ctx.createRadialGradient(gx2, gy2, 1, gx2, gy2, r2 * flicker);
-        fg.addColorStop(0, '#fff2c0'); fg.addColorStop(0.5, '#e2622c'); fg.addColorStop(1, 'rgba(200,60,40,0)');
+        const flicker = 0.85 + Math.sin(this._frame * 0.9 + g2.phase) * 0.15;
+        const fg = ctx.createLinearGradient(gx2, gy2, gx2, gy2 + gh);
+        fg.addColorStop(0, `rgba(255,242,192,${flicker})`);
+        fg.addColorStop(0.5, `rgba(226,98,44,${flicker})`);
+        fg.addColorStop(1, `rgba(200,60,40,${flicker * 0.9})`);
         ctx.fillStyle = fg;
-        ctx.beginPath(); ctx.arc(gx2, gy2, r2 * flicker, 0, Math.PI * 2); ctx.fill();
-      } else {
-        ctx.strokeStyle = 'rgba(224,90,74,0.35)'; ctx.lineWidth = 1.5;
-        ctx.setLineDash([3, 3]);
-        ctx.beginPath(); ctx.arc(gx2, gy2, r2, 0, Math.PI * 2); ctx.stroke();
-        ctx.setLineDash([]);
+        ctx.fillRect(gx2 + postW, gy2, gw - postW * 2, gh);
+        // A few flame licks along the top edge so it reads as fire, not a
+        // flat orange rectangle
+        for (let i = 0; i < 4; i++) {
+          const fx = gx2 + postW + (gw - postW * 2) * ((i + 0.5) / 4);
+          const fh = (8 + Math.sin(this._frame * 0.5 + i * 1.7) * 5) * flicker;
+          ctx.beginPath();
+          ctx.moveTo(fx - 4, gy2);
+          ctx.quadraticCurveTo(fx, gy2 - fh, fx + 4, gy2);
+          ctx.closePath();
+          ctx.fillStyle = `rgba(255,210,120,${flicker * 0.9})`;
+          ctx.fill();
+        }
       }
+      ctx.fillStyle = g2.active ? '#3a2418' : '#2a2420';
+      ctx.fillRect(gx2, gy2, postW, gh);
+      ctx.fillRect(gx2 + gw - postW, gy2, postW, gh);
+      ctx.strokeStyle = g2.active ? '#1a0f08' : 'rgba(224,90,74,0.3)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(gx2, gy2, postW, gh);
+      ctx.strokeRect(gx2 + gw - postW, gy2, postW, gh);
     });
 
     // Cash -- bills sized and colored by denomination, gone once collected.
@@ -2807,30 +2778,16 @@ class HeistGame {
       ctx.fillText('DIAMOND', gx, gy + gr + 16);
     }
 
-    // Ball — bigger with a drop shadow while airborne off a ramp, so
-    // clearing a chasm actually reads as height, not just immunity.
+    // Ball
     const [bx2, by2] = toPx(m.ball.x, m.ball.y);
     const baseBr = toPxLen(HEIST_TUNING.maze.ballRadius);
-    if (m.ball.airborne) {
-      const hop = Math.sin((m.ball.airborneTimer / 50) * Math.PI) * baseBr * 1.3;
-      ctx.beginPath();
-      ctx.ellipse(bx2, by2, baseBr * 1.1, baseBr * 0.5, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fill();
-      const br = baseBr * 1.3;
-      ctx.beginPath(); ctx.arc(bx2, by2 - hop, br, 0, Math.PI * 2);
-      const g3 = ctx.createRadialGradient(bx2 - br * 0.3, by2 - hop - br * 0.3, br * 0.1, bx2, by2 - hop, br);
-      g3.addColorStop(0, '#fff4dc'); g3.addColorStop(1, '#c8a878');
-      ctx.fillStyle = g3; ctx.fill();
-      ctx.strokeStyle = '#5a4a30'; ctx.lineWidth = 1.5; ctx.stroke();
-    } else {
-      ctx.beginPath();
-      ctx.arc(bx2, by2, baseBr, 0, Math.PI * 2);
-      const ballGrad = ctx.createRadialGradient(bx2 - baseBr * 0.3, by2 - baseBr * 0.3, baseBr * 0.1, bx2, by2, baseBr);
-      ballGrad.addColorStop(0, '#f0e8d8'); ballGrad.addColorStop(1, '#a89878');
-      ctx.fillStyle = ballGrad;
-      ctx.fill();
-      ctx.strokeStyle = '#5a4a30'; ctx.lineWidth = 1.5; ctx.stroke();
-    }
+    ctx.beginPath();
+    ctx.arc(bx2, by2, baseBr, 0, Math.PI * 2);
+    const ballGrad = ctx.createRadialGradient(bx2 - baseBr * 0.3, by2 - baseBr * 0.3, baseBr * 0.1, bx2, by2, baseBr);
+    ballGrad.addColorStop(0, '#f0e8d8'); ballGrad.addColorStop(1, '#a89878');
+    ctx.fillStyle = ballGrad;
+    ctx.fill();
+    ctx.strokeStyle = '#5a4a30'; ctx.lineWidth = 1.5; ctx.stroke();
 
     ctx.restore();
 
