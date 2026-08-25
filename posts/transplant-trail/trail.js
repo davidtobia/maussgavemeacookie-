@@ -836,34 +836,53 @@ class TrailGame {
   // ============================================
 
   checkRandomEvent() {
-    // 20% chance of event per day
-    if (Math.random() < 0.2) {
+    // Was a flat 20% chance per day -- at ~1.5 real seconds/game-hour
+    // that's ~36 real seconds/day, so an *average* wait of roughly 5
+    // days, close to 3 real minutes, between anything actually
+    // happening. Direct feedback: "you are just walking and walking and
+    // nothing really happens." Bumped to 40% (the event pool grew
+    // alongside it -- see triggerRandomEvent -- so more frequent doesn't
+    // just mean more repetitive).
+    if (Math.random() < 0.4) {
       this.triggerRandomEvent();
     }
     this.state.lastEventDay = this.state.currentDay;
   }
 
   triggerRandomEvent() {
+    // Was a flat text array matched afterward by scanning for substrings
+    // ("$20", "puddle", etc.) to decide what effect to apply -- fragile
+    // (a future event whose text happened to contain another event's
+    // trigger word would silently misfire the wrong effect) and two
+    // entries ("lost 2 hours" / "lost 3 hours") promised a time cost
+    // that was never actually applied -- pure flavor text, no effect,
+    // same "promises something that doesn't happen" issue as
+    // reachDestination()'s old ending. Each event carries its own real
+    // effect directly now, and there are more of them.
+    const addHours = (h) => {
+      this.state.hoursElapsed += h;
+      this.state.currentDate.setHours(this.state.currentDate.getHours() + h);
+    };
     const events = [
-      "You stepped in a puddle. Aura -5.",
-      "Someone complimented your outfit. Aura +10.",
-      "The L train broke down. Lost 2 hours.",
-      "You found $20 on the street!",
-      "A pigeon pooped on you. Aura -15.",
-      `${this.gameState.playerName} twisted their ankle.`,
-      "You discovered an amazing taco spot. Aura +5.",
-      "Your phone died. You got lost for 3 hours."
+      { text: 'You stepped in a puddle. Aura -5.', apply: () => { this.gameState.aura -= 5; } },
+      { text: 'Someone complimented your outfit. Aura +10.', apply: () => { this.gameState.aura += 10; } },
+      { text: 'The L train broke down. Lost 2 hours.', apply: () => addHours(2) },
+      { text: 'You found $20 on the street!', apply: () => { this.gameState.balances.chaseFreedom += 20; } },
+      { text: 'A pigeon pooped on you. Aura -15.', apply: () => { this.gameState.aura -= 15; } },
+      { text: `${this.gameState.playerName} twisted an ankle. Aura -8.`, apply: () => { this.gameState.aura -= 8; } },
+      { text: 'You discovered an amazing taco spot. Aura +5.', apply: () => { this.gameState.aura += 5; } },
+      { text: 'Your phone died. You got lost for 3 hours.', apply: () => addHours(3) },
+      { text: 'A stranger asks if you know a good dermatologist. You do not. Aura -3.', apply: () => { this.gameState.aura -= 3; } },
+      { text: 'A stranger holds the subway door for you. Aura +6.', apply: () => { this.gameState.aura += 6; } },
+      { text: 'You get seated immediately at a place with a line out the door. Aura +12.', apply: () => { this.gameState.aura += 12; } },
+      { text: 'Every Citi Bike dock on the block is full. You wait it out. Lost 1 hour.', apply: () => addHours(1) },
+      { text: 'You get invited to a rooftop thing you weren\'t expecting. Aura +8.', apply: () => { this.gameState.aura += 8; } },
+      { text: 'Your card gets declined at the register for a second, then goes through. Aura -6.', apply: () => { this.gameState.aura -= 6; } },
     ];
 
     const event = events[Math.floor(Math.random() * events.length)];
-    this.showEvent(event);
-
-    // Apply event effects
-    if (event.includes("puddle")) this.gameState.aura -= 5;
-    if (event.includes("complimented")) this.gameState.aura += 10;
-    if (event.includes("$20")) this.gameState.balances.chaseFreedom += 20;
-    if (event.includes("pigeon")) this.gameState.aura -= 15;
-    if (event.includes("taco")) this.gameState.aura += 5;
+    this.showEvent(event.text);
+    event.apply();
   }
 
   showEvent(text, onDismiss = null) {

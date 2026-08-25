@@ -404,15 +404,51 @@ class BodegaGame {
       ctx.fillText(item.label, item.x, item.y + item.h + 14);
     });
 
-    // Basket / arms
+    // Shopping bag -- was two goalpost bars with a rail between them,
+    // which read as nothing in particular. basketY/the ~140px span stay
+    // where they were (gameLoop()'s catch hit-test uses the same
+    // basketY and a fixed halfW=68 independent of this draw call, so
+    // catch range is unchanged -- only the visual is).
     const basketY = height - 85;
-    ctx.fillStyle = '#d4a574';
-    ctx.fillRect(this.basketX - 70, basketY,      16, 58);
-    ctx.fillRect(this.basketX + 54, basketY,      16, 58);
-    ctx.fillRect(this.basketX - 70, basketY + 52, 140, 10);
-    ctx.fillStyle = '#b8935a';
-    ctx.fillRect(this.basketX - 70, basketY,      16, 10);
-    ctx.fillRect(this.basketX + 54, basketY,      16, 10);
+    const cx = this.basketX;
+    const topW = 132, botW = 108, bagH = 66;
+
+    ctx.fillStyle = '#c8935a';
+    ctx.beginPath();
+    ctx.moveTo(cx - topW / 2, basketY);
+    ctx.lineTo(cx + topW / 2, basketY);
+    ctx.lineTo(cx + botW / 2, basketY + bagH);
+    ctx.lineTo(cx - botW / 2, basketY + bagH);
+    ctx.closePath();
+    ctx.fill();
+
+    // Folded side panel, like a paper bag's visible seam
+    ctx.fillStyle = '#a97a44';
+    ctx.beginPath();
+    ctx.moveTo(cx - topW / 2, basketY);
+    ctx.lineTo(cx - topW / 2 + 20, basketY);
+    ctx.lineTo(cx - botW / 2 + 16, basketY + bagH);
+    ctx.lineTo(cx - botW / 2, basketY + bagH);
+    ctx.closePath();
+    ctx.fill();
+
+    // Crease near the top opening
+    ctx.strokeStyle = '#8a6238';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - topW / 2 + 4, basketY + 11);
+    ctx.lineTo(cx + topW / 2 - 4, basketY + 11);
+    ctx.stroke();
+
+    // Two handles
+    ctx.strokeStyle = '#5a3f22';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.ellipse(cx - topW / 4, basketY - 6, 11, 13, 0, Math.PI, 0, true);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(cx + topW / 4, basketY - 6, 11, 13, 0, Math.PI, 0, true);
+    ctx.stroke();
   }
 
   endCatching() {
