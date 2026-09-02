@@ -678,12 +678,23 @@
     <div id="jail-game" class="screen">
       <canvas id="jail-canvas"></canvas>
 
-      <!-- Narrative overlay reused for intake, each recruiter's pitch, the
-           three-way choice, both "days before" activities, and the ending.
-           One reusable dialogue panel instead of a dedicated screen per
-           beat -- same pattern bodega's results panel uses. -->
-      <div id="jail-dialogue" class="jail-overlay">
+      <!-- YARD HUD: per-discovered-character friendship strip, the
+           ambient toast, and the "Talk to X" approach button. Hidden
+           whenever a dialogue/mini-game/result/summary overlay is up. -->
+      <div id="jail-yard-hud" class="jail-yard-hud hidden">
+        <div id="jail-yard-friend-strip" class="jail-yard-friend-strip"></div>
+        <div id="jail-yard-toast" class="jail-yard-toast hidden"></div>
+        <button id="jail-yard-approach" class="jail-yard-approach hidden"></button>
+      </div>
+
+      <!-- Narrative overlay reused for intake, the gate-leave confirm, and
+           every node of every character's dialogue tree — one reusable
+           panel instead of a dedicated screen per beat, same pattern
+           bodega's results panel uses. -->
+      <div id="jail-dialogue" class="jail-overlay hidden">
         <div class="cannon-splash cannon-splash-wide">
+          <div id="jail-dialogue-chip" class="jail-dialogue-chip hidden"></div>
+          <span id="jail-dialogue-pip" class="jail-dialogue-pip"></span>
           <h2 id="jail-dialogue-title" class="cannon-splash-title"></h2>
           <p id="jail-dialogue-sub" class="cannon-splash-sub"></p>
           <div id="jail-dialogue-body"></div>
@@ -691,7 +702,86 @@
         </div>
       </div>
 
-      <!-- Fight HUD -->
+      <!-- Shared mini-game result panel — all three games report into this
+           one overlay: raw stats, the arithmetic behind the friendship
+           gain, "run it back" (free replay, best run counts), and
+           Continue into that character's post-game reaction. -->
+      <div id="jail-result" class="jail-overlay hidden">
+        <div class="cannon-splash">
+          <h2 id="jail-result-title" class="cannon-splash-title"></h2>
+          <p id="jail-result-sub" class="cannon-splash-sub"></p>
+          <div id="jail-result-stats"></div>
+          <div class="menu-options" style="margin-top: 20px;">
+            <button id="jail-result-again" class="menu-option">Run it back</button>
+            <button id="jail-result-continue" class="menu-option">Continue</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Release-day summary — three friendship tracks, their tiers, and
+           the closing outcome line keyed off how many landed at "friend". -->
+      <div id="jail-summary" class="jail-overlay hidden">
+        <div class="cannon-splash cannon-splash-wide">
+          <h2 class="cannon-splash-title">Release Day</h2>
+          <div id="jail-summary-list"></div>
+          <p id="jail-summary-release" class="cannon-stat-total"></p>
+          <div class="menu-options" style="margin-top: 20px;">
+            <button id="jail-summary-continue" class="menu-option">Out the gate</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rhythm mini-game HUD (Diddy) -->
+      <div id="jail-rhythm-hud" class="jail-minigame-hud hidden">
+        <div class="jail-rhythm-readout">
+          <span id="jail-rhythm-acc" class="jail-rhythm-acc">0%</span>
+          <span id="jail-rhythm-combo" class="jail-rhythm-combo"></span>
+        </div>
+        <div class="jail-rhythm-btns">
+          <button id="jail-rhythm-btn-0" class="jail-btn jail-rhythm-btn">J</button>
+          <button id="jail-rhythm-btn-1" class="jail-btn jail-rhythm-btn">K</button>
+          <button id="jail-rhythm-btn-2" class="jail-btn jail-rhythm-btn">L</button>
+        </div>
+      </div>
+
+      <!-- Bench-press mini-game HUD (Luigi) -->
+      <div id="jail-bench-hud" class="jail-minigame-hud hidden">
+        <div class="jail-bench-readout">
+          <span id="jail-bench-reps"></span>
+          <div class="jail-bench-form"><div id="jail-bench-form-fill" class="jail-bench-form-fill"></div></div>
+        </div>
+        <button id="jail-bench-btn" class="jail-btn jail-bench-hold-btn">HOLD</button>
+      </div>
+
+      <!-- Trip mini-game HUD (Sam) -->
+      <div id="jail-trip-hud" class="jail-minigame-hud hidden">
+        <div class="jail-trip-readout">
+          <span id="jail-trip-clock" class="jail-trip-clock"></span>
+          <span id="jail-trip-utils" class="jail-trip-utils"></span>
+        </div>
+        <div id="jail-trip-pad" class="heist-maze-pads">
+          <div class="heist-pad heist-pad-left">
+            <button class="heist-pad-btn" data-axis="x" data-dir="-1">◀</button>
+            <button class="heist-pad-btn" data-axis="x" data-dir="1">▶</button>
+          </div>
+          <div class="heist-pad heist-pad-right">
+            <button class="heist-pad-btn" data-axis="y" data-dir="-1">▲</button>
+            <button class="heist-pad-btn" data-axis="y" data-dir="1">▼</button>
+          </div>
+        </div>
+        <div id="jail-trip-bet-panel" class="jail-trip-bet-panel hidden">
+          <p id="jail-trip-bet-prompt" class="jail-trip-bet-prompt"></p>
+          <div class="jail-trip-bet-btns">
+            <button id="jail-trip-bet-a" class="jail-btn"></button>
+            <button id="jail-trip-bet-b" class="jail-btn"></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Fight HUD — shelved along with the single-ally fight arc, see
+           jail-shelved.js's header. Not loaded, not wired to anything;
+           left here (unused, commented out) so a future revival doesn't
+           have to rebuild this markup from scratch.
       <div id="jail-fight-hud" class="jail-fight-hud hidden">
         <div class="jail-fight-bars">
           <div class="jail-fight-bar-wrap">
@@ -710,6 +800,7 @@
           <button id="jail-punch-btn" class="jail-fight-btn jail-punch-btn">PUNCH</button>
         </div>
       </div>
+      -->
     </div>
 
     <!-- Apartment Hunt -->
@@ -738,8 +829,10 @@
   <script src="bodega.js?v=5"></script>
   <script src="cannon.js?v=15"></script>
   <script src="heist.js?v=30"></script>
-  <script src="jail.js?v=2"></script>
-  <script src="game.js?v=16"></script>
+  <script src="jail-data.js?v=1"></script>
+  <script src="jail-minigames.js?v=1"></script>
+  <script src="jail.js?v=3"></script>
+  <script src="game.js?v=17"></script>
 
   <!-- GoatCounter Analytics -->
   <script data-goatcounter="https://maussgavemeacookie.goatcounter.com/count"
