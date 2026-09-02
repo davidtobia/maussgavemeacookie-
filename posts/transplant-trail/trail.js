@@ -905,6 +905,25 @@ class TrailGame {
     const landmark = this.getCurrentLandmark();
     console.log('Reached:', landmark.name);
 
+    // Hard invariant: reaching the Mirage (or the landmark right before
+    // it) without the heist ever having been offered is a broken
+    // playthrough, not a valid outcome. Direct feedback after this
+    // happened via a chapter-select jump: "that shouldn't happen! that's
+    // not even the point!" checkWiseEricsPitch() (advanceTime(), fires
+    // once wisemenJoined is true) should always catch this on its own
+    // during a genuinely fresh, continuous run -- but a save loaded via
+    // chapter-select can carry forward broken state from before a fix
+    // existed (e.g. an old save with wisemenJoined: false baked in from
+    // before the cannon "exit early" softlock was fixed). This can't be
+    // skipped by any upstream bug or stale save data -- forces the
+    // pitch outright rather than trusting an earlier step got there.
+    if ((landmark.id === 'williamsburg' || landmark.id === 'mirage') && !this.gameState.wiseEricsPitched) {
+      this.gameState.wisemenJoined = true;
+      this.gameState.wiseEricsPitched = true;
+      this.showWiseEricsPitch();
+      return;
+    }
+
     // Handle different landmark types
     if (landmark.id === 'murray-hill') {
       this.apartmentHunt();
