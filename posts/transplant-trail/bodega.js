@@ -22,6 +22,18 @@ class BodegaGame {
     this.timeLeft = 45;
     this.items = [];
     this.basketX = 200;
+    // Catch feedback: a catch used to just tick the DOM score text with
+    // nothing happening on the canvas itself -- same "the number changed
+    // somewhere off to the side" gap as everywhere else in this pass.
+    // particles: a burst of sparkles (good) or scattering crumbs (bad) at
+    // the catch point. popups: the +10/-5 itself, floating up and fading,
+    // so the point value is a thing that happens AT the bag, not just a
+    // running total. bagPunch/bagShake: a quick scale-pop or side-jitter
+    // on the bag graphic itself, decaying every frame.
+    this.particles = [];
+    this.popups = [];
+    this.bagPunch = 0;
+    this.bagShake = 0;
     this.frameCounter = 0;
     this.animFrame = null;
     this.running = false;
@@ -74,6 +86,8 @@ class BodegaGame {
     this.canvas.width  = rect.width;
     this.canvas.height = rect.height;
     this.basketX = this.canvas.width / 2;
+    this.particles = [];
+    this.popups = [];
     this.setupControls();
     this.running = true;
     this.timerInterval = setInterval(() => this.tickTimer(), 1000);
@@ -164,13 +178,49 @@ class BodegaGame {
       if (caught) {
         this.score = Math.max(0, this.score + item.points);
         document.getElementById('bodega-score').textContent = `Score: ${this.score}`;
+        this.spawnCatchFx(item);
         return false;
       }
       return item.y < this.canvas.height + 60;
     });
 
+    this.updateFx();
     this.render();
     this.animFrame = requestAnimationFrame(() => this.gameLoop());
+  }
+
+  // A good catch pops the bag and throws a gold sparkle burst; a bad one
+  // jolts the bag sideways and scatters a few dark crumbs -- same catch,
+  // opposite feeling, purely so the moment itself carries some weight
+  // instead of only the running total changing.
+  spawnCatchFx(item) {
+    const x = this.basketX, y = this.canvas.height - 85;
+    const n = 10;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const speed = 1.2 + Math.random() * 3;
+      this.particles.push({
+        x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed - 1.5,
+        life: 20 + Math.floor(Math.random() * 14),
+        maxLife: 34,
+        color: item.good ? (Math.random() < 0.5 ? '#f1c40f' : item.color) : (Math.random() < 0.5 ? '#5d4037' : '#8a8a8a'),
+      });
+    }
+    this.popups.push({
+      x, y: y - 20, text: (item.points > 0 ? '+' : '') + item.points,
+      life: 46, maxLife: 46, good: item.good,
+    });
+    if (item.good) this.bagPunch = 1;
+    else this.bagShake = 1;
+  }
+
+  updateFx() {
+    this.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life--; });
+    this.particles = this.particles.filter(p => p.life > 0);
+    this.popups.forEach(p => { p.y -= 0.7; p.life--; });
+    this.popups = this.popups.filter(p => p.life > 0);
+    this.bagPunch *= 0.82;
+    this.bagShake *= 0.78;
   }
 
   // ============================================
@@ -413,6 +463,18 @@ class BodegaGame {
     const cx = this.basketX;
     const topW = 132, botW = 108, bagH = 66;
 
+    // A good catch pops the whole bag up in scale for an instant; a bad one
+    // jolts it sideways -- both purely visual, both decaying back to normal
+    // over a few frames (see updateFx()). The catch hit-test above already
+    // ran against the un-punched basketX/basketY, so this never touches
+    // what actually counts as a catch.
+    ctx.save();
+    const shakeOffset = Math.sin(this.frameCounter * 1.4) * 9 * this.bagShake;
+    const punchScale = 1 + 0.16 * this.bagPunch;
+    ctx.translate(cx + shakeOffset, basketY);
+    ctx.scale(punchScale, punchScale);
+    ctx.translate(-cx, -basketY);
+
     ctx.fillStyle = '#c8935a';
     ctx.beginPath();
     ctx.moveTo(cx - topW / 2, basketY);
@@ -449,6 +511,28 @@ class BodegaGame {
     ctx.beginPath();
     ctx.ellipse(cx + topW / 4, basketY - 6, 11, 13, 0, Math.PI, 0, true);
     ctx.stroke();
+    ctx.restore();
+
+    // Catch particles -- sparkle burst for a good grab, scattered crumbs
+    // for a bad one.
+    this.particles.forEach(p => {
+      ctx.globalAlpha = Math.max(0, p.life / p.maxLife);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - 2.5, p.y - 2.5, 5, 5);
+    });
+    ctx.globalAlpha = 1;
+
+    // The point value itself, floating up off the bag and fading -- the
+    // score changing is no longer something that only happens in the DOM
+    // off to the side.
+    this.popups.forEach(p => {
+      ctx.globalAlpha = Math.min(1, p.life / (p.maxLife * 0.6));
+      ctx.font = 'bold 20px VT323';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = p.good ? '#7ec89a' : '#e74c3c';
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.globalAlpha = 1;
+    });
   }
 
   endCatching() {

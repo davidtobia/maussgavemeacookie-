@@ -960,6 +960,9 @@ class HeistGame {
       if (fill) {
         fill.style.width = `${Math.round(ch.heat)}%`;
         fill.style.background = ch.heat > 75 ? '#e74c3c' : ch.heat > 40 ? '#f39c12' : '#2ecc71';
+        // A step past "the bar is red" -- actively pulsing says "you are
+        // about to lose this one," not just "this one's had a rough time."
+        fill.classList.toggle('critical', ch.heat > 75);
       }
     });
     const active = this.floorChars.find(c => c.id === this.floorActiveId);
@@ -1257,6 +1260,11 @@ class HeistGame {
         return !this.floorSightBlocked(g.x, g.y, ch.x, ch.y);
       });
       ch.heat = Math.max(0, Math.min(100, ch.heat + (seen ? this.floorHeatGain : -this.floorHeatDecay)));
+      // Purely for drawFloorScene's real-time "you're currently exposed"
+      // highlight -- the heat bar filling is a trailing indicator (takes a
+      // beat to read), this is instant, frame-accurate feedback that RIGHT
+      // NOW a cone actually has you, not just that heat happens to be up.
+      ch.seen = seen;
 
       if (!ch.isThief && ch.heat >= 100 && !ch.pulled) {
         ch.pulled = true;
@@ -1291,7 +1299,33 @@ class HeistGame {
     document.getElementById('heist-floor-toast').classList.add('hidden');
     this.phase = 'floor-caught';
     this.caughtEarly = true;
+    // A hard freeze-flash beat before the result popup -- getting made used
+    // to cut straight from "still walking around" to a text screen with no
+    // impact in between, which undersold the one real fail-state this phase
+    // has. Same pattern as the getaway's hitFlash: a white spike that decays
+    // into red, plus the frame holds still instead of continuing to
+    // simulate, so the moment actually registers as a moment.
+    this._floorCaughtFlash = 26;
+    this.floorCaughtFlashLoop();
+  }
 
+  floorCaughtFlashLoop() {
+    this.drawFloorScene();
+    const ctx = this.ctx, W = this.canvas.width, H = this.canvas.height;
+    const t = this._floorCaughtFlash / 26;
+    ctx.fillStyle = t > 0.8
+      ? `rgba(255,255,255,${(t - 0.8) * 5})`
+      : `rgba(224,60,50,${t * 0.5})`;
+    ctx.fillRect(0, 0, W, H);
+    this._floorCaughtFlash--;
+    if (this._floorCaughtFlash > 0) {
+      this._af = requestAnimationFrame(() => this.floorCaughtFlashLoop());
+      return;
+    }
+    this.showFloorCaughtResult();
+  }
+
+  showFloorCaughtResult() {
     this.showResult({
       title: 'Made you',
       who: null,
@@ -1436,8 +1470,14 @@ class HeistGame {
         ctx.lineTo(gx + Math.cos(back) * 16, gy + Math.sin(back) * 16);
         ctx.stroke();
       }
+      // A small vertical bob while actually walking (patrol/investigate/
+      // return) -- held still during pause/frozen. Guards were rigid dots
+      // that only ever moved in straight lines; this alone is enough to
+      // read as footsteps instead of a token sliding across a board.
+      const bobbing = g.state !== 'pause' && !g.frozen;
+      const bob = bobbing ? Math.abs(Math.sin(this._frame * 0.22 + (g.sweepSeed || 0) * 5)) * 1.6 : 0;
       ctx.beginPath();
-      ctx.arc(gx, gy, 8, 0, Math.PI * 2);
+      ctx.arc(gx, gy - bob, 8, 0, Math.PI * 2);
       ctx.fillStyle = g.state === 'investigate' || g.state === 'pause' ? '#7a3a3a' : '#3a4a5a';
       ctx.fill();
       ctx.strokeStyle = g.state === 'pause' ? '#e05a4a' : '#8a9aac';
@@ -1474,6 +1514,20 @@ class HeistGame {
     this.floorChars.forEach(ch => {
       if (ch.pulled) return;
       const [cx, cy] = toPx(ch.x, ch.y);
+      // Real-time "a cone has you right now" tell -- distinct from the heat
+      // bar (which fills gradually and lags a beat behind). A hard pulsing
+      // ring the instant sightline connects reads as "this exact spot is
+      // dangerous," which is the actual information a stealth section needs
+      // to teach: not just an anxiety number climbing somewhere off to the
+      // side, but where and when.
+      if (ch.seen) {
+        const pulse = 15 + Math.sin(this._frame * 0.35) * 3;
+        ctx.beginPath();
+        ctx.arc(cx, cy, pulse, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(231,76,60,0.85)';
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      }
       if (ch.id === this.floorActiveId) {
         ctx.beginPath();
         ctx.arc(cx, cy, 13, 0, Math.PI * 2);
@@ -1491,6 +1545,26 @@ class HeistGame {
     });
 
     ctx.restore();
+
+    // Screen-edge vignette that reddens and pulses faster as the Thief's own
+    // heat climbs toward capture -- the same "getting close" tension the
+    // getaway's HEAT bar sells, but here it lives at the edges of the
+    // screen instead of a separate bar, so it's felt while your eyes are on
+    // the guards and the register, not a stat you have to glance away to
+    // check.
+    {
+      const thiefCh = this.floorChars.find(c => c.isThief);
+      if (thiefCh && thiefCh.heat > 45) {
+        const t = (thiefCh.heat - 45) / 55; // 0..1 from 45 to 100
+        const pulseSpeed = 0.05 + t * 0.12;
+        const alpha = t * 0.4 * (0.75 + 0.25 * Math.sin(this._frame * pulseSpeed));
+        const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.32, W / 2, H / 2, Math.max(W, H) * 0.72);
+        vg.addColorStop(0, 'rgba(224,60,50,0)');
+        vg.addColorStop(1, `rgba(224,60,50,${alpha})`);
+        ctx.fillStyle = vg;
+        ctx.fillRect(0, 0, W, H);
+      }
+    }
   }
 
   // Purely cosmetic — a tomato that rolls off a display and squishes, or a
@@ -2237,7 +2311,7 @@ class HeistGame {
     });
     g.shots = g.shots.filter(s => !s.dead && s.x > -200 && s.x < this.canvas.width + 200);
 
-    g.particles.forEach(p => { p.x += p.vx * slow; p.y += p.vy * slow; p.vy += 0.25 * slow; p.life -= slow; });
+    g.particles.forEach(p => { p.x += p.vx * slow; p.y += p.vy * slow; p.vy += (p.rise ? 0.06 : 0.25) * slow; p.life -= slow; });
     g.particles = g.particles.filter(p => p.life > 0);
 
     const px = this.canvas.width * 0.22;
@@ -2271,6 +2345,12 @@ class HeistGame {
           o.hit = true;
           this.applyGetawayPickup(o.type);
           this.updateGetawayButtons();
+          // A pickup used to just swap the HUD hint line and vanish --
+          // same silent-grab problem as everything else that didn't
+          // already have a burst. A lighter, upward sparkle (not the
+          // gravity-pulled explosion burst kills/crashes use) so grabbing
+          // gear reads as a reward, not an impact.
+          this.spawnGetawaySparkle(o.x, this.laneCenterY(o.lane));
           return;
         }
         o.hit = true;
@@ -2282,6 +2362,13 @@ class HeistGame {
           g.heat = Math.min(100, g.heat + HEIST_TUNING.getaway.heat.crashAdd + extra);
           this.cash = Math.max(this.bagFloor, this.cash - HEIST_TUNING.cashLostPerCrash);
           if (o.type === 'spikes') this.setHudHint('Spike strip. That one’s going to slow you down.', g.cfg.label);
+          // The screen flash + car shake already sold "you got hit," but
+          // nothing actually happened at the point of impact -- the
+          // obstacle just silently vanished. A kill (cop/heli) got a real
+          // burst; taking a hit yourself didn't. Same burst, right at the
+          // front bumper, so a crash reads as an actual collision instead
+          // of the car simply passing through whatever it touched.
+          this.spawnGetawayBurst(px, this.laneCenterY(o.lane));
         }
       }
     });
@@ -2379,6 +2466,22 @@ class HeistGame {
         x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed - 1,
         life: 24 + Math.floor(Math.random() * 12),
         color: Math.random() < 0.5 ? '#e8b32a' : '#e05a4a',
+      });
+    }
+  }
+
+  // A reward burst, not an impact one -- rises instead of falling, lighter
+  // and fewer particles than spawnGetawayBurst, gold/white so it reads as
+  // "good thing happened" at a glance rather than reusing the same visual
+  // language as a cop car or the helicopter going down.
+  spawnGetawaySparkle(x, y) {
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2, speed = 0.8 + Math.random() * 2;
+      this.mech.particles.push({
+        x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed - 2.4,
+        life: 20 + Math.floor(Math.random() * 10),
+        color: Math.random() < 0.5 ? '#fff2c0' : '#7ec8e3',
+        rise: true,
       });
     }
   }

@@ -573,6 +573,12 @@ class CannonGame {
       splashed: false, splashTimer: 0, splashX: 0,
       jetpackHeat: 0, exploded: false,
       groundSpawnCount: 0, ratSpawned: false,
+      // Hit feedback for taking damage from a hazard mid-air (pigeons,
+      // helicopters, the various thrown-object arcs, running a cab on the
+      // ground): before this, "Damage: 22%" ticking up in the corner was
+      // the entire signal something had actually hit you. Reuses the same
+      // shakeX/shakeY the ground-bounce impact already drives.
+      hitFlash: 0, hitParticles: [],
     };
 
     const hud = document.getElementById('cannon-flight-hud');
@@ -629,8 +635,11 @@ class CannonGame {
     this._frame++;
     if (this.flight.flapCooldown > 0) this.flight.flapCooldown--;
     if (this.flight.flapFlash > 0)    this.flight.flapFlash--;
+    if (this.flight.hitFlash > 0)     this.flight.hitFlash--;
     this.flight.shakeX *= 0.72;
     this.flight.shakeY *= 0.72;
+    this.flight.hitParticles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.25; p.life--; });
+    this.flight.hitParticles = this.flight.hitParticles.filter(p => p.life > 0);
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     if (!this.flight.landed) this.updateFlight();
     if (this.flight.splashTimer > 0) this.flight.splashTimer--;
@@ -938,6 +947,7 @@ class CannonGame {
       if (Math.abs(px - e.x) > 34 || Math.abs(py - esy) > vTol) return;
 
       e.collected = true;
+      const dmgBefore = f.damage;
       switch (e.type) {
         case 'coin':          f.coins++; this.ts.boroughBucks += 5; break;
         case 'ring':          f.vx += 6; break;
@@ -960,6 +970,25 @@ class CannonGame {
         case 'rat_dumpster':  f.ratMode = true; f.ratVx = Math.max(f.vx, f.ratVx) * 0.85; f.vx = 0; f.sliding = false; f.worldY = 0; break;
         case 'manhole':       f.vx *= 0.5; if (f.ratMode) f.ratVx *= 0.5; break;
         case 'cab_ground':    f.vx *= 0.4; f.damage += 15; break;
+      }
+      // Any hazard that actually landed damage gets a real impact: a red
+      // flash, a camera kick (same shakeX/shakeY the ground bounce already
+      // uses), and a burst of debris right where it hit -- before this,
+      // getting clipped by a helicopter looked and felt identical to
+      // grabbing a coin except for one number changing in the corner.
+      if (f.damage > dmgBefore) {
+        f.hitFlash = 14;
+        const kick = Math.min(16, (f.damage - dmgBefore) * 0.7);
+        f.shakeX = (Math.random() - 0.5) * kick * 2;
+        f.shakeY = (Math.random() - 0.5) * kick * 1.4;
+        for (let i = 0; i < 9; i++) {
+          const a = Math.random() * Math.PI * 2, speed = 1.4 + Math.random() * 3.4;
+          f.hitParticles.push({
+            x: px, y: esy, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed - 1,
+            life: 18 + Math.floor(Math.random() * 12),
+            color: Math.random() < 0.5 ? '#e74c3c' : '#8a8a8a',
+          });
+        }
       }
       if (f.damage >= 100) { f.damage = 100; f.landed = true; }
     });
@@ -1004,7 +1033,25 @@ class CannonGame {
     if (f.ratMode) this.renderRat(80, groundScreenY);
     else if (!f.splashed && !f.exploded) this.renderPlayer(80, playerScreenY, f);
 
+    // Hit debris -- rides the same camera shake as everything else in this
+    // block since it's meant to read as part of the world, not a screen
+    // overlay.
+    f.hitParticles.forEach(p => {
+      ctx.globalAlpha = Math.max(0, p.life / 30);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+    });
+    ctx.globalAlpha = 1;
+
     ctx.restore();
+
+    // A quick red wash on the moment of impact itself -- screen-space (not
+    // inside the shake transform above), same idea as the getaway chase's
+    // hitFlash.
+    if (f.hitFlash > 0) {
+      ctx.fillStyle = `rgba(224,60,50,${0.22 * (f.hitFlash / 14)})`;
+      ctx.fillRect(0, 0, W, H);
+    }
 
     // Jetpack overheat — fiery burst at wherever the player actually is (this
     // can happen mid-air, unlike a splash which is tied to hitting the water).
