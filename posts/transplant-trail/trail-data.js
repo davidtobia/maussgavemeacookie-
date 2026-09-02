@@ -51,8 +51,11 @@ const TRANSPORTATION_MODES = [
     vibeEffect: 0,
     description: 'Medium speed, cheap, chaotic',
     restrictions: [],
-    requiresItem: 'metrocard',
-    unavailableWeather: ['blizzard']
+    requiresItem: 'metrocard'
+    // Deliberately no unavailableWeather here -- direct correction:
+    // "if it's snowing the car goes slow and the subway still works."
+    // Blizzard hits it with a real speed penalty instead (see
+    // TrailGame.weatherTransportMod() in trail.js), not unavailability.
   },
   {
     id: 'yellow-cab',

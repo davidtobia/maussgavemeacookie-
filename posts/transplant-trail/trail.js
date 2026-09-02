@@ -17,7 +17,7 @@ class TrailGame {
       currentDate: new Date(2026, this.getStartMonth(), 1),
       landmarkIndex: 0, // Current position in LANDMARKS array
       milesFromLandmark: 0, // Distance traveled since last landmark
-      milesPerLandmark: 15, // Distance between landmarks
+      milesPerLandmark: 9, // Distance between landmarks -- was 15, cut down alongside the faster hour-tick above (see update()'s frameCounter comment)
       transportation: 'walk', // Start with walking
       spendingMode: 'trader-joes', // Default to middle option
       vibeWeather: this.randomVibeWeather(),
@@ -35,6 +35,13 @@ class TrailGame {
     this.spriteFrame = 0;
     this.frameCounter = 0;
 
+    // Weather particles (rain/snow/leaves) and street life (pedestrians,
+    // passing traffic) -- both lazily populated the first time they're
+    // drawn, since canvas size isn't known until setupCanvas() runs.
+    this.weatherParticles = [];
+    this._weatherParticleKind = null;
+    this.streetActors = [];
+
     this.init();
   }
 
@@ -49,9 +56,34 @@ class TrailGame {
     return monthMap[this.gameState.departureMonth] || 4;
   }
 
+  // Was a flat uniform pick across all 6 -- could roll a blizzard in July
+  // or an August heat wave in February, completely disconnected from
+  // the game's own calendar. Weighted by the actual current month now
+  // (0 = Jan same as Date), so real-weather categories only show up
+  // anywhere near their real season; the two that aren't season-bound
+  // (a major event, the subway just being weird) stay available
+  // year-round. `this.state` doesn't exist yet the first time this is
+  // called (it's still being constructed), so this falls back to the
+  // chosen departure month for that one call.
+  seasonalWeatherWeight(id, month) {
+    switch (id) {
+      case 'blizzard':     return [3, 3, 1, 0, 0, 0, 0, 0, 0, 0, 1, 3][month];
+      case 'august':       return [0, 0, 0, 0, 1, 2, 3, 3, 2, 0, 0, 0][month];
+      case 'perfect-fall': return [0, 0, 1, 2, 1, 0, 0, 0, 2, 3, 2, 0][month];
+      case 'raining':      return [1, 1, 2, 3, 2, 1, 1, 1, 2, 2, 1, 1][month];
+      default:              return 1; // major-event, subway-weird -- not seasonal
+    }
+  }
+
   randomVibeWeather() {
-    const weather = VIBE_WEATHER[Math.floor(Math.random() * VIBE_WEATHER.length)];
-    return weather.id;
+    const month = this.state ? this.state.currentDate.getMonth() : this.getStartMonth();
+    const pool = [];
+    VIBE_WEATHER.forEach(w => {
+      const weight = Math.max(0, this.seasonalWeatherWeight(w.id, month));
+      for (let i = 0; i < weight; i++) pool.push(w.id);
+    });
+    if (pool.length === 0) return VIBE_WEATHER[0].id;
+    return pool[Math.floor(Math.random() * pool.length)];
   }
 
   getCurrentLandmark() {
@@ -181,8 +213,14 @@ class TrailGame {
       this.spriteFrame = (this.spriteFrame + 1) % 4;
     }
 
-    // Advance time (every 90 frames = ~1.5 real seconds per game hour)
-    if (this.frameCounter % 90 === 0) {
+    // Advance time (every 55 frames = ~0.92 real seconds per game hour).
+    // Was 90 frames (~1.5s/hour, ~36 real seconds per game day) -- direct
+    // feedback: "the time passes really slow (like the days) and it also
+    // takes a long time to travel between the stops... here the
+    // mini-games are the draw, not the trail." Combined with
+    // milesPerLandmark below, a landmark now takes roughly 2.5-3x less
+    // real time at any given transport speed.
+    if (this.frameCounter % 55 === 0) {
       this.advanceTime();
     }
 
@@ -203,39 +241,86 @@ class TrailGame {
     if (this.state.currentDay > this.state.lastEventDay) {
       this.checkRandomEvent();
     }
+
+    this.updateWeatherParticles();
   }
 
   render() {
     // Render background layers (parallax)
     this.renderBackground();
 
+    // Ambient street life (pedestrians, cabs, a delivery cyclist) --
+    // drawn before the player so the player sprite reads as the one
+    // thing actually in focus.
+    this.renderForeground();
+
     // Render character/vehicle sprite
     this.renderCharacter();
 
-    // Render foreground
-    this.renderForeground();
+    // Weather sits on top of everything, like it's between the camera
+    // and the whole scene.
+    this.renderWeatherEffects();
+  }
+
+  // Sky/building/street palette per neighborhood -- was one fixed purple
+  // skyline everywhere regardless of which landmark you were actually
+  // near. Colors and silhouette shape only (no new copy) -- Midtown runs
+  // tall and uniform, the Village/Soho stay low and varied, Williamsburg
+  // runs wide and industrial, the Mirage goes full neon.
+  landmarkPalette() {
+    const palettes = {
+      'entry':                 { skyTop: '#232833', skyBottom: '#1c2230', building: '#39404d', street: '#3a3f4a', accent: '#8a93a3' },
+      'murray-hill':            { skyTop: '#241d2e', skyBottom: '#1c1624', building: '#5a3f35', street: '#4a3428', accent: '#c98f5a' },
+      'midtown':                { skyTop: '#141c33', skyBottom: '#0d1424', building: '#22355c', street: '#2a2f3d', accent: '#8fc8ff' },
+      'washington-square-park': { skyTop: '#1c2a24', skyBottom: '#141f1a', building: '#3f5240', street: '#3a3428', accent: '#7ea87e' },
+      'union-square':           { skyTop: '#2c1f18', skyBottom: '#1f150f', building: '#6b4226', street: '#4a3020', accent: '#e2882c' },
+      'west-village':           { skyTop: '#241f2c', skyBottom: '#191420', building: '#4a3628', street: '#3a2c20', accent: '#c9a05a' },
+      'soho':                   { skyTop: '#1f1a1a', skyBottom: '#161212', building: '#5c4230', street: '#403428', accent: '#caa06a' },
+      'les':                    { skyTop: '#2a1830', skyBottom: '#1c1022', building: '#7a2f5a', street: '#402038', accent: '#e2622c' },
+      'williamsburg':           { skyTop: '#2c1c14', skyBottom: '#1f130c', building: '#8a4a2c', street: '#4a3020', accent: '#d4783a' },
+      'mirage':                 { skyTop: '#2a1240', skyBottom: '#180a2a', building: '#5a1a5a', street: '#2a1040', accent: '#e24ac8' },
+    };
+    return palettes[this.getCurrentLandmark().id] || palettes['entry'];
   }
 
   renderBackground() {
     const { width, height } = this.canvas;
+    const p = this.landmarkPalette();
+    const landmark = this.getCurrentLandmark();
 
     // Sky gradient
     const gradient = this.ctx.createLinearGradient(0, 0, 0, height * 0.6);
-    gradient.addColorStop(0, '#1a1a2e');
-    gradient.addColorStop(1, '#16213e');
+    gradient.addColorStop(0, p.skyTop);
+    gradient.addColorStop(1, p.skyBottom);
     this.ctx.fillStyle = gradient;
     this.ctx.fillRect(0, 0, width, height * 0.6);
 
     // Buildings silhouette (parallax layer 1 - slow)
-    this.ctx.fillStyle = '#0f3460';
+    const tall = landmark.id === 'midtown';
+    const low = landmark.id === 'west-village' || landmark.id === 'soho';
+    const wide = landmark.id === 'williamsburg';
+    const spacing = wide ? 190 : 150;
+    const baseW = wide ? 160 : 120;
     for (let i = -1; i < 10; i++) {
-      const x = (i * 150) - (this.backgroundOffset * 0.3);
-      const buildingHeight = 100 + Math.sin(i * 0.5) * 50;
-      this.ctx.fillRect(x, height * 0.4 - buildingHeight, 120, buildingHeight);
+      const x = (i * spacing) - (this.backgroundOffset * 0.3);
+      const baseHeight = tall ? 190 : low ? 70 : 100;
+      const variance = tall ? 30 : low ? 20 : 50;
+      const buildingHeight = baseHeight + Math.sin(i * 0.5 + landmark.id.length) * variance;
+      this.ctx.fillStyle = p.building;
+      this.ctx.fillRect(x, height * 0.4 - buildingHeight, baseW, buildingHeight);
+      // Scattered lit windows
+      this.ctx.fillStyle = p.accent;
+      for (let wy = 10; wy < buildingHeight - 10; wy += 18) {
+        for (let wx = 6; wx < baseW - 6; wx += 20) {
+          if ((i * 7 + Math.floor(wy) + Math.floor(wx)) % 5 === 0) {
+            this.ctx.fillRect(x + wx, height * 0.4 - buildingHeight + wy, 6, 8);
+          }
+        }
+      }
     }
 
     // Street level (parallax layer 2 - medium)
-    this.ctx.fillStyle = '#533483';
+    this.ctx.fillStyle = p.street;
     this.ctx.fillRect(0, height * 0.6, width, height * 0.4);
 
     // Street details (parallax layer 3 - fast)
@@ -244,6 +329,169 @@ class TrailGame {
       const x = (i * 100) - this.backgroundOffset;
       // Street lines
       this.ctx.fillRect(x, height * 0.7, 60, 3);
+    }
+  }
+
+  // Ambient pedestrians/traffic -- was an empty stub. Positions are a
+  // pure function of backgroundOffset (same scrolling approach the
+  // buildings/street-lines above already use) rather than tracked,
+  // mutated per-frame state, so there's no drift/accumulation to get
+  // wrong -- only which actor goes in which slot is randomized once,
+  // lazily, the first time this runs.
+  ensureStreetActors() {
+    if (this.streetActors.length > 0) return;
+    const kinds = ['pedestrian', 'pedestrian', 'cab', 'pedestrian', 'delivery-cyclist', 'pedestrian', 'cab', 'pedestrian'];
+    this.streetActors = kinds.map(kind => ({
+      kind,
+      seed: Math.random(),
+      color: kind === 'cab' ? (Math.random() < 0.5 ? '#FFD700' : '#2c2c2c') : null,
+    }));
+  }
+
+  renderForeground() {
+    this.ensureStreetActors();
+    const { width, height } = this.canvas;
+    this.streetActors.forEach((a, i) => {
+      const spacing = a.kind === 'pedestrian' ? 140 : 260;
+      const factor = a.kind === 'pedestrian' ? 0.9 : 1.5;
+      let x = ((i * spacing + a.seed * spacing) - this.backgroundOffset * factor) % (width + spacing * 2);
+      if (x < -spacing) x += (width + spacing * 2);
+      const y = a.kind === 'pedestrian' ? height * 0.74 : height * 0.66;
+      if (a.kind === 'pedestrian') this.drawPedestrianSilhouette(x, y, a);
+      else if (a.kind === 'cab') this.drawPassingCab(x, y, a.color);
+      else if (a.kind === 'delivery-cyclist') this.drawDeliveryCyclist(x, y, a);
+    });
+  }
+
+  drawPedestrianSilhouette(x, y, a) {
+    const ctx = this.ctx;
+    const bob = Math.sin(this.frameCounter * 0.15 + a.seed * 10) * 2;
+    ctx.fillStyle = 'rgba(20,16,24,0.55)';
+    ctx.beginPath();
+    ctx.arc(x, y - 34 + bob, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillRect(x - 4, y - 29 + bob, 8, 16);
+    ctx.fillRect(x - 4, y - 13 + bob, 3, 12);
+    ctx.fillRect(x + 1, y - 13 + bob, 3, 12);
+  }
+
+  drawPassingCab(x, y, color) {
+    const ctx = this.ctx;
+    ctx.fillStyle = color || '#FFD700';
+    ctx.fillRect(x - 22, y - 12, 44, 16);
+    ctx.fillStyle = '#111';
+    ctx.fillRect(x - 16, y - 20, 32, 10);
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath(); ctx.arc(x - 14, y + 4, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 14, y + 4, 4, 0, Math.PI * 2); ctx.fill();
+  }
+
+  drawDeliveryCyclist(x, y, a) {
+    const ctx = this.ctx;
+    const bob = Math.sin(this.frameCounter * 0.2 + a.seed * 10) * 1.5;
+    ctx.strokeStyle = 'rgba(20,16,24,0.6)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x - 8, y + 6, 6, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + 8, y + 6, 6, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y + 6); ctx.lineTo(x, y - 6 + bob); ctx.lineTo(x + 8, y + 6);
+    ctx.stroke();
+    ctx.fillStyle = '#3a6ea5';
+    ctx.fillRect(x - 4, y - 14 + bob, 8, 8);
+  }
+
+  // ============================================
+  // WEATHER VISUALS
+  // ============================================
+  // Was numbers-only (speedMod/vibeMod) with zero visual reflection of
+  // what the weather actually was. Falling particles for rain/snow/fall
+  // leaves, a shimmer wash for heat -- purely visual, no new copy.
+
+  weatherKind() {
+    switch (this.state.vibeWeather) {
+      case 'raining':      return 'rain';
+      case 'blizzard':      return 'snow';
+      case 'perfect-fall':  return 'leaves';
+      case 'august':        return 'heat';
+      default:               return null; // major-event / subway-weird -- not a visual weather state
+    }
+  }
+
+  ensureWeatherParticles() {
+    const kind = this.weatherKind();
+    if (this._weatherParticleKind === kind && (this.weatherParticles.length > 0 || !kind)) return;
+    this._weatherParticleKind = kind;
+    this.weatherParticles = [];
+    if (!kind || kind === 'heat') return;
+    const { width, height } = this.canvas;
+    const w = width || 400, h = height || 400;
+    const count = kind === 'snow' ? 55 : kind === 'rain' ? 90 : 16;
+    for (let i = 0; i < count; i++) {
+      this.weatherParticles.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        speed: kind === 'rain' ? 8 + Math.random() * 6 : kind === 'snow' ? 1 + Math.random() * 1.5 : 0.6 + Math.random() * 0.8,
+        drift: kind === 'snow' ? (Math.random() - 0.5) * 0.6 : kind === 'leaves' ? (Math.random() - 0.5) * 1.2 : 0,
+        len: kind === 'rain' ? 10 + Math.random() * 10 : 0,
+        size: kind === 'snow' ? 1.5 + Math.random() * 2 : kind === 'leaves' ? 3 + Math.random() * 2 : 0,
+        angle: Math.random() * Math.PI * 2,
+      });
+    }
+  }
+
+  updateWeatherParticles() {
+    const kind = this.weatherKind();
+    this.ensureWeatherParticles();
+    if (!kind || kind === 'heat') return;
+    const { width, height } = this.canvas;
+    this.weatherParticles.forEach(p => {
+      p.y += p.speed;
+      p.x += p.drift;
+      if (kind === 'leaves') p.angle += 0.02;
+      if (p.y > height) { p.y = -10; p.x = Math.random() * width; }
+      if (p.x > width) p.x = 0;
+      if (p.x < 0) p.x = width;
+    });
+  }
+
+  renderWeatherEffects() {
+    const kind = this.weatherKind();
+    if (!kind) return;
+    this.ensureWeatherParticles();
+    const { width, height } = this.canvas;
+    const ctx = this.ctx;
+
+    if (kind === 'rain') {
+      ctx.strokeStyle = 'rgba(180,200,230,0.5)';
+      ctx.lineWidth = 1.5;
+      this.weatherParticles.forEach(p => {
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x - 3, p.y + p.len);
+        ctx.stroke();
+      });
+    } else if (kind === 'snow') {
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      this.weatherParticles.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      // Low-visibility haze
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.fillRect(0, 0, width, height);
+    } else if (kind === 'leaves') {
+      ctx.fillStyle = '#c96a2e';
+      this.weatherParticles.forEach(p => {
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle);
+        ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+        ctx.restore();
+      });
+    } else if (kind === 'heat') {
+      ctx.fillStyle = 'rgba(255,150,60,0.07)';
+      ctx.fillRect(0, height * 0.5, width, height * 0.5);
     }
   }
 
@@ -508,13 +756,43 @@ class TrailGame {
     this.ctx.fillRect(x + 57, y - 15, 8, 12);
   }
 
-  renderForeground() {
-    // Could add foreground elements here (trash cans, fire hydrants, etc.)
-  }
-
   // ============================================
   // TIME & PROGRESSION
   // ============================================
+
+  // Real-world asymmetry: snow mostly slows street traffic, not trains
+  // running underground; rain is worse on a bike than in a cab; heat
+  // wears out a walk or a bike ride, not a ride with AC; a "subway being
+  // weird" day is specifically bad for the subway and nothing else.
+  // Returns null for weather that doesn't have this kind of asymmetry
+  // (perfect fall, a major event) so advanceTime() falls back to that
+  // weather's own flat speedMod.
+  weatherTransportMod(weatherId, transportId) {
+    const isSubway = transportId === 'subway';
+    const isWalkBike = transportId === 'walk' || transportId === 'bank-bike' || transportId === 'electric-bike';
+    const isCar = transportId === 'yellow-cab' || transportId === 'app-car' || transportId === 'own-car';
+    switch (weatherId) {
+      case 'blizzard':
+        if (isSubway) return 0.95;
+        if (isWalkBike) return 0.35;
+        if (isCar) return 0.4;
+        return 0.6;
+      case 'raining':
+        if (isSubway) return 1.0;
+        if (isWalkBike) return 0.7;
+        if (isCar) return 0.85;
+        return 0.85;
+      case 'august':
+        if (isSubway) return 0.9;
+        if (isWalkBike) return 0.65;
+        if (isCar) return 0.9;
+        return 0.8;
+      case 'subway-weird':
+        return isSubway ? 0.4 : 1.0;
+      default:
+        return null;
+    }
+  }
 
   advanceTime() {
     // Advance by 1 hour
@@ -531,9 +809,18 @@ class TrailGame {
     const transport = TRANSPORTATION_MODES.find(m => m.id === this.state.transportation);
     const speed = transport ? transport.speed : 1;
 
-    // Apply vibe weather modifier
+    // Apply vibe weather modifier -- was one flat speedMod hitting every
+    // transportation mode equally, so a blizzard slowed the subway
+    // exactly as much as a cab. Direct correction: "if it's snowing the
+    // car goes slow and the subway still works." weatherTransportMod()
+    // gives the weather types with a real asymmetry (blizzard, rain,
+    // heat, the subway-specific "weird" day) a per-mode multiplier;
+    // anything it returns null for (perfect fall, a major event -- both
+    // uniform by nature) falls back to the flat speedMod already on the
+    // weather entry.
     const weather = VIBE_WEATHER.find(w => w.id === this.state.vibeWeather);
-    const speedMod = weather ? weather.speedMod : 1;
+    const perModeMod = weather ? this.weatherTransportMod(weather.id, this.state.transportation) : null;
+    const speedMod = perModeMod != null ? perModeMod : (weather ? weather.speedMod : 1);
 
     const milesThisHour = speed * speedMod;
     this.state.milesFromLandmark += milesThisHour;
