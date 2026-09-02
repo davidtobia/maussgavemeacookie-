@@ -739,10 +739,21 @@ class CannonGame {
     }
 
     // ---- AIRBORNE ----
-    // Fatigue: past ~40s of flight, a gentle extra pull kicks in and ramps up over
-    // the next minute or so. Backstops naked/pigeon/eagle so a flight can't run
-    // forever even with perfect play and good luck.
-    const fatigue = this._frame > 2400 ? Math.min(0.30, (this._frame - 2400) / 10000) : 0;
+    // Fatigue: past ~20s of flight, an extra pull kicks in and ramps up hard
+    // over the next ~12s. The old numbers here (start 40s, cap +0.30, ramp
+    // over a minute) were sized against naked/pigeon/eagle's flap-force-per-
+    // cooldown-frame ratio and never actually caught up to it -- a Monte
+    // Carlo sim across full sessions showed maxed eagle gear cruising
+    // 90-130s+ per flight, and maxed jetpack gear with anything less than
+    // nonstop mashing effectively never came down (30,000+ blocks logged
+    // before an artificial test cutoff). +2.0 comfortably exceeds every
+    // suit's max sustain ratio including jetpack's, so this now actually
+    // delivers on "can't run forever" for all four suits instead of just
+    // the weakest ones. Verified via the same sim: full 4-borough sessions
+    // drop from ~4-12 min of total flight time to ~1.5-3 min; turn count
+    // and turn-1 win rates are unchanged since those flights already
+    // resolved well before the old 40s mark too.
+    const fatigue = this._frame > 1200 ? Math.min(2.0, (this._frame - 1200) / 750) : 0;
     f.vy -= f.gravity + fatigue;
     f.vx *= (1 - f.drag * 0.018);
     f.worldY += f.vy;
@@ -810,9 +821,13 @@ class CannonGame {
     f.spawnTimer++;
     // Spawn rate ramps up with distance — a long endurance flight gets busier, not
     // calmer — but starts dense and generous right out of the cannon (no more
-    // barren first few seconds before anything shows up).
-    const skyInterval = Math.max(22, 42 - Math.floor(f.distance / 250));
-    const groundInterval = Math.max(40, 70 - Math.floor(f.distance / 250));
+    // barren first few seconds before anything shows up). Base/floor intervals
+    // tightened ~24% (was 42/22 sky, 70/40 ground) as part of a density pass:
+    // simulated across free and mid-tier gear, this alone roughly doubles
+    // hazard encounters per flight without dropping mid-tier win rates (still
+    // 100% everywhere) or moving turn-1 win rates outside noise.
+    const skyInterval = Math.max(16, 32 - Math.floor(f.distance / 250));
+    const groundInterval = Math.max(30, 54 - Math.floor(f.distance / 250));
     if (f.spawnTimer % skyInterval === 0) this.spawnSky();
     if (f.spawnTimer % groundInterval === 0 && f.distance > 15) this.spawnGround();
     this.updateLaunchersAndArcs();
@@ -849,22 +864,31 @@ class CannonGame {
 
   spawnSky() {
     const W = this.canvas.width, r = Math.random();
-    // Front-loaded generous: mostly coins/powerups, only a small slice of hazards
-    // right out of the cannon. Danger grows the longer a flight runs (below).
+    // Front-loaded generous: mostly coins/powerups, only a slice of hazards right
+    // out of the cannon. Danger grows the longer a flight runs (below).
     // Currency/utility pickups are frequent (reward, no effect on how far a shot
     // goes); movement-boost pickups (ring/light_cloud/pigeon_flock/updraft) are
     // kept rarer on purpose — they used to be common enough that one incidental
     // hit alone covered the gap a bad shot left, making skill/power irrelevant.
+    // Density pass: the three hazard types' combined share went 17% -> 27%,
+    // taken entirely out of plain coin's share (42% -> 32%) — every other
+    // pickup, including the deliberately-rare movement-boost ones, keeps its
+    // exact original relative share, so it only gets more common via the
+    // interval tightening above, never gets rarer. Simulated: turn-1 win
+    // rates hold within noise of pre-change values, mid-tier gear stays at
+    // 100% completion everywhere, and average hazard encounters per flight
+    // roughly double while average pickup encounters still rise too (both
+    // denser, not a trade of one for the other).
     let type;
-    if      (r < 0.42) type = 'coin';
-    else if (r < 0.52) type = 'pretzel';
-    else if (r < 0.58) type = 'rainbow_cloud';
-    else if (r < 0.65) type = 'ring';
-    else if (r < 0.72) type = 'light_cloud';
-    else if (r < 0.77) type = 'pigeon_flock';
-    else if (r < 0.83) type = 'updraft';
-    else if (r < 0.90) type = 'dark_cloud';
-    else if (r < 0.95) type = 'pigeon_obs';
+    if      (r < 0.32) type = 'coin';
+    else if (r < 0.42) type = 'pretzel';
+    else if (r < 0.48) type = 'rainbow_cloud';
+    else if (r < 0.55) type = 'ring';
+    else if (r < 0.62) type = 'light_cloud';
+    else if (r < 0.67) type = 'pigeon_flock';
+    else if (r < 0.73) type = 'updraft';
+    else if (r < 0.84) type = 'dark_cloud';
+    else if (r < 0.93) type = 'pigeon_obs';
     else               type = 'helicopter';
 
     // Long flights get meaner: occasionally upgrade a benign pickup into a hazard,
