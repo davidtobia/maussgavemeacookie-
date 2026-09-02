@@ -700,6 +700,16 @@ class TrailGame {
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
       ctx.fillRect(x + 19, y - 36, 2, 5);  // shine
     }
+
+    // Adderall (orange pill bottle, other breast pocket) -- was
+    // purchasable in the store for real money and had zero payoff,
+    // cosmetic or otherwise, unlike zyn/gun/cocaine right above it.
+    if ((inv['adderall'] || 0) > 0) {
+      ctx.fillStyle = '#e2822c';
+      ctx.fillRect(x - 24, y - 38, 6, 9);   // bottle body
+      ctx.fillStyle = '#f0e6d4';
+      ctx.fillRect(x - 24, y - 40, 6, 3);   // cap
+    }
   }
 
   renderBiker(x, y) {
@@ -825,9 +835,20 @@ class TrailGame {
     const milesThisHour = speed * speedMod;
     this.state.milesFromLandmark += milesThisHour;
 
-    // Hourly costs (transportation) — checking first, then Sapphire
+    // Hourly costs (transportation) — checking first, then Sapphire.
+    // Uber Credit (store.js, $100/unit) was purchasable and did nothing
+    // -- an app-car ride never actually checked for it. Now it offsets
+    // app-car's hourly cost directly instead of charging Sapphire, and
+    // drains proportionally (this hour's cost as a fraction of $100)
+    // until it runs out, at which point normal charging resumes.
     if (transport && transport.cost > 0) {
-      this.chargeExpense(transport.cost / 24, 'chaseSapphire');
+      const hourlyCost = transport.cost / 24;
+      const credit = this.gameState.inventory['uber-credit'] || 0;
+      if (this.state.transportation === 'app-car' && credit > 0) {
+        this.gameState.inventory['uber-credit'] = Math.max(0, credit - hourlyCost / 100);
+      } else {
+        this.chargeExpense(hourlyCost, 'chaseSapphire');
+      }
     }
 
     this.updateStatusDisplay();
