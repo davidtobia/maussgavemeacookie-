@@ -906,18 +906,25 @@ class TrailGame {
     console.log('Reached:', landmark.name);
 
     // Hard invariant: reaching the Mirage (or the landmark right before
-    // it) without the heist ever having been offered is a broken
+    // it) without the heist having actually happened is a broken
     // playthrough, not a valid outcome. Direct feedback after this
     // happened via a chapter-select jump: "that shouldn't happen! that's
-    // not even the point!" checkWiseEricsPitch() (advanceTime(), fires
-    // once wisemenJoined is true) should always catch this on its own
-    // during a genuinely fresh, continuous run -- but a save loaded via
-    // chapter-select can carry forward broken state from before a fix
-    // existed (e.g. an old save with wisemenJoined: false baked in from
-    // before the cannon "exit early" softlock was fixed). This can't be
-    // skipped by any upstream bug or stale save data -- forces the
-    // pitch outright rather than trusting an earlier step got there.
-    if ((landmark.id === 'williamsburg' || landmark.id === 'mirage') && !this.gameState.wiseEricsPitched) {
+    // not even the point!" Actually verified with a headless simulation
+    // (jsdom, loading the real game files) against two hypotheses for
+    // what the stale save looked like: wiseEricsPitched: false landed on
+    // this guard correctly and fired the pitch as intended -- but
+    // wiseEricsPitched: true with heistDone still false (the pitch got
+    // shown at some point in an earlier session, but the heist itself
+    // never ran -- e.g. the choice screen was reached and then abandoned
+    // via a reload or chapter jump before a button was clicked)
+    // reproduced the exact reported bug: the old check here only looked
+    // at wiseEricsPitched, which was already (incorrectly) true, so the
+    // guard silently did nothing and let the player straight through to
+    // the Mirage. heistDone is the actual signal that matters -- it's
+    // only ever set once startHeistGame()'s onComplete fires, win or
+    // lose, so checking it instead can't be satisfied by a stuck
+    // "the pitch was shown once" flag the way wiseEricsPitched could.
+    if ((landmark.id === 'williamsburg' || landmark.id === 'mirage') && !this.gameState.heistDone) {
       this.gameState.wisemenJoined = true;
       this.gameState.wiseEricsPitched = true;
       this.showWiseEricsPitch();
