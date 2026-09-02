@@ -474,14 +474,14 @@ class HeistGame {
           // Toggle back off — buttons take over again immediately.
           this.mazeUseTilt = false;
           this.mazeTiltX = 0; this.mazeTiltY = 0;
-          tiltBtn.textContent = 'Try tilt instead';
+          tiltBtn.textContent = 'Try tilt — 10x cash, unlimited lives';
           document.getElementById('heist-maze-pads').classList.remove('tilt-active');
           return;
         }
         this.requestTiltPermission((granted) => {
           if (this.phase !== 'maze' || !granted) {
             tiltBtn.textContent = "Tilt didn't respond — using arrows";
-            setTimeout(() => { tiltBtn.textContent = 'Try tilt instead'; }, 2000);
+            setTimeout(() => { tiltBtn.textContent = 'Try tilt — 10x cash, unlimited lives'; }, 2000);
             return;
           }
           this._mazeOrientBase = null;
@@ -501,7 +501,7 @@ class HeistGame {
             } else {
               this.mazeUseTilt = false;
               tiltBtn.textContent = 'No signal — using arrows';
-              setTimeout(() => { tiltBtn.textContent = 'Try tilt instead'; }, 2000);
+              setTimeout(() => { tiltBtn.textContent = 'Try tilt — 10x cash, unlimited lives'; }, 2000);
             }
           }, 700);
         });
@@ -1800,7 +1800,7 @@ class HeistGame {
     this.input.onDown = null;
     this.input.onUp = null;
     document.getElementById('heist-maze-pads').classList.remove('hidden', 'tilt-active');
-    document.getElementById('heist-maze-tilt-btn').textContent = 'Try tilt instead';
+    document.getElementById('heist-maze-tilt-btn').textContent = 'Try tilt — 10x cash, unlimited lives';
     this.showHud(
       'The lock — a real maze, not a diagram',
       'Grab cash on the way to the diamond. Holes are everywhere, not just wrong turns -- watch the roll.',
@@ -1883,8 +1883,12 @@ class HeistGame {
         if (c.collected) return;
         if (Math.hypot(ball.x - c.x, ball.y - c.y) < t.ballRadius + 3) {
           c.collected = true;
-          m.cashCollected += c.value;
-          this.cash += c.value;
+          // Tilt pays out 10x -- a real incentive to actually use it,
+          // not just a cute alternate control scheme. Direct feedback:
+          // "tilt is way more fun."
+          const value = this.mazeUseTilt ? c.value * 10 : c.value;
+          m.cashCollected += value;
+          this.cash += value;
         }
       });
 
@@ -1905,7 +1909,10 @@ class HeistGame {
         layout.gates.find(g2 => g2.active && this.pointRectDist(ball.x, ball.y, g2) < t.ballRadius);
       if (inHole) {
         m.resets++;
-        m.lives--;
+        // Tilt also gets unlimited lives -- falling still costs you
+        // whatever cash you were carrying (real stakes stay real), it
+        // just never actually ends the run.
+        if (!this.mazeUseTilt) m.lives--;
         // Whatever cash you'd grabbed this run spills out right where you
         // fell -- real stakes for pushing your luck, but not gone for
         // good: it's sitting there as a pile if you make it back.
@@ -1917,7 +1924,7 @@ class HeistGame {
           layout.cash.push({ x: ball.x, y: ball.y, value: dropped, collected: false, dropped: true });
           dropLine = ` Dropped $${dropped} right there.`;
         }
-        if (m.lives <= 0) {
+        if (m.lives <= 0 && !this.mazeUseTilt) {
           // Out of chances -- the job's over right here, straight to the
           // getaway, same as running out of time.
           m.outOfLives = true;
@@ -1928,7 +1935,9 @@ class HeistGame {
         }
         ball.x = m.checkpoint.x; ball.y = m.checkpoint.y; ball.vx = 0; ball.vy = 0;
         this.setHudHint(
-          `Down through the floor.${dropLine} ${m.lives} ${m.lives === 1 ? 'life' : 'lives'} left.`,
+          this.mazeUseTilt
+            ? `Down through the floor.${dropLine} Tilt mode -- unlimited lives, keep going.`
+            : `Down through the floor.${dropLine} ${m.lives} ${m.lives === 1 ? 'life' : 'lives'} left.`,
           `+${m.bonusSeconds}s bought by the distractions`);
       }
 
