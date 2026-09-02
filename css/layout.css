@@ -30,7 +30,7 @@ main.container {
 .site-header {
   padding: var(--space-2xl) 0;
   text-align: center;
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .header-content {
@@ -68,7 +68,7 @@ main.container {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f5f5f5;
+  background-color: var(--color-background-alt);
 }
 
 .hero-image {
@@ -107,9 +107,16 @@ main.container {
 /* Quick access to the in-progress game for playtesting -- not a real
    site feature, just a convenience link at the top so it doesn't need
    to be typed/remembered each time. */
+.top-test-links {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: var(--space-md);
+}
+
 .top-test-link {
   display: inline-block;
-  margin-top: var(--space-md);
   padding: 6px 14px;
   font-size: var(--font-size-sm, 0.875rem);
   color: var(--color-accent);
@@ -188,7 +195,7 @@ main.container {
   font-weight: 700;
   margin-bottom: var(--space-2xl);
   padding-bottom: var(--space-lg);
-  border-bottom: 2px solid #e5e5e5;
+  border-bottom: 2px solid var(--color-border);
   color: var(--color-text);
   position: relative;
   z-index: 1;
@@ -217,17 +224,18 @@ main.container {
 /* Post Card */
 .post-card {
   padding: var(--space-xl);
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-border);
   background-color: var(--color-background);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition: border-left-color 0.2s ease, background-color 0.2s ease;
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
 }
 
 .post-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-left-color: var(--color-accent);
+  background-color: var(--color-background-alt);
 }
 
 .post-card-title {
@@ -294,7 +302,7 @@ article {
   text-align: center;
   margin-bottom: var(--space-4xl);
   padding-bottom: var(--space-2xl);
-  border-bottom: 1px solid #e5e5e5;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .post-title {
@@ -317,7 +325,7 @@ article {
 .site-footer {
   margin-top: var(--space-4xl);
   padding: var(--space-3xl) 0;
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid var(--color-border);
   text-align: center;
 }
 
@@ -385,33 +393,37 @@ article {
   transition: transform 0.1s ease-out;
 }
 
-/* Featured Section - Most prominent category section */
+/* Featured Section - Most prominent category section. Was a purple
+   gradient card layered with rgba glow/blur (box-shadow bloom, text-
+   shadow halos, a lift-on-hover) -- the exact look of a design nobody
+   actually chose. Replaced with something that reads as picked on
+   purpose: a solid ink card in the site's own accent, bordered like a
+   stamped ticket instead of lit up like a neon sign. */
 .featured-section {
-  background: linear-gradient(135deg, rgba(138, 43, 226, 0.12) 0%, rgba(168, 85, 247, 0.18) 100%);
-  border: 3px solid rgba(138, 43, 226, 0.4);
-  box-shadow: 0 8px 32px rgba(138, 43, 226, 0.2), inset 0 0 60px rgba(138, 43, 226, 0.08);
+  background-color: var(--color-background-alt);
+  border: 1px solid var(--color-border);
   padding: var(--space-4xl) var(--space-3xl);
 }
 
 .featured-section .category-title {
-  color: #6b21a8;
-  border-bottom-color: rgba(138, 43, 226, 0.4);
+  color: var(--color-accent);
+  border-bottom-color: var(--color-border);
   font-size: var(--font-size-4xl);
-  text-shadow: 0 0 30px rgba(138, 43, 226, 0.3);
 }
 
 .featured-section[data-bg="featured"]::before {
-  background: radial-gradient(circle at center, rgba(138, 43, 226, 0.2) 0%, transparent 70%);
-  opacity: 0.6;
+  display: none;
 }
 
-.featured-card {
-  border: 3px solid rgba(138, 43, 226, 0.5);
-  background: linear-gradient(135deg, #6b21a8 0%, #8b5cf6 100%);
-  box-shadow: 0 12px 40px rgba(138, 43, 226, 0.3), 0 0 60px rgba(138, 43, 226, 0.2);
+article.featured-card {
+  border: 1px solid var(--color-accent);
+  outline: 1px solid var(--color-background);
+  outline-offset: -8px;
+  background-color: var(--color-accent);
   padding: 0;
   text-align: center;
   cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
 .featured-card-link {
@@ -423,32 +435,24 @@ article {
   height: 100%;
 }
 
-.featured-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 16px 48px rgba(138, 43, 226, 0.4), 0 0 80px rgba(138, 43, 226, 0.3);
-  border-color: rgba(168, 85, 247, 0.8);
+article.featured-card:hover {
+  background-color: var(--color-accent-hover);
 }
 
 .featured-card .post-card-title {
+  font-family: var(--font-display);
   font-size: var(--font-size-4xl);
   margin-bottom: var(--space-lg);
-  color: #fff;
-  text-shadow: 0 0 30px rgba(168, 85, 247, 0.8), 0 2px 8px rgba(0, 0, 0, 0.4);
-  letter-spacing: 0.08em;
+  color: var(--color-background);
+  letter-spacing: 0.04em;
   font-weight: 700;
-}
-
-.featured-card:hover .post-card-title {
-  color: #fae8ff;
-  text-shadow: 0 0 40px rgba(255, 255, 255, 0.9), 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .featured-card .post-card-description {
   font-size: var(--font-size-xl);
-  color: #e9d5ff;
+  color: var(--color-background-alt);
   line-height: var(--line-height-relaxed);
   font-style: italic;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 @media (max-width: 768px) {

@@ -16,8 +16,13 @@
   --font-size-4xl: 2.25rem;
   --font-size-5xl: 3rem;
 
-  /* Font Families */
+  /* Font Families -- a real display serif for headings instead of the
+     system sans stack (Fraunces, loaded on pages that link it; falls
+     back to Georgia/system serif on pages that don't). Body text stays
+     Georgia -- it's plain, but plain is right for something meant to be
+     read, not a reason to swap it for something with more "personality." */
   --font-serif: Georgia, 'Times New Roman', Times, serif;
+  --font-display: 'Fraunces', Georgia, 'Times New Roman', Times, serif;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   --font-mono: 'Courier New', Courier, monospace;
 
@@ -37,13 +42,18 @@
   --space-3xl: 4rem;
   --space-4xl: 6rem;
 
-  /* Colors - Base Palette */
-  --color-text: #1a1a1a;
-  --color-text-light: #4a4a4a;
-  --color-background: #ffffff;
-  --color-background-alt: #f5f5f5;
-  --color-accent: #2563eb;
-  --color-accent-hover: #1d4ed8;
+  /* Colors - Base Palette -- warm ink on warm paper instead of flat
+     black-on-white with a default Tailwind blue for the accent. Rust
+     instead of blue: it's a color that had to actually be picked, and
+     it matches the site's own warm/handcrafted images (mascot, hero)
+     better than a generic "web app" blue ever did. */
+  --color-text: #241d16;
+  --color-text-light: #5c5044;
+  --color-background: #faf6ef;
+  --color-background-alt: #f1ece1;
+  --color-accent: #a8431f;
+  --color-accent-hover: #7f3117;
+  --color-border: #e2d9c8;
 
   /* Max Width for Readable Text */
   --max-width-text: 65ch;
@@ -77,7 +87,7 @@ body {
 
 /* Typography */
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-sans);
+  font-family: var(--font-display);
   font-weight: 700;
   line-height: var(--line-height-tight);
   margin-bottom: var(--space-lg);
