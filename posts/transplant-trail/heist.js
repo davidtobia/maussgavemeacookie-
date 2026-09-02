@@ -1179,7 +1179,21 @@ class HeistGame {
       }
 
       if (g.state === 'patrol') {
-        g.angle = g.facing;
+        // Cone used to snap to one fixed absolute direction (g.facing)
+        // for the entire patrol regardless of which way the guard was
+        // actually walking -- direct feedback: "the people don't even
+        // change their vision cone when they turn, so they look like
+        // they're walking backwards." Faces direction of travel now,
+        // like someone actually watching where they're going, plus a
+        // slow glance sweep so a long straightaway doesn't read as a
+        // guard staring dead ahead the whole patrol. Bonus: a cone that
+        // never moved during patrol also never gave a real "time it for
+        // when they glance away" stealth window -- this does now.
+        const travelAngle = g.patrolAxis === 'y'
+          ? (g.patrolDir > 0 ? Math.PI / 2 : -Math.PI / 2)
+          : (g.patrolDir > 0 ? 0 : Math.PI);
+        if (g.sweepSeed == null) g.sweepSeed = Math.random() * Math.PI * 2;
+        g.angle = travelAngle + Math.sin(this._frame * 0.025 + g.sweepSeed) * 0.5;
         if (g.patrolAxis === 'y') {
           g.y += g.speed * g.patrolDir;
           if (g.y >= g.patrolMax) { g.y = g.patrolMax; g.patrolDir = -1; }
