@@ -56,17 +56,11 @@ class TransplantTrail {
   // (starting/restarting a game without a full page reload) needs to
   // reset all of these, not just balances/inventory, or a second
   // playthrough in the same tab carries over stale flags from the first.
-  // Concretely: wisemenJoinedAtHour surviving a restart meant the new
-  // run's hoursElapsed could never catch back up to it, so
-  // checkWiseEricsPitch() (trail.js) would never fire -- "the heist is
-  // still not triggering," reported on what turned out to be a second
-  // attempt in the same tab, not a fresh one.
   freshRunState() {
     return {
       dadsAmexCancelled: false,
       wisemenJoined: false,
       wiseEricsPitched: false,
-      wisemenJoinedAtHour: null,
       heistDone: false,
       heistAssignments: null,
       jailDone: false,
@@ -268,8 +262,8 @@ class TransplantTrail {
     this.state.checkingAccount = character.checkingAccount;
     this.state.balances = { ...character.balances };
     // Resets every run-scoped progression flag (wisemenJoined,
-    // wisemenJoinedAtHour, heistDone, etc.) -- was only resetting
-    // balances/inventory here, so restarting a game in the same tab
+    // heistDone, etc.) -- was only resetting balances/inventory here,
+    // so restarting a game in the same tab
     // (main menu -> "Travel the trail" again) carried stale progression
     // flags forward from whatever the previous playthrough left them at.
     Object.assign(this.state, this.freshRunState());
@@ -497,7 +491,6 @@ class TransplantTrail {
       dadsAmexCancelled: this.state.dadsAmexCancelled,
       wisemenJoined: this.state.wisemenJoined,
       wiseEricsPitched: this.state.wiseEricsPitched,
-      wisemenJoinedAtHour: this.state.wisemenJoinedAtHour != null ? this.state.wisemenJoinedAtHour : null,
       heistDone: this.state.heistDone || false,
       heistAssignments: this.state.heistAssignments || null,
       jailDone: this.state.jailDone || false,
@@ -537,7 +530,6 @@ class TransplantTrail {
     this.state.dadsAmexCancelled  = save.dadsAmexCancelled || false;
     this.state.wisemenJoined      = save.wisemenJoined || false;
     this.state.wiseEricsPitched   = save.wiseEricsPitched || false;
-    this.state.wisemenJoinedAtHour = save.wisemenJoinedAtHour != null ? save.wisemenJoinedAtHour : null;
     this.state.heistDone          = save.heistDone || false;
     this.state.heistAssignments   = save.heistAssignments || null;
     this.state.jailDone           = save.jailDone || false;

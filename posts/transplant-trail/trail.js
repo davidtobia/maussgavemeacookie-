@@ -831,33 +831,6 @@ class TrailGame {
     }
 
     this.updateStatusDisplay();
-    this.checkWiseEricsPitch();
-  }
-
-  // Was gated purely on checkingAccount <= 150 and only checked once a
-  // day (onNewDay()) -- could take a long, unpredictable time to fire,
-  // or effectively never if checking alone happened to stay healthy
-  // while everything else (BILT especially, since rent is charged
-  // straight to it, not through checking) went deep into debt. Direct
-  // correction: "maybe the heist shouldn't simply trigger based on
-  // money... just have it trigger shortly (like even 10-15 seconds) of
-  // game time after the cannon game." Checked every game-hour now
-  // (not once a day) and guaranteed to fire ~12 in-game hours after the
-  // wisemen join, regardless of money -- with an OR on total money
-  // across every account, not just checking, in case the player goes
-  // broke even faster than that.
-  checkWiseEricsPitch() {
-    if (!this.gameState.wisemenJoined || this.gameState.wiseEricsPitched) return;
-    if (this.gameState.wisemenJoinedAtHour == null) {
-      this.gameState.wisemenJoinedAtHour = this.state.hoursElapsed;
-    }
-    const hoursSinceJoined = this.state.hoursElapsed - this.gameState.wisemenJoinedAtHour;
-    const b = this.gameState.balances;
-    const totalMoney = this.gameState.checkingAccount + b.cash + b.chaseFreedom + b.chaseSapphire + b.dadsAmex + b.bilt;
-    if (hoursSinceJoined >= 12 || totalMoney <= 100) {
-      this.gameState.wiseEricsPitched = true;
-      this.showWiseEricsPitch();
-    }
   }
 
   onNewDay() {
@@ -905,25 +878,22 @@ class TrailGame {
     const landmark = this.getCurrentLandmark();
     console.log('Reached:', landmark.name);
 
-    // Hard invariant: reaching the Mirage (or the landmark right before
-    // it) without the heist having actually happened is a broken
-    // playthrough, not a valid outcome. Direct feedback after this
-    // happened via a chapter-select jump: "that shouldn't happen! that's
-    // not even the point!" Actually verified with a headless simulation
-    // (jsdom, loading the real game files) against two hypotheses for
-    // what the stale save looked like: wiseEricsPitched: false landed on
-    // this guard correctly and fired the pitch as intended -- but
-    // wiseEricsPitched: true with heistDone still false (the pitch got
-    // shown at some point in an earlier session, but the heist itself
-    // never ran -- e.g. the choice screen was reached and then abandoned
-    // via a reload or chapter jump before a button was clicked)
-    // reproduced the exact reported bug: the old check here only looked
-    // at wiseEricsPitched, which was already (incorrectly) true, so the
-    // guard silently did nothing and let the player straight through to
-    // the Mirage. heistDone is the actual signal that matters -- it's
-    // only ever set once startHeistGame()'s onComplete fires, win or
-    // lose, so checking it instead can't be satisfied by a stuck
-    // "the pitch was shown once" flag the way wiseEricsPitched could.
+    // The heist trigger was an hour/money-based timer layered with
+    // three separate flags (wisemenJoined, wiseEricsPitched,
+    // wisemenJoinedAtHour) -- too many moving parts, and it kept finding
+    // new ways to fail (a stale wisemenJoinedAtHour after a restart, a
+    // stuck wiseEricsPitched from an abandoned session). Direct
+    // correction, and this is now literally what the code does: "it
+    // ends, you walk a little, then the heist." The very next landmark
+    // you reach after the wisemen join IS the trigger -- no timer, no
+    // money threshold, nothing else that can drift out of sync. The
+    // williamsburg/mirage check right after is a redundant last-resort
+    // backstop only -- it should never actually be the one that fires.
+    if (this.gameState.wisemenJoined && !this.gameState.heistDone && !this.gameState.wiseEricsPitched) {
+      this.gameState.wiseEricsPitched = true;
+      this.showWiseEricsPitch();
+      return;
+    }
     if ((landmark.id === 'williamsburg' || landmark.id === 'mirage') && !this.gameState.heistDone) {
       this.gameState.wisemenJoined = true;
       this.gameState.wiseEricsPitched = true;
