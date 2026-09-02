@@ -680,10 +680,16 @@ class TrailGame {
     this.stop();
     game.showScreen('cannon-game');
     cannonGame = new CannonGame(this.gameState, (result) => {
-      // Borough Bucks earned in the cannon game become real cash on hand — the
-      // mini-game used to just discard everything you earned in it.
+      // Was crediting checkingAccount 1:1 -- between this and bodega's
+      // score doing the same thing, a well-played cannon run alone could
+      // put a player comfortably above the heist trigger
+      // (checkingAccount <= 150) for the rest of the game. That's
+      // backwards: nobody is supposed to reach the Mirage without the
+      // heist -- running out of money is the intended path, not an edge
+      // case, and it's supposed to happen shortly after this. Borough
+      // Bucks are a score now, not spendable cash.
       if (result && result.boroughBucks) {
-        this.gameState.checkingAccount += result.boroughBucks;
+        this.gameState.boroughBucks = (this.gameState.boroughBucks || 0) + result.boroughBucks;
       }
       // Save chapter 3 checkpoint after cannon game completes
       game.saveChapter(3, this.getTrailStateSnapshot());

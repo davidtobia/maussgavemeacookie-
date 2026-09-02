@@ -56,7 +56,8 @@ class TransplantTrail {
       jailPath: null,
       aura: 100,
       inventory: {},
-      bodegaScore: 0
+      bodegaScore: 0,
+      boroughBucks: 0
     };
 
     this.init();
@@ -483,6 +484,7 @@ class TransplantTrail {
       aura: this.state.aura,
       inventory: { ...this.state.inventory },
       bodegaScore: this.state.bodegaScore || 0,
+      boroughBucks: this.state.boroughBucks || 0,
       trailState: trailStateSnapshot,
     };
     saves.latestChapter = Math.max(saves.latestChapter || 1, chapterNum);
@@ -521,6 +523,7 @@ class TransplantTrail {
     this.state.aura               = save.aura;
     this.state.inventory          = { ...save.inventory };
     this.state.bodegaScore        = save.bodegaScore || 0;
+    this.state.boroughBucks       = save.boroughBucks || 0;
 
     this.showScreen('trail-screen');
     trailGame = new TrailGame(this.state);

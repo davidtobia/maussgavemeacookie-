@@ -472,12 +472,14 @@ class BodegaGame {
   showResults() {
     this.showPhase('gamble');
     const earned = this.score;
+    // Was crediting checkingAccount 1:1 same as the cannon game's
+    // Borough Bucks -- between the two, minigame winnings alone could
+    // keep a player's checking comfortably above the heist trigger
+    // (checkingAccount <= 150) indefinitely. Running out of money is
+    // supposed to be the inevitable path to the heist, not something
+    // good minigame play can dodge. bodegaScore is a pure score now, not
+    // spendable cash -- same reversal as cannon's boroughBucks.
     this.gameState.bodegaScore = (this.gameState.bodegaScore || 0) + earned;
-    // Same reward pattern the cannon and heist mini-games use -- real
-    // cash on hand. Previously bodegaScore was tracked and saved but
-    // never actually spent or shown anywhere, so this catcher game was
-    // the only one of the three that didn't matter economically.
-    this.gameState.checkingAccount += earned;
 
     document.getElementById('bodega-gamble-text').textContent = earned > 0
       ? `Bag's packed. You made off with $${earned} worth of groceries.`
