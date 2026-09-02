@@ -37,7 +37,11 @@ const TRANSPORTATION_MODES = [
     description: 'Slow, cheap, -vibes (sweaty)',
     restrictions: [],
     requiresItem: 'bank-bike',
-    unavailableWeather: ['raining']
+    // Blizzard's own entry in VIBE_WEATHER describes "most transportation
+    // unavailable" but nothing enforced that beyond rain blocking this one
+    // mode -- extended below (subway, electric-bike) so the blizzard
+    // restriction is actually more than a single mode.
+    unavailableWeather: ['raining', 'blizzard']
   },
   {
     id: 'subway',
@@ -47,7 +51,8 @@ const TRANSPORTATION_MODES = [
     vibeEffect: 0,
     description: 'Medium speed, cheap, chaotic',
     restrictions: [],
-    requiresItem: 'metrocard'
+    requiresItem: 'metrocard',
+    unavailableWeather: ['blizzard']
   },
   {
     id: 'yellow-cab',
@@ -83,8 +88,15 @@ const TRANSPORTATION_MODES = [
     cost: 0,
     vibeEffect: 3,
     description: 'Fast, free, +vibes',
-    restrictions: ['delivery-driver'],
-    exclusive: true
+    // Was gated to `exclusive: true` + restrictions: ['delivery-driver'] --
+    // 'delivery-driver' only exists as an NPC id (characters.js NPCS), never
+    // as a playable CHARACTERS id, and canUseTransport()'s exclusive branch
+    // requires restrictions.includes(characterId). No selectable character
+    // could ever satisfy that, so this mode -- the fastest, free,
+    // best-vibe option in the whole list -- was permanently unreachable
+    // for every player, in every game. Opened up like every other mode.
+    restrictions: [],
+    unavailableWeather: ['blizzard']
   }
 ];
 

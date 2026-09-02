@@ -252,19 +252,33 @@ class TrailGame {
     const x = width / 2 - 30;
     const y = height * 0.65;
 
-    // Different sprites based on transportation mode
+    // Different sprites based on transportation mode. This switch used to
+    // check for 'bike'/'uber', but TRANSPORTATION_MODES (trail-data.js)
+    // actually uses 'bank-bike'/'electric-bike' and 'yellow-cab'/'app-car'/
+    // 'own-car' -- none of those ever matched, so every mode except walk
+    // and subway silently fell through to the walking sprite. Picking a
+    // faster transport had zero visual payoff. Fixed to the real ids, and
+    // renderCar() now takes a color so a cab/app car/personal car don't
+    // all look like the same yellow taxi.
     switch(this.state.transportation) {
       case 'walk':
         this.renderWalkingPerson(x, y);
         break;
-      case 'bike':
+      case 'bank-bike':
+      case 'electric-bike':
         this.renderBiker(x, y);
         break;
       case 'subway':
         this.renderSubwayIcon(x, y);
         break;
-      case 'uber':
-        this.renderCar(x, y);
+      case 'yellow-cab':
+        this.renderCar(x, y, '#FFD700');
+        break;
+      case 'app-car':
+        this.renderCar(x, y, '#2c2c2c');
+        break;
+      case 'own-car':
+        this.renderCar(x, y, '#7f8c8d');
         break;
       default:
         this.renderWalkingPerson(x, y);
@@ -476,9 +490,9 @@ class TrailGame {
     this.ctx.fillText('L', x + 30, y - 15);
   }
 
-  renderCar(x, y) {
+  renderCar(x, y, color = '#FFD700') {
     // Simple car (top-down view)
-    this.ctx.fillStyle = '#FFD700'; // Yellow (taxi/uber)
+    this.ctx.fillStyle = color;
     this.ctx.fillRect(x, y - 40, 60, 35);
 
     // Windows
@@ -552,9 +566,23 @@ class TrailGame {
       this.showWiseEricsPitch();
     }
 
-    // Change weather occasionally (20% chance)
+    // Change weather occasionally (20% chance). VIBE_WEATHER (trail-data.js)
+    // defines a vibeMod (and, for august heat, a healthMod) on every entry
+    // -- neither was ever read anywhere, so weather only ever affected
+    // travel speed, not the "vibe" it's named for. Applied once, right as
+    // the weather actually turns, rather than every day it's in effect --
+    // a continuous daily drain on top of the existing -1/day decay and
+    // spending-mode vibeEffect would compound hard over a multi-day
+    // blizzard; a one-time jolt when it changes reads as "the weather
+    // just turned bad" without threatening to snowball a run.
     if (Math.random() < 0.2) {
-      this.state.vibeWeather = this.randomVibeWeather();
+      const prevWeather = this.state.vibeWeather;
+      const newWeather = this.randomVibeWeather();
+      if (newWeather !== prevWeather) {
+        this.state.vibeWeather = newWeather;
+        const w = VIBE_WEATHER.find(x => x.id === newWeather);
+        if (w) this.gameState.aura += (w.vibeMod || 0) + (w.healthMod || 0);
+      }
     }
   }
 
@@ -897,7 +925,14 @@ class TrailGame {
 
   handleDeath() {
     this.stop();
-    this.showEvent('Your aura hit zero. You have been absorbed by the city.');
+    // Was a dead end -- stop() plus an event with no dismiss callback left
+    // the player on a frozen canvas with no menu and no way to do
+    // anything else. Same recovery path returnToChapterSelect() already
+    // uses elsewhere: dismissing the event now sends you to chapter
+    // select instead of softlocking the tab.
+    this.showEvent('Your aura hit zero. You have been absorbed by the city.', () => {
+      game.showChapterSelect();
+    });
   }
 
   // ============================================
@@ -948,6 +983,13 @@ class TrailGame {
 
       btn.onclick = () => {
         this.state.transportation = mode.id;
+        // Rain's own VIBE_WEATHER entry describes "App Car surge pricing
+        // (+$20)" as one of its effects -- wasn't wired to an actual
+        // charge anywhere. One-time hit at the moment you book it during
+        // rain, same as a real surge fare.
+        if (mode.id === 'app-car' && weather === 'raining') {
+          this.chargeExpense(20, 'chaseSapphire');
+        }
         game.showScreen('trail-screen');
         this.start();
       };
@@ -973,6 +1015,16 @@ class TrailGame {
 
   rest() {
     this.toggleMenu();
+    // Used to just add aura and skip a day for free -- no daily cost, no
+    // decay, no death check -- which made it strictly better than doing
+    // nothing every single time and let you spam it to sit at max aura
+    // forever at zero risk, undercutting the entire aura-pressure system.
+    // A rest day is still a day: it still costs that day's spending-mode
+    // charge and still applies the normal -1 decay before the rest bonus
+    // lands, same as a day spent actually walking.
+    this.dailyExpenses();
+    this.checkAura();
+    if (!this.state.running) return; // died from the day's own costs -- handleDeath() already took over
     this.gameState.aura = Math.min(100, this.gameState.aura + 20);
     this.state.currentDay++;
     this.showEvent('You stayed in and doom-scrolled. Aura +20. One day lost.');
