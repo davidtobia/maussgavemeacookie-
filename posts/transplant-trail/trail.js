@@ -1026,11 +1026,20 @@ class TrailGame {
       if (result && result.boroughBucks) {
         this.gameState.boroughBucks = (this.gameState.boroughBucks || 0) + result.boroughBucks;
       }
+      // wisemenJoined has to be set before the chapter-3 snapshot below,
+      // not after -- saveChapter() reads gameState synchronously, so a
+      // save taken first would freeze wisemenJoined: false into that
+      // checkpoint even on a run where the wisemen actually did join,
+      // and resuming chapter 3 later would silently lose it (and with
+      // it, any chance of the heist ever triggering for that resumed
+      // run).
+      if (result && result.wisemenJoined) {
+        this.gameState.wisemenJoined = true;
+      }
       // Save chapter 3 checkpoint after cannon game completes
       game.saveChapter(3, this.getTrailStateSnapshot());
       game.showScreen('trail-screen');
       if (result && result.wisemenJoined) {
-        this.gameState.wisemenJoined = true;
         this.showEvent("Big Tony, Ruhul, and Dmitri fall in step behind you. You've earned New York.", () => this.start());
       } else {
         this.start();
