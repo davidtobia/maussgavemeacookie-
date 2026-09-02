@@ -910,7 +910,20 @@ class TrailGame {
     // money threshold, nothing else that can drift out of sync. The
     // williamsburg/mirage check right after is a redundant last-resort
     // backstop only -- it should never actually be the one that fires.
-    if (this.gameState.wisemenJoined && !this.gameState.heistDone && !this.gameState.wiseEricsPitched) {
+    // Also requires landmarkIndex > 3 (past Washington Square Park) --
+    // found live: "I think this version of the game skipped the cannon
+    // scene." Root cause was worse than just cannon -- if wisemenJoined
+    // is ever true this early (stale save data, or any future bug),
+    // this check alone would fire at the very first landmark reached
+    // (Murray Hill), hijacking what should have been the apartment hunt
+    // and routing straight into the heist before apartment hunt, bodega,
+    // AND cannon ever ran. wisemenJoined can only ever become
+    // legitimately true through the cannon game's own completion, which
+    // can't happen before reaching WSP (landmarkIndex 3) -- so gating on
+    // landmark position can't block any real trigger, only the buggy
+    // premature one. Reproduced and verified fixed with a headless
+    // simulation before shipping this, not just reasoned about.
+    if (this.gameState.wisemenJoined && !this.gameState.heistDone && !this.gameState.wiseEricsPitched && this.state.landmarkIndex > 3) {
       this.gameState.wiseEricsPitched = true;
       this.showWiseEricsPitch();
       return;
@@ -922,19 +935,29 @@ class TrailGame {
       return;
     }
 
-    // Handle different landmark types
+    // Handle different landmark types. 'fort' and the generic fallback
+    // used to always show a mandatory tap-to-dismiss popup for pure
+    // flavor text with zero unique info beyond what the status bar's
+    // own "next landmark" readout already shows. Harmless at the old
+    // pacing (landmarks were rare) -- but landmarks come 2.5-3x more
+    // often now (see update()'s frameCounter/milesPerLandmark comments),
+    // so this turned into "you have to tap to continue after every
+    // landmark." reachLandmark() pauses unconditionally at the top of
+    // this method; these two branches now explicitly undo that instead
+    // of relying on a popup dismissal to do it, so the trail just keeps
+    // walking through them.
     if (landmark.id === 'murray-hill') {
       this.apartmentHunt();
     } else if (landmark.id === 'washington-square-park') {
       this.showEvent('You arrive at Washington Square Park. Three figures are waiting by the arch.', () => this.startCannonGame());
     } else if (landmark.type === 'fort') {
-      this.showEvent(`You reached ${landmark.name}! You can rest and resupply here.`);
+      this.state.paused = false;
     } else if (landmark.type === 'crossing') {
       this.lTrainCrossing();
     } else if (landmark.type === 'destination') {
       this.reachDestination();
     } else {
-      this.showEvent(`You reached ${landmark.name}.`);
+      this.state.paused = false;
     }
   }
 
@@ -1369,11 +1392,6 @@ class TrailGame {
     this.gameState.aura = Math.min(100, this.gameState.aura + 20);
     this.state.currentDay++;
     this.showEvent('You stayed in and doom-scrolled. Aura +20. One day lost.');
-  }
-
-  workGig() {
-    this.toggleMenu();
-    this.showEvent('Work gig — coming soon.');
   }
 
   // Was only reachable by fully backing out to the main menu and hitting

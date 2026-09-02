@@ -89,6 +89,27 @@ class BodegaGame {
     this.particles = [];
     this.popups = [];
     this.setupControls();
+    // Every other mini-game in this app re-syncs its canvas size on
+    // resize (heist.js/cannon.js both do); bodega never did. The canvas
+    // dimensions were only ever set once here, but mobile browsers
+    // routinely resize the viewport shortly after load as the address
+    // bar auto-collapses -- when that happens, the canvas's actual
+    // CSS-rendered box changes (100dvh reacts to it) but the drawing
+    // buffer (canvas.width/height, and everything computed off it, like
+    // the basket's y-position near the bottom) stays pinned to whatever
+    // it was at this exact moment. Direct feedback: "bodega game is cut
+    // off. can't see the basket on mobile."
+    this._resizeHandler = () => {
+      const r = this.canvas.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const prevW = this.canvas.width || r.width;
+      this.canvas.width  = r.width;
+      this.canvas.height = r.height;
+      // Keep the basket's relative position instead of snapping to
+      // center on every resize, which would be jarring mid-catch.
+      this.basketX = this.basketX * (r.width / prevW);
+    };
+    window.addEventListener('resize', this._resizeHandler);
     this.running = true;
     this.timerInterval = setInterval(() => this.tickTimer(), 1000);
     this.gameLoop();
@@ -540,6 +561,7 @@ class BodegaGame {
     clearInterval(this.timerInterval);
     if (this.animFrame)   cancelAnimationFrame(this.animFrame);
     if (this._keyHandler) document.removeEventListener('keydown', this._keyHandler);
+    if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
     this.showResults();
   }
 

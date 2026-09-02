@@ -170,7 +170,12 @@ class TransplantTrail {
       { label: 'Travel the trail', action: 'start' },
       ...(hasSave ? [{ label: 'Continue', action: 'continue' }] : []),
       ...(hasSave ? [{ label: 'Choose chapter', action: 'chapters' }] : []),
-      { label: 'Learn about the trail', action: 'learn' },
+      // "Learn about the trail" cut -- dead stub, no content ever
+      // written, and the game already explains itself inline (premise
+      // screen, event text). "See the leaderboard" and "Turn sound off"
+      // stay even though both are still stubs -- a local personal-best
+      // leaderboard is real, buildable work (see the note where
+      // showLeaderboard() used to alert()), and sound is planned.
       { label: 'See the leaderboard', action: 'leaderboard' },
       { label: 'Turn sound off', action: 'sound' },
     ];
@@ -190,7 +195,6 @@ class TransplantTrail {
       case 'start':       this.startGame(); break;
       case 'continue':    this.continueGame(); break;
       case 'chapters':    this.showChapterSelect(); break;
-      case 'learn':       this.showLearnAboutTrail(); break;
       case 'leaderboard': this.showLeaderboard(); break;
       case 'sound':       this.toggleSound(); break;
     }
@@ -230,11 +234,6 @@ class TransplantTrail {
   startGame() {
     this.state.gameStarted = true;
     this.showCharacterSelect();
-  }
-
-  showLearnAboutTrail() {
-    // TODO: Add info screen about the trail
-    alert('Learn about the trail - Coming soon!');
   }
 
   showLeaderboard() {
