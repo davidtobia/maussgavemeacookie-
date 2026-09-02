@@ -104,6 +104,25 @@ main.container {
   line-height: var(--line-height-normal);
 }
 
+/* Quick access to the in-progress game for playtesting -- not a real
+   site feature, just a convenience link at the top so it doesn't need
+   to be typed/remembered each time. */
+.top-test-link {
+  display: inline-block;
+  margin-top: var(--space-md);
+  padding: 6px 14px;
+  font-size: var(--font-size-sm, 0.875rem);
+  color: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: 999px;
+  text-decoration: none;
+}
+
+.top-test-link:hover {
+  background-color: var(--color-accent);
+  color: var(--color-background);
+}
+
 /* Navigation */
 .nav {
   display: flex;
