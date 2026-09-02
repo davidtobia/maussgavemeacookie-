@@ -1645,6 +1645,18 @@ button.menu-option.cannon-shop-exit-btn:hover {
   transition: width 0.1s linear, background 0.2s ease;
 }
 
+/* Past 75 heat this stops being "elevated" and starts being "about to lose
+   this character" -- a pulse says so at a glance, without needing to read
+   the number under it. */
+.heist-floor-chip-heat-fill.critical {
+  animation: heist-heat-critical-pulse 0.5s ease-in-out infinite;
+}
+
+@keyframes heist-heat-critical-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.6); }
+}
+
 /* Maze D-pads — real buttons, always work, no touch-position math or device
    sensors required. Left pad = X-axis, right pad = Y-axis. */
 .heist-maze-pads {
