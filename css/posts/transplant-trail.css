@@ -2230,6 +2230,11 @@ button.menu-option.cannon-shop-exit-btn:hover {
   pointer-events: auto;
 }
 
+/* .jail-btn is the general base every mini-game's buttons share (rhythm
+   lanes, the bench HOLD button, trip's bet options); .jail-fight-btn is
+   kept as an alias so the shelved fight markup (jail-shelved.js) still
+   renders correctly if it's ever reconnected. */
+.jail-btn,
 .jail-fight-btn {
   flex: 1;
   max-width: 160px;
@@ -2243,6 +2248,7 @@ button.menu-option.cannon-shop-exit-btn:hover {
   cursor: pointer;
 }
 
+.jail-btn.pressed,
 .jail-fight-btn.pressed {
   transform: scale(0.95);
 }
@@ -2252,5 +2258,361 @@ button.menu-option.cannon-shop-exit-btn:hover {
 
 @media (max-width: 768px) {
   .jail-fight-prompt { font-size: 26px; }
+  .jail-btn,
   .jail-fight-btn { font-size: 19px; padding: 18px 0; }
+}
+
+/* ============================================
+   ACT 3 REDESIGN — THE YARD
+   Yard hub, dialogue-tree chip/pip, shared result/summary panels, and the
+   three mini-game HUDs. Appended below the shelved-fight rules above
+   (kept as-is, aliased into .jail-btn) rather than reworking them in
+   place — see jail-shelved.js for why that code is parked, not deleted.
+   ============================================ */
+
+/* ---- Dialogue tree additions: speaker chip + friendship pip ---- */
+
+.jail-dialogue-chip {
+  display: inline-block;
+  padding: 3px 12px;
+  margin-bottom: 10px;
+  font-family: 'VT323', monospace;
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #0e0b08;
+  border-radius: 3px;
+}
+
+.jail-dialogue-chip.hidden { display: none; }
+
+.jail-choice-locked {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.jail-dialogue-pip {
+  position: absolute;
+  top: 14px;
+  right: 18px;
+  font-family: 'VT323', monospace;
+  font-size: 22px;
+  font-weight: bold;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.jail-pip-flash {
+  animation: jail-pip-pop 1.1s ease-out;
+}
+
+@keyframes jail-pip-pop {
+  0%   { opacity: 0; transform: translateY(4px) scale(0.8); }
+  15%  { opacity: 1; transform: translateY(-6px) scale(1.15); }
+  30%  { opacity: 1; transform: translateY(-10px) scale(1); }
+  100% { opacity: 0; transform: translateY(-26px) scale(1); }
+}
+
+/* ---- Yard HUD: friendship strip, toast, approach button ---- */
+
+.jail-yard-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.jail-yard-hud.hidden { display: none; }
+
+.jail-yard-friend-strip {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 320px;
+}
+
+.jail-yard-friend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(10, 8, 6, 0.72);
+  border: 1px solid rgba(212, 165, 116, 0.25);
+  border-radius: 4px;
+  padding: 5px 9px;
+  font-family: 'VT323', monospace;
+}
+
+.jail-yard-friend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.jail-yard-friend-name {
+  font-size: 14px;
+  color: #e8dfd0;
+  white-space: nowrap;
+  min-width: 70px;
+}
+
+.jail-yard-friend-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.jail-yard-friend-bar-fill {
+  height: 100%;
+  transition: width 0.4s ease-out;
+}
+
+.jail-yard-friend-tier {
+  font-size: 12px;
+  color: #9a8a76;
+  white-space: nowrap;
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jail-yard-toast {
+  position: absolute;
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: min(520px, 90vw);
+  text-align: center;
+  background: rgba(10, 8, 6, 0.88);
+  border: 1px solid rgba(212, 165, 116, 0.4);
+  border-radius: 4px;
+  padding: 10px 16px;
+  font-family: 'VT323', monospace;
+  font-size: 16px;
+  color: #e8dfd0;
+  pointer-events: none;
+}
+
+.jail-yard-toast.hidden { display: none; }
+
+.jail-yard-approach {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: auto;
+  font-family: 'VT323', monospace;
+  font-size: 20px;
+  letter-spacing: 0.04em;
+  padding: 12px 28px;
+  background: rgba(10, 8, 6, 0.88);
+  border: 2px solid #d4a574;
+  border-radius: 4px;
+  color: #d4a574;
+  cursor: pointer;
+  animation: jail-approach-pulse 1.6s ease-in-out infinite;
+}
+
+.jail-yard-approach.hidden { display: none; }
+
+@keyframes jail-approach-pulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(212, 165, 116, 0); }
+  50% { box-shadow: 0 0 16px rgba(212, 165, 116, 0.45); }
+}
+
+/* ---- Shared result panel ---- */
+
+#jail-result-stats {
+  margin-top: 10px;
+}
+
+/* ---- Release-day summary ---- */
+
+.jail-summary-row {
+  text-align: left;
+  border-top: 1px solid rgba(212, 165, 116, 0.2);
+  padding: 12px 0;
+}
+
+.jail-summary-row:first-child { border-top: none; }
+
+.jail-summary-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.jail-summary-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.jail-summary-name {
+  font-size: 20px;
+  color: #e8dfd0;
+  flex: 1;
+}
+
+.jail-summary-tier {
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ---- Generic mini-game HUD shell (rhythm/bench/trip all use this) ---- */
+
+.jail-minigame-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  padding: 16px;
+}
+
+.jail-minigame-hud.hidden { display: none; }
+
+/* ---- Rhythm HUD (Diddy) ---- */
+
+.jail-rhythm-readout {
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-family: 'VT323', monospace;
+}
+
+.jail-rhythm-acc {
+  font-size: 30px;
+  color: #d4a574;
+}
+
+.jail-rhythm-combo {
+  font-size: 18px;
+  color: #f4c542;
+  min-height: 22px;
+}
+
+.jail-rhythm-btns {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  pointer-events: auto;
+}
+
+.jail-rhythm-btn {
+  max-width: 120px;
+}
+
+/* ---- Bench HUD (Luigi) ---- */
+
+.jail-bench-readout {
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  color: #c8b89c;
+}
+
+.jail-bench-form {
+  width: 200px;
+  height: 10px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid #3a322c;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.jail-bench-form-fill {
+  height: 100%;
+  width: 100%;
+  transition: width 0.15s ease-out, background 0.2s ease;
+}
+
+.jail-bench-hold-btn {
+  align-self: center;
+  max-width: 220px;
+  pointer-events: auto;
+  border-color: #7ec89a;
+  color: #7ec89a;
+}
+
+/* ---- Trip HUD (Sam) ---- */
+
+.jail-trip-readout {
+  align-self: center;
+  display: flex;
+  gap: 22px;
+  font-family: 'VT323', monospace;
+  font-size: 22px;
+  color: #d4a574;
+}
+
+.jail-trip-clock-low {
+  color: #e05a4a;
+  animation: jail-approach-pulse 0.8s ease-in-out infinite;
+}
+
+.jail-trip-utils {
+  color: #f4c542;
+}
+
+.jail-trip-bet-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  background: rgba(10, 6, 16, 0.94);
+  border: 2px solid #a86ad8;
+  border-radius: 6px;
+  padding: 18px 22px;
+  max-width: min(420px, 88vw);
+  text-align: center;
+}
+
+.jail-trip-bet-panel.hidden { display: none; }
+
+.jail-trip-bet-prompt {
+  font-family: 'VT323', monospace;
+  font-size: 18px;
+  color: #e8dfd0;
+  margin-bottom: 14px;
+}
+
+.jail-trip-bet-btns {
+  display: flex;
+  gap: 12px;
+}
+
+.jail-trip-bet-btns .jail-btn {
+  max-width: none;
+  border-color: #a86ad8;
+  color: #a86ad8;
+  padding: 14px 8px;
+  font-size: 16px;
+}
+
+@media (max-width: 768px) {
+  .jail-yard-friend-strip { max-width: 260px; }
+  .jail-yard-friend-name { min-width: 56px; font-size: 12px; }
+  .jail-yard-approach { font-size: 17px; padding: 10px 20px; }
+  .jail-rhythm-btn { font-size: 19px; padding: 18px 0; }
+  .jail-bench-hold-btn { font-size: 19px; padding: 18px 0; }
 }

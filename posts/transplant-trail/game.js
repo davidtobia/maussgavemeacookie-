@@ -66,6 +66,9 @@ class TransplantTrail {
       jailDone: false,
       jailWon: false,
       jailPath: null,
+      jailFriendship: null,
+      jailFlags: null,
+      nycFriends: [],
       aura: 100,
       inventory: {},
       bodegaScore: 0,
@@ -496,6 +499,9 @@ class TransplantTrail {
       jailDone: this.state.jailDone || false,
       jailWon: this.state.jailWon || false,
       jailPath: this.state.jailPath || null,
+      jailFriendship: this.state.jailFriendship || null,
+      jailFlags: this.state.jailFlags || null,
+      nycFriends: this.state.nycFriends || [],
       aura: this.state.aura,
       inventory: { ...this.state.inventory },
       bodegaScore: this.state.bodegaScore || 0,
@@ -535,6 +541,9 @@ class TransplantTrail {
     this.state.jailDone           = save.jailDone || false;
     this.state.jailWon            = save.jailWon || false;
     this.state.jailPath           = save.jailPath || null;
+    this.state.jailFriendship     = save.jailFriendship || null;
+    this.state.jailFlags          = save.jailFlags || null;
+    this.state.nycFriends         = save.nycFriends || [];
     this.state.aura               = save.aura;
     this.state.inventory          = { ...save.inventory };
     this.state.bodegaScore        = save.bodegaScore || 0;

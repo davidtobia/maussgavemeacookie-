@@ -1099,17 +1099,19 @@ class TrailGame {
     game.showScreen('jail-game');
     jailGame = new JailGame(this.gameState, (result) => {
       this.gameState.jailDone = true;
-      this.gameState.jailWon = !!(result && result.jailWon);
-      this.gameState.jailPath = result ? result.jailPath : null;
+      this.gameState.jailWon = !!(result && result.jailWon); // dead field, kept only for old-save compatibility
+      this.gameState.jailPath = result ? result.jailPath : null; // dead field, same reason
+      this.gameState.jailFriendship = result ? result.jailFriendship : null;
+      this.gameState.jailFlags = result ? result.jailFlags : [];
+      this.gameState.nycFriends = result ? result.nycFriends : [];
       // Chapter 6: the jail arc is its own checkpoint too, same reasoning
-      // as chapter 5 -- it's a real chunk of content (recruitment arc +
-      // two activity beats + a fight), not something you want to redo
-      // because you closed the tab right after finishing it.
+      // as chapter 5 -- it's a real chunk of content (yard exploration,
+      // three dialogue trees, three mini-games), not something you want
+      // to redo because you closed the tab right after finishing it.
       game.saveChapter(6, this.getTrailStateSnapshot());
       game.showScreen('trail-screen');
-      const outcome = result && result.jailWon
-        ? 'You walk out of the yard still standing. Word travels fast in a building this size.'
-        : "You walk out of the yard, eventually, on your own legs. That's the part that counts.";
+      const friendCount = result ? result.jailFriendCount : 0;
+      const outcome = JAIL_OUTCOMES.release[friendCount] || JAIL_OUTCOMES.release[0];
       this.showEvent(
         `${outcome} Act 4 is coming soon.`,
         () => this.start()
