@@ -831,6 +831,33 @@ class TrailGame {
     }
 
     this.updateStatusDisplay();
+    this.checkWiseEricsPitch();
+  }
+
+  // Was gated purely on checkingAccount <= 150 and only checked once a
+  // day (onNewDay()) -- could take a long, unpredictable time to fire,
+  // or effectively never if checking alone happened to stay healthy
+  // while everything else (BILT especially, since rent is charged
+  // straight to it, not through checking) went deep into debt. Direct
+  // correction: "maybe the heist shouldn't simply trigger based on
+  // money... just have it trigger shortly (like even 10-15 seconds) of
+  // game time after the cannon game." Checked every game-hour now
+  // (not once a day) and guaranteed to fire ~12 in-game hours after the
+  // wisemen join, regardless of money -- with an OR on total money
+  // across every account, not just checking, in case the player goes
+  // broke even faster than that.
+  checkWiseEricsPitch() {
+    if (!this.gameState.wisemenJoined || this.gameState.wiseEricsPitched) return;
+    if (this.gameState.wisemenJoinedAtHour == null) {
+      this.gameState.wisemenJoinedAtHour = this.state.hoursElapsed;
+    }
+    const hoursSinceJoined = this.state.hoursElapsed - this.gameState.wisemenJoinedAtHour;
+    const b = this.gameState.balances;
+    const totalMoney = this.gameState.checkingAccount + b.cash + b.chaseFreedom + b.chaseSapphire + b.dadsAmex + b.bilt;
+    if (hoursSinceJoined >= 12 || totalMoney <= 100) {
+      this.gameState.wiseEricsPitched = true;
+      this.showWiseEricsPitch();
+    }
   }
 
   onNewDay() {
@@ -844,13 +871,6 @@ class TrailGame {
     if (!this.gameState.dadsAmexCancelled && this.gameState.balances.dadsAmex <= 0) {
       this.gameState.dadsAmexCancelled = true;
       this.showEvent(`Your dad just called. "I'm cancelling the card. You need to figure this out yourself." The AMEX is dead.`);
-    }
-
-    // The Wise Erics (Big Tony, Ruhul, Dmitri) pitch a way to make cash once
-    // you're actually running low, but only after they've joined you post-cannon.
-    if (this.gameState.wisemenJoined && !this.gameState.wiseEricsPitched && this.gameState.checkingAccount <= 150) {
-      this.gameState.wiseEricsPitched = true;
-      this.showWiseEricsPitch();
     }
 
     // Change weather occasionally (20% chance). VIBE_WEATHER (trail-data.js)

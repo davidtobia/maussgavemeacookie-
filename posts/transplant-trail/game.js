@@ -49,6 +49,7 @@ class TransplantTrail {
       dadsAmexCancelled: false,
       wisemenJoined: false,
       wiseEricsPitched: false,
+      wisemenJoinedAtHour: null,
       heistDone: false,
       heistAssignments: null,
       jailDone: false,
@@ -476,6 +477,7 @@ class TransplantTrail {
       dadsAmexCancelled: this.state.dadsAmexCancelled,
       wisemenJoined: this.state.wisemenJoined,
       wiseEricsPitched: this.state.wiseEricsPitched,
+      wisemenJoinedAtHour: this.state.wisemenJoinedAtHour != null ? this.state.wisemenJoinedAtHour : null,
       heistDone: this.state.heistDone || false,
       heistAssignments: this.state.heistAssignments || null,
       jailDone: this.state.jailDone || false,
@@ -515,6 +517,7 @@ class TransplantTrail {
     this.state.dadsAmexCancelled  = save.dadsAmexCancelled || false;
     this.state.wisemenJoined      = save.wisemenJoined || false;
     this.state.wiseEricsPitched   = save.wiseEricsPitched || false;
+    this.state.wisemenJoinedAtHour = save.wisemenJoinedAtHour != null ? save.wisemenJoinedAtHour : null;
     this.state.heistDone          = save.heistDone || false;
     this.state.heistAssignments   = save.heistAssignments || null;
     this.state.jailDone           = save.jailDone || false;
