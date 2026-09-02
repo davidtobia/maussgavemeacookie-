@@ -34,6 +34,18 @@ class BodegaGame {
     this.popups = [];
     this.bagPunch = 0;
     this.bagShake = 0;
+    // Chaos catches: catching the cat or the poop used to cost -5 points
+    // and nothing else, same as mouthwash -- no different from any other
+    // miss. Direct request: make the bad ones actually hurt in a way
+    // that's fun, not just a worse number. Cat: a giant version jumps in
+    // and takes the basket out of your control for ~2s (it visibly
+    // topples over -- input is ignored while catInvasion is active,
+    // not just visually disabled). Poop: a splatter blooms over the
+    // screen and blocks your view of falling items, then fades.
+    this.catInvasion = null; // { timer, maxTimer, x }
+    this.poopSplat = null;   // { timer, maxTimer, blobs }
+    this.basketLocked = false;
+    this.basketTilt = 0;
     this.frameCounter = 0;
     this.animFrame = null;
     this.running = false;
@@ -116,25 +128,32 @@ class BodegaGame {
   }
 
   setupControls() {
+    // basketLocked (set during a cat invasion) ignores all movement
+    // input, not just visually disables it -- the whole point of the
+    // penalty is a real few seconds of lost control, not a cosmetic
+    // wobble.
     this.canvas.addEventListener('touchmove', (e) => {
       e.preventDefault();
+      if (this.basketLocked) return;
       const rect = this.canvas.getBoundingClientRect();
       this.basketX = e.touches[0].clientX - rect.left;
     }, { passive: false });
 
     this.canvas.addEventListener('touchstart', (e) => {
       e.preventDefault();
+      if (this.basketLocked) return;
       const rect = this.canvas.getBoundingClientRect();
       this.basketX = e.touches[0].clientX - rect.left;
     }, { passive: false });
 
     this.canvas.addEventListener('mousemove', (e) => {
+      if (this.basketLocked) return;
       const rect = this.canvas.getBoundingClientRect();
       this.basketX = e.clientX - rect.left;
     });
 
     this._keyHandler = (e) => {
-      if (!this.running) return;
+      if (!this.running || this.basketLocked) return;
       const step = 30;
       if (e.key === 'ArrowLeft')  this.basketX = Math.max(70, this.basketX - step);
       if (e.key === 'ArrowRight') this.basketX = Math.min(this.canvas.width - 70, this.basketX + step);
@@ -233,6 +252,36 @@ class BodegaGame {
     });
     if (item.good) this.bagPunch = 1;
     else this.bagShake = 1;
+
+    if (item.label === 'Bodega Cat') this.triggerCatInvasion();
+    if (item.label === 'Poop') this.triggerPoopSplat();
+  }
+
+  // ~130 frames at 60fps is "two seconds" as asked for. Locks basket
+  // input for the whole thing, not just while the cat is at full size --
+  // losing control during the leap-in/leap-out feels like part of the
+  // same chaos instead of a separate mechanic.
+  triggerCatInvasion() {
+    this.catInvasion = { timer: 130, maxTimer: 130, x: this.basketX };
+    this.basketLocked = true;
+  }
+
+  // A handful of overlapping blob shapes at random spots -- placed once
+  // here, not regenerated every frame, so the splatter reads as a single
+  // "hit" rather than noise.
+  triggerPoopSplat() {
+    const w = this.canvas.width, h = this.canvas.height;
+    const blobs = [];
+    const n = 6 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      blobs.push({
+        x: Math.random() * w,
+        y: h * 0.08 + Math.random() * h * 0.6,
+        r: 36 + Math.random() * 60,
+        rot: Math.random() * Math.PI * 2,
+      });
+    }
+    this.poopSplat = { timer: 100, maxTimer: 100, blobs };
   }
 
   updateFx() {
@@ -242,6 +291,20 @@ class BodegaGame {
     this.popups = this.popups.filter(p => p.life > 0);
     this.bagPunch *= 0.82;
     this.bagShake *= 0.78;
+
+    if (this.catInvasion) {
+      this.catInvasion.timer--;
+      if (this.catInvasion.timer <= 0) { this.catInvasion = null; this.basketLocked = false; }
+    }
+    if (this.poopSplat) {
+      this.poopSplat.timer--;
+      if (this.poopSplat.timer <= 0) this.poopSplat = null;
+    }
+    // Basket topples toward a fixed lean while locked, rights itself
+    // when control comes back -- same easing pattern as bagPunch/
+    // bagShake above.
+    const targetTilt = this.basketLocked ? 0.5 : 0;
+    this.basketTilt += (targetTilt - this.basketTilt) * 0.15;
   }
 
   // ============================================
@@ -353,42 +416,7 @@ class BodegaGame {
       }
 
       case 'Bodega Cat': {
-        // Body
-        ctx.fillStyle = '#e67e22';
-        ctx.beginPath();
-        ctx.ellipse(cx, y + h - 14, 24, 12, 0, 0, Math.PI * 2); ctx.fill();
-        // Head
-        ctx.beginPath(); ctx.arc(cx, y + 12, 12, 0, Math.PI * 2); ctx.fill();
-        // Ears
-        ctx.fillStyle = '#d35400';
-        ctx.beginPath();
-        ctx.moveTo(cx - 12, y + 6); ctx.lineTo(cx - 18, y - 5); ctx.lineTo(cx - 4, y + 3);
-        ctx.closePath(); ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(cx + 12, y + 6); ctx.lineTo(cx + 18, y - 5); ctx.lineTo(cx + 4, y + 3);
-        ctx.closePath(); ctx.fill();
-        // Inner ears
-        ctx.fillStyle = '#f0a070';
-        ctx.beginPath();
-        ctx.moveTo(cx - 12, y + 4); ctx.lineTo(cx - 16, y - 2); ctx.lineTo(cx - 6, y + 2);
-        ctx.closePath(); ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(cx + 12, y + 4); ctx.lineTo(cx + 16, y - 2); ctx.lineTo(cx + 6, y + 2);
-        ctx.closePath(); ctx.fill();
-        // Eyes (yellow + slit pupil)
-        ctx.fillStyle = '#f9ca24';
-        ctx.beginPath(); ctx.ellipse(cx - 4, y + 12, 3, 3.5, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(cx + 4, y + 12, 3, 3.5, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#1a1a1a';
-        ctx.beginPath(); ctx.ellipse(cx - 4, y + 12, 1.2, 3, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(cx + 4, y + 12, 1.2, 3, 0, 0, Math.PI * 2); ctx.fill();
-        // Nose
-        ctx.fillStyle = '#e84393';
-        ctx.beginPath(); ctx.arc(cx, y + 16, 1.5, 0, Math.PI * 2); ctx.fill();
-        // Tabby stripes on body
-        ctx.fillStyle = '#d35400';
-        ctx.fillRect(cx - 22, y + h - 24, 3, 12);
-        ctx.fillRect(cx + 19, y + h - 24, 3, 12);
+        this.drawCatShape(ctx, cx, y, h);
         break;
       }
 
@@ -444,6 +472,134 @@ class BodegaGame {
     ctx.restore();
   }
 
+  // Shared with the giant invasion cat (drawCatInvasion()) via a scale
+  // transform on the caller's ctx -- same shape at any size instead of
+  // two versions of the same drawing to keep in sync.
+  drawCatShape(ctx, cx, y, h) {
+    // Body
+    ctx.fillStyle = '#e67e22';
+    ctx.beginPath();
+    ctx.ellipse(cx, y + h - 14, 24, 12, 0, 0, Math.PI * 2); ctx.fill();
+    // Head
+    ctx.beginPath(); ctx.arc(cx, y + 12, 12, 0, Math.PI * 2); ctx.fill();
+    // Ears
+    ctx.fillStyle = '#d35400';
+    ctx.beginPath();
+    ctx.moveTo(cx - 12, y + 6); ctx.lineTo(cx - 18, y - 5); ctx.lineTo(cx - 4, y + 3);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx + 12, y + 6); ctx.lineTo(cx + 18, y - 5); ctx.lineTo(cx + 4, y + 3);
+    ctx.closePath(); ctx.fill();
+    // Inner ears
+    ctx.fillStyle = '#f0a070';
+    ctx.beginPath();
+    ctx.moveTo(cx - 12, y + 4); ctx.lineTo(cx - 16, y - 2); ctx.lineTo(cx - 6, y + 2);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(cx + 12, y + 4); ctx.lineTo(cx + 16, y - 2); ctx.lineTo(cx + 6, y + 2);
+    ctx.closePath(); ctx.fill();
+    // Eyes (yellow + slit pupil)
+    ctx.fillStyle = '#f9ca24';
+    ctx.beginPath(); ctx.ellipse(cx - 4, y + 12, 3, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 4, y + 12, 3, 3.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath(); ctx.ellipse(cx - 4, y + 12, 1.2, 3, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 4, y + 12, 1.2, 3, 0, 0, Math.PI * 2); ctx.fill();
+    // Nose
+    ctx.fillStyle = '#e84393';
+    ctx.beginPath(); ctx.arc(cx, y + 16, 1.5, 0, Math.PI * 2); ctx.fill();
+    // Tabby stripes on body
+    ctx.fillStyle = '#d35400';
+    ctx.fillRect(cx - 22, y + h - 24, 3, 12);
+    ctx.fillRect(cx + 19, y + h - 24, 3, 12);
+  }
+
+  // The cat leaps up from below, holds huge and dominant in view for the
+  // middle stretch (with a claw-swipe accent near where it landed --
+  // that's the "swipes at your basket" beat), then leaps back off.
+  // basketLocked (set in triggerCatInvasion) is what actually removes
+  // control; this is purely the visual.
+  drawCatInvasion(ctx) {
+    const inv = this.catInvasion;
+    const { width, height } = this.canvas;
+    const t = 1 - inv.timer / inv.maxTimer; // 0 -> 1 across the whole event
+    const offY = height + 160;
+    const midY = height * 0.4;
+    let catY, scale;
+    if (t < 0.18) {
+      const p = t / 0.18;
+      const ease = 1 - Math.pow(1 - p, 3);
+      catY = offY + (midY - offY) * ease;
+      scale = 0.7 + 2.6 * ease;
+    } else if (t < 0.82) {
+      catY = midY + Math.sin((t - 0.18) * 20) * 5;
+      scale = 3.3;
+    } else {
+      const p = (t - 0.82) / 0.18;
+      const ease = Math.pow(p, 3);
+      catY = midY + (offY - midY) * ease;
+      scale = 3.3 - 2.6 * ease;
+    }
+    const vigAlpha = t < 0.18 ? (t / 0.18) * 0.4 : t > 0.82 ? ((1 - t) / 0.18) * 0.4 : 0.4;
+    const catX = Math.min(width - 50, Math.max(50, inv.x));
+
+    ctx.save();
+    ctx.fillStyle = `rgba(10,6,4,${vigAlpha})`;
+    ctx.fillRect(0, 0, width, height);
+    ctx.translate(catX, catY);
+    ctx.scale(scale, scale);
+    ctx.translate(-catX, -catY);
+    this.drawCatShape(ctx, catX, catY - 20, 42);
+    ctx.restore();
+
+    // Claw-swipe accent, timed to roughly when the basket actually gets
+    // knocked (right after landing).
+    if (t > 0.16 && t < 0.34) {
+      const swipeAlpha = 1 - Math.abs(t - 0.25) / 0.09;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, swipeAlpha) * 0.8;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 3;
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.moveTo(catX - 40 + i * 14, height - 130);
+        ctx.lineTo(catX + 40 + i * 14, height - 70);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  // Blooms in fast ("splat!"), holds, dissipates -- one set of blob
+  // positions generated once in triggerPoopSplat() so it reads as a
+  // single impact rather than randomized noise every frame.
+  drawPoopSplat(ctx) {
+    const s = this.poopSplat;
+    const p = 1 - s.timer / s.maxTimer;
+    let alpha;
+    if (p < 0.08) alpha = p / 0.08;
+    else if (p < 0.55) alpha = 1;
+    else alpha = Math.max(0, 1 - (p - 0.55) / 0.45);
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    s.blobs.forEach(b => {
+      ctx.fillStyle = '#2f2019';
+      for (let i = 0; i < 4; i++) {
+        const a = b.rot + i * 1.6;
+        const dx = Math.cos(a) * b.r * 1.15, dy = Math.sin(a) * b.r * 0.85;
+        ctx.beginPath(); ctx.arc(b.x + dx, b.y + dy, 6 + (i % 2) * 6, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = '#4a3327';
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(b.rot);
+      ctx.beginPath(); ctx.ellipse(0, 0, b.r, b.r * 0.72, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    });
+    ctx.restore();
+  }
+
   render() {
     const { width, height } = this.canvas;
     const ctx = this.ctx;
@@ -494,6 +650,9 @@ class BodegaGame {
     const punchScale = 1 + 0.16 * this.bagPunch;
     ctx.translate(cx + shakeOffset, basketY);
     ctx.scale(punchScale, punchScale);
+    // Topples over while the cat's got the basket -- basketTilt eases
+    // toward its target in updateFx(), same pattern as bagShake/bagPunch.
+    ctx.rotate(this.basketTilt);
     ctx.translate(-cx, -basketY);
 
     ctx.fillStyle = '#c8935a';
@@ -554,6 +713,12 @@ class BodegaGame {
       ctx.fillText(p.text, p.x, p.y);
       ctx.globalAlpha = 1;
     });
+
+    // Both chaos overlays draw last, on top of everything -- the poop
+    // splat is supposed to actually block your view of falling items,
+    // and the cat is supposed to dominate the screen while it's here.
+    if (this.poopSplat) this.drawPoopSplat(ctx);
+    if (this.catInvasion) this.drawCatInvasion(ctx);
   }
 
   endCatching() {
