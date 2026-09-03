@@ -369,102 +369,7 @@
         </div>
       </div>
 
-      <!-- Features / Instructions overlay (shown after wisemen, before turn 1) -->
-      <div id="cannon-features" class="cannon-overlay hidden">
-        <div class="cannon-splash cannon-instructions-panel">
-          <h2 class="cannon-splash-title">How To Fly</h2>
-
-          <div class="cannon-instr-sections">
-
-            <div class="cannon-instr-section">
-              <div class="cannon-instr-heading">The Goal</div>
-              <p class="cannon-instr-body">Aim the cannon. Launch yourself across NYC — over an actual river — to unlock a borough's special item. Come down short and you splash: no unlock, though you keep whatever Borough Bucks you earned. There are four boroughs to collect. Keep flying as long as you want — exit to the trail whenever you're ready.</p>
-            </div>
-
-            <div class="cannon-instr-section">
-              <div class="cannon-instr-heading">Aiming</div>
-              <p class="cannon-instr-body"><strong>Pick a borough</strong> to target first. Then a needle sweeps up and down through the launch angle — <strong>tap once</strong> to lock it in. A power meter swings next — <strong>tap again</strong> near the top to fire at full power.</p>
-            </div>
-
-            <div class="cannon-instr-section">
-              <div class="cannon-instr-heading">Upgrades (buy in the shop after each turn)</div>
-              <ul class="cannon-instr-list">
-                <li><span class="cannon-instr-key">Cannon Strength</span> — how far you launch</li>
-                <li><span class="cannon-instr-key">Cannon Accuracy</span> — slower angle sweep, easier to time</li>
-                <li><span class="cannon-instr-key">Flight Suit</span> — tap to flap; better suit = more flaps</li>
-                <li><span class="cannon-instr-key">Rocket Power</span> — one big mid-air boost</li>
-                <li><span class="cannon-instr-key">Special Bonus</span> — coin magnet, bouncy legs, or rat whisperer</li>
-              </ul>
-            </div>
-
-            <div class="cannon-instr-section">
-              <div class="cannon-instr-heading">In The Air (good)</div>
-              <ul class="cannon-instr-list">
-                <li>Coins — earn Borough Bucks</li>
-                <li>Rings — speed boost</li>
-                <li>Light clouds — bounce you up</li>
-                <li>Rainbow clouds — Happy Pride! (+bonus bucks)</li>
-                <li>Pretzels — restore flaps</li>
-                <li>Pigeon flock — free speed boost</li>
-                <li>Updrafts — strong lift</li>
-              </ul>
-            </div>
-
-            <div class="cannon-instr-section">
-              <div class="cannon-instr-heading">In The Air (bad)</div>
-              <ul class="cannon-instr-list">
-                <li>Dark clouds — slow you way down</li>
-                <li>Pigeons (solo) — damage and knockback</li>
-                <li>Helicopters — heavy damage</li>
-              </ul>
-            </div>
-
-            <div class="cannon-instr-section">
-              <div class="cannon-instr-heading">On The Ground</div>
-              <ul class="cannon-instr-list">
-                <li>Hit the ground fast → bounce → slide → stop</li>
-                <li>Dumpster — dead stop</li>
-                <li>Rat dumpster — enter rat mode (run along ground)</li>
-                <li>Fire hydrant — launches you back up</li>
-                <li>Subway grate — speed boost and liftoff</li>
-                <li>Hot dog cart — bounce</li>
-                <li>Manhole — trap, slows you</li>
-              </ul>
-            </div>
-
-            <div class="cannon-instr-section">
-              <div class="cannon-instr-heading">Borough Hazards (unique to each area)</div>
-              <ul class="cannon-instr-list">
-                <li><span class="cannon-instr-key" style="color:#e67e22">Hoboken</span> — pizza men launching discs skyward; drunks vomiting upward</li>
-                <li><span class="cannon-instr-key" style="color:#3498db">Brooklyn Heights</span> — new parents launching babies out of expensive strollers</li>
-                <li><span class="cannon-instr-key" style="color:#9b59b6">Bushwick</span> — vomiters</li>
-                <li><span class="cannon-instr-key" style="color:#2ecc71">Astoria</span> — Greek grandfathers smashing plates into the air (Opa!)</li>
-              </ul>
-            </div>
-
-            <div class="cannon-instr-section">
-              <div class="cannon-instr-heading">Borough Unlocks (land to collect)</div>
-              <ul class="cannon-instr-list">
-                <li><span class="cannon-instr-key" style="color:#e67e22">Hoboken</span> (350 blocks, across the Hudson) — Giant Cannoli + MAGA Girlfriend</li>
-                <li><span class="cannon-instr-key" style="color:#3498db">Brooklyn Heights</span> (650 blocks, across the East River) — Park Slope Food Co-op + Legal Summons</li>
-                <li><span class="cannon-instr-key" style="color:#9b59b6">Bushwick</span> (1300 blocks, across the East River) — Septum Piercing + ENM Marriage Reshuffle Goodybag</li>
-                <li><span class="cannon-instr-key" style="color:#2ecc71">Astoria</span> (1900 blocks, across the East River) — Reasonable Rent + Boring Personality</li>
-              </ul>
-            </div>
-
-          </div>
-
-          <!-- Dynamic section: upgrade bars + stats + collected items -->
-          <div id="cannon-features-dynamic"></div>
-
-          <div class="cannon-features-btns">
-            <button id="cannon-features-map-btn" class="menu-option">View Map</button>
-            <button id="cannon-features-launch-btn" class="menu-option">Enter the cannon.</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Map overlay (sits on top of features) -->
+      <!-- Map overlay -->
       <div id="cannon-map" class="cannon-overlay cannon-map-overlay hidden">
         <div class="cannon-splash">
           <h2 class="cannon-splash-title">Borough Map</h2>
@@ -478,6 +383,7 @@
         <div class="cannon-splash cannon-shop-panel">
           <h2 class="cannon-splash-title">Pick A Borough</h2>
           <div id="cannon-location-list" class="cannon-location-list"></div>
+          <button id="cannon-location-map-btn" class="menu-option" style="margin-top: 16px;">View Map</button>
         </div>
       </div>
 
@@ -826,7 +732,7 @@
   <script src="trail-data.js?v=5"></script>
   <script src="trail.js?v=21"></script>
   <script src="bodega.js?v=8"></script>
-  <script src="cannon.js?v=16"></script>
+  <script src="cannon.js?v=17"></script>
   <script src="heist.js?v=31"></script>
   <script src="jail-data.js?v=1"></script>
   <script src="jail-minigames.js?v=1"></script>

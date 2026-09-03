@@ -203,55 +203,8 @@ class CannonGame {
   }
 
   afterWisemen() {
-    this.showOverlay('cannon-features');
-    this.renderFeaturesScreen();
-  }
-
-  // ============================================
-  // FEATURES SCREEN
-  // ============================================
-
-  renderFeaturesScreen() {
-    const el = document.getElementById('cannon-features-dynamic');
-    if (!el) return;
-    const cats = [
-      { key: 'strength', label: 'Cannon Strength' },
-      { key: 'accuracy', label: 'Cannon Accuracy' },
-      { key: 'suit',     label: 'Flight Suit'     },
-      { key: 'rocket',   label: 'Rocket Power'    },
-      { key: 'bonus',    label: 'Special Bonus'   },
-    ];
-    const maxLvl = { strength: 3, accuracy: 3, suit: 3, rocket: 2, bonus: 3 };
-    let html = '<div class="cannon-feat-bars">';
-    cats.forEach(c => {
-      const pct  = (this.ts[c.key] / maxLvl[c.key]) * 100;
-      const tier = CANNON_UPGRADES[c.key][this.ts[c.key]];
-      html += `<div class="cannon-feat-row">
-        <div class="cannon-feat-label">${c.label}</div>
-        <div class="cannon-feat-bar-wrap"><div class="cannon-feat-bar" style="width:${pct}%"></div></div>
-        <div class="cannon-feat-tier">${tier.label}</div>
-      </div>`;
-    });
-    html += '</div>';
-    if (this.ts.unlocks.length > 0) {
-      html += '<div class="cannon-feat-unlocks"><div class="cannon-feat-unlocks-title">Collected</div>';
-      this.ts.unlocks.forEach(id => {
-        const b = TARGET_BOROUGHS.find(b => b.id === id);
-        if (b) html += `<div class="cannon-feat-unlock-entry" style="border-color:${b.color}"><span style="color:${b.color}">${b.name}</span> — ${b.unlock.title}</div>`;
-      });
-      html += '</div>';
-    }
-    html += `<div class="cannon-feat-stats">
-      <span class="cannon-feat-stat">Bucks: <span class="cannon-feat-val">$${this.ts.boroughBucks}</span></span>
-      <span class="cannon-feat-stat">Distance: <span class="cannon-feat-val">${this.ts.totalDistance} blocks</span></span>
-      <span class="cannon-feat-stat">Turn: <span class="cannon-feat-val">${this.ts.currentTurn}</span></span>
-    </div>`;
-    el.innerHTML = html;
-    document.getElementById('cannon-features-map-btn').onclick    = () => this.showMapOverlay();
-    document.getElementById('cannon-features-launch-btn').onclick = () => {
-      if (this.ts.currentTurn === 0) this.ts.currentTurn = 1;
-      this.showLocationSelect();
-    };
+    if (this.ts.currentTurn === 0) this.ts.currentTurn = 1;
+    this.showLocationSelect();
   }
 
   // ============================================
@@ -325,6 +278,8 @@ class CannonGame {
   showLocationSelect() {
     this.hideOverlays();
     this.showOverlay('cannon-location');
+    const mapBtn = document.getElementById('cannon-location-map-btn');
+    if (mapBtn) mapBtn.onclick = () => this.showMapOverlay();
     const list = document.getElementById('cannon-location-list');
     list.innerHTML = '';
     TARGET_BOROUGHS.forEach(b => {
