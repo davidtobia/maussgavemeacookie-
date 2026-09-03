@@ -475,6 +475,7 @@ class HeistGame {
           this.mazeUseTilt = false;
           this.mazeTiltX = 0; this.mazeTiltY = 0;
           tiltBtn.textContent = 'Try tilt — 10x cash, unlimited lives';
+          tiltBtn.classList.remove('active');
           document.getElementById('heist-maze-pads').classList.remove('tilt-active');
           return;
         }
@@ -497,6 +498,7 @@ class HeistGame {
             if (this.phase !== 'maze' || !this.mazeUseTilt) return;
             if (this._mazeGotOrientEvent) {
               tiltBtn.textContent = 'Using tilt (tap for arrows)';
+              tiltBtn.classList.add('active');
               document.getElementById('heist-maze-pads').classList.add('tilt-active');
             } else {
               this.mazeUseTilt = false;
@@ -2385,7 +2387,14 @@ class HeistGame {
       `$${this.cash} in the bag · Heat ${Math.round(g.heat)}% · ${where}`;
     this.updateGetawayButtons();
 
-    if (g.elapsed >= g.durationFrames) {
+    // Heat maxing out ends the run early -- reckless driving (crashes,
+    // getting boxed in by cops) can genuinely get you caught before the
+    // clock runs out, same as it always could in theory, just never
+    // actually wired to anything. Good play (shooting cops/the chopper,
+    // nitro) buys time back the same way it always did; it just used to
+    // only matter for which ending line you got, not whether the run
+    // itself kept going.
+    if (g.elapsed >= g.durationFrames || g.heat >= 100) {
       this.crashes = g.crashes;
       this.bestFlips = g.bestFlips;
       this.finalHeat = g.heat;
@@ -3083,8 +3092,17 @@ class HeistGame {
     ctx.fillStyle = '#191919';
     ctx.fillRect(pxx, py, pw, 10);
     const heatFrac = Math.min(1, g.heat / 100);
+    // Heat maxing out now actually ends the run early (busted), so the bar
+    // needs to sell "you are about to lose this" as it climbs, not just
+    // shift color once. A pulsing outline once it's genuinely dangerous.
     ctx.fillStyle = heatFrac < 0.45 ? '#7ec89a' : heatFrac < 0.75 ? '#d4a574' : '#e05a4a';
     ctx.fillRect(pxx, py, pw * heatFrac, 10);
+    if (heatFrac >= 0.85) {
+      const pulse = 0.5 + Math.sin(this._frame * 0.3) * 0.5;
+      ctx.strokeStyle = `rgba(255,90,60,${0.5 + pulse * 0.5})`;
+      ctx.lineWidth = 2 + pulse * 2;
+      ctx.strokeRect(pxx - 4, py - 4, pw + 8, 18);
+    }
     ctx.fillStyle = '#c8b89c';
     ctx.font = '10px VT323, monospace'; ctx.textAlign = 'center';
     ctx.fillText('HEAT', pxx + pw / 2, py + 9);

@@ -1872,17 +1872,36 @@ button.menu-option.cannon-shop-exit-btn:hover {
   display: none;
 }
 
+/* Deliberately loud — tilt is the fun way to play this, and the muted
+   version of this button was easy to miss/ignore entirely. Pulses to
+   actually get looked at; calms down to .active once someone's using it. */
 .heist-tilt-btn {
   align-self: center;
   margin-bottom: 20px;
   font-family: 'VT323', monospace;
-  font-size: 14px;
-  color: #8a7a5a;
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid #4a3a28;
-  padding: 6px 10px;
+  font-size: 15px;
+  font-weight: bold;
+  color: #1a0a24;
+  background: linear-gradient(135deg, #ff6ec7, #7b5cff);
+  border: 2px solid #ffe3f7;
+  padding: 8px 14px;
+  border-radius: 8px;
   cursor: pointer;
   pointer-events: all;
+  animation: heist-tilt-invite-pulse 1.3s ease-in-out infinite;
+}
+
+@keyframes heist-tilt-invite-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 6px rgba(255, 110, 199, 0.5); }
+  50%      { transform: scale(1.05); box-shadow: 0 0 20px rgba(123, 92, 255, 0.85); }
+}
+
+.heist-tilt-btn.active {
+  animation: none;
+  background: rgba(126, 200, 154, 0.9);
+  border-color: #2ecc71;
+  color: #0a1f10;
+  box-shadow: none;
 }
 
 .heist-floor-controlling {
