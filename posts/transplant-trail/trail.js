@@ -1199,11 +1199,11 @@ class TrailGame {
       if (result) {
         this.gameState.zoomiesScore = Math.max(this.gameState.zoomiesScore || 0, result.score || 0);
         // "yeah sure you can lose in this game and if you do maybe you
-        // lose a few days to have to recover" -- a bad trip (rush never
-        // climbed out of the low tier) costs real trail time, same
-        // addHours pattern the random-event pool already uses. A good
-        // run costs nothing.
-        if ((result.peakRush || 0) < 0.33) {
+        // lose a few days to have to recover" -- a rough trip (missed
+        // more jumps than you landed cleanly) costs real trail time,
+        // same addHours pattern the random-event pool already uses. A
+        // clean run costs nothing.
+        if ((result.misses || 0) >= 4) {
           this.state.hoursElapsed += 40;
           this.state.currentDate.setHours(this.state.currentDate.getHours() + 40);
         }
