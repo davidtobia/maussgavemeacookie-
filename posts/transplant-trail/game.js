@@ -74,6 +74,7 @@ class TransplantTrail {
       bodegaScore: 0,
       boroughBucks: 0,
       cannonProgress: null,
+      zoomiesScore: 0,
       bodegaDone: false,
       zoomiesOffered: false,
     };

@@ -1192,13 +1192,21 @@ class TrailGame {
     this.stop();
     game.showScreen('zoomies-game');
     zoomiesGame = new ZoomiesGame(this.gameState, (result) => {
-      // Keeping this light and non-punishing on purpose -- the real
-      // "comedown" consequence is future narrative work the user is
-      // writing themselves, not something to invent here. A small
-      // reward for now so the detour reads as a genuine treat, not a
-      // trap.
+      // Explicit instruction: "should not feed into money or health, it
+      // is just for fun and SCORE. everything is about score." No
+      // checkingAccount/aura/balances touch here, ever -- score is its
+      // own thing, tracked purely as a running high score.
       if (result) {
-        this.gameState.aura = (this.gameState.aura || 0) + Math.min(20, Math.floor(result.coins / 15));
+        this.gameState.zoomiesScore = Math.max(this.gameState.zoomiesScore || 0, result.score || 0);
+        // "yeah sure you can lose in this game and if you do maybe you
+        // lose a few days to have to recover" -- a bad trip (rush never
+        // climbed out of the low tier) costs real trail time, same
+        // addHours pattern the random-event pool already uses. A good
+        // run costs nothing.
+        if ((result.peakRush || 0) < 0.33) {
+          this.state.hoursElapsed += 40;
+          this.state.currentDate.setHours(this.state.currentDate.getHours() + 40);
+        }
       }
       game.showScreen('trail-screen');
       this.state.paused = false;
