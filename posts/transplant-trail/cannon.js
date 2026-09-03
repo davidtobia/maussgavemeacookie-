@@ -145,11 +145,22 @@ class CannonGame {
     this.canvas = document.getElementById('cannon-canvas');
     this.ctx    = this.canvas.getContext('2d');
 
-    this.ts = {
-      currentTurn: 0, boroughBucks: 0, totalDistance: 0,
-      targetBorough: null, unlocks: [], highScores: {},
-      strength: 0, accuracy: 0, suit: 0, rocket: 0, bonus: 0,
-    };
+    // Lives on gameState (not just this instance) so a re-entry into
+    // the cannon game -- another CannonGame constructed for the same
+    // run, whether that's a real replay path or just re-testing --
+    // doesn't silently wipe unlocked boroughs/high scores/upgrades.
+    // Bug report: "I completed hoboken and then later it didn't track
+    // my progress" -- this was the actual cause, this.ts was a fresh
+    // plain object every single construction, never read from or
+    // written back to gameState at all.
+    if (!gameState.cannonProgress) {
+      gameState.cannonProgress = {
+        currentTurn: 0, boroughBucks: 0, totalDistance: 0,
+        targetBorough: null, unlocks: [], highScores: {},
+        strength: 0, accuracy: 0, suit: 0, rocket: 0, bonus: 0,
+      };
+    }
+    this.ts = gameState.cannonProgress;
 
     this.aim = { active: false, angle: 15, dir: 1, phase: 'angle', power: 0, powerDir: 1 };
     this.flight      = null;
@@ -533,7 +544,7 @@ class CannonGame {
       // per flight regardless of altitude. Both fire exactly once.
       moonSpawned: false, moonBanner: 0, pilotSpawned: false, pilotBannerTimer: 0,
       ufoAbducted: false, ufoAbductTimer: 0, ufoDropped: false, ufoDeath: false, bloodParticles: [],
-      possessedTimer: 0, possessedSpinAngle: 0,
+      possessedTimer: 0, possessedSpinAngle: 0, ufoTargetWorldY: null,
       finishCrossed: false, finishEventTimer: 0,
       // Hit feedback for taking damage from a hazard mid-air (pigeons,
       // helicopters, the various thrown-object arcs, running a cab on the
@@ -677,9 +688,17 @@ class CannonGame {
   updateFlight() {
     const f = this.flight, H = this.canvas.height, W = this.canvas.width;
 
-    // Camera lerp: follow player upward, never below ground view
+    // Camera lerp: follow player upward, never below ground view.
+    // Rate scales with how fast the player is actually falling -- a
+    // fixed slow lerp couldn't keep up with a hard drop from a UFO
+    // encounter high up, so the camera was still stuck near the
+    // abduction altitude at the moment of ground impact and the ground
+    // itself rendered far off the bottom of the screen ("can't see the
+    // ground when you hit" -- confirmed via a direct camera/ground-
+    // position check before this fix, not just reasoned about).
     const targetCamY = Math.max(0, f.worldY - H * 0.38);
-    f.cameraY += (targetCamY - f.cameraY) * 0.07;
+    const camRate = f.ufoDropped || Math.abs(f.vy) > 14 ? 0.22 : 0.07;
+    f.cameraY += (targetCamY - f.cameraY) * camRate;
 
     // River trigger
     if (f.river && !f.river.crossed) {
@@ -754,12 +773,19 @@ class CannonGame {
       return;
     }
     if (f.ufoAbducted) {
-      if (f.ufoAbductTimer > 0) {
-        f.ufoAbductTimer--;
-        f.worldY += 16;
+      // Pull up to the UFO's own altitude, not some fixed distance past
+      // it -- direct feedback: "it should only suck you up to the UFO
+      // then you get shot down." ufoAbductTimer is now just a safety
+      // cap in case the target is ever missing, not the real driver.
+      const target = f.ufoTargetWorldY != null ? f.ufoTargetWorldY : f.worldY + 220;
+      const remaining = target - f.worldY;
+      f.ufoAbductTimer--;
+      if (remaining > 4 && f.ufoAbductTimer > 0) {
+        f.worldY += Math.min(22, Math.max(4, remaining * 0.3));
         f.vx = 0; f.vy = 0;
         return;
       }
+      f.worldY = target;
       f.ufoAbducted = false;
       f.ufoDropped = true;
       f.vy = -34;
@@ -862,8 +888,11 @@ class CannonGame {
     // takes real effort/luck, not routine climbing.
     if (!f.pilotSpawned && f.worldY > 1400) {
       f.pilotSpawned = true;
-      f.pilotBannerTimer = 220;
-      f.entities.push({ type: 'pilot_flyby', x: this.canvas.width + 80, worldY: f.worldY + (Math.random() * 80 - 20), noCollide: true, collected: false });
+      f.pilotBannerTimer = 340;
+      f.entities.push({
+        type: 'pilot_flyby', x: this.canvas.width + 80, worldY: f.worldY + (Math.random() * 80 - 20),
+        noCollide: true, collected: false, phase: 'approach', phaseTimer: 0, climbVy: 0,
+      });
     }
     if (f.pilotBannerTimer > 0) f.pilotBannerTimer--;
 
@@ -886,9 +915,34 @@ class CannonGame {
     this.updateLaunchersAndArcs();
     f.entities = f.entities.filter(e => {
       e.x -= dx * 0.85 + 1.5;
-      // The banner plane has its own engine, not just parallax drift — it
-      // actually flies across the sky under its own power.
-      if (e.type === 'pilot_flyby') e.x -= 3.5;
+      // The banner plane is a real three-beat performance, not a fast
+      // one-way pass: it closes in and flies alongside for a bit, the
+      // pilot tips his hat, then it climbs away hard and reverses
+      // direction — matches "flies alongside... tips his hat... zips up
+      // into the sky and goes the other way."
+      if (e.type === 'pilot_flyby') {
+        if (e.phase === 'approach') {
+          e.x -= 3.5;
+          if (e.x < 210) { e.phase = 'alongside'; e.phaseTimer = 110; e.alongsideX = e.x; }
+        } else if (e.phase === 'alongside') {
+          // The base parallax subtraction above already moved e.x this
+          // frame same as every other entity -- that's what scrolls a
+          // fixed coin past you at normal speed. To actually hold a
+          // steady screen position ("flies alongside") the plane has to
+          // counter that pull explicitly, not just skip adding extra
+          // motion on top of it.
+          e.x = e.alongsideX + Math.sin(this._frame * 0.05) * 4;
+          e.phaseTimer--;
+          e.hatTipping = e.phaseTimer < 34;
+          if (e.phaseTimer <= 0) { e.phase = 'climb'; e.phaseTimer = 60; }
+        } else if (e.phase === 'climb') {
+          e.phaseTimer--;
+          e.climbVy = (e.climbVy || 0) + 1.5;
+          e.worldY = (e.worldY || 1400) + e.climbVy;
+          e.x += 7; // reverses course -- flies off the other way
+          if (e.phaseTimer <= 0) e.doneFlying = true;
+        }
+      }
       if (e.type === 'heli_rocket') e.x -= 7;
       // UFOs actually move around the sky under their own power on top
       // of normal parallax drift — a wandering flight path, not scenery
@@ -898,6 +952,7 @@ class CannonGame {
         e.x += Math.sin(this._frame * 0.018 + e.wanderPhaseX) * 1.7;
       }
       if (e.isArc && e.arcWorldY !== undefined && e.arcWorldY < -10) return false;
+      if (e.type === 'pilot_flyby' && e.doneFlying) return false;
       return e.x > -120;
     });
     this.checkCollisions();
@@ -1060,6 +1115,7 @@ class CannonGame {
         if (Math.abs(px - e.x) < 30 && py >= esyU - 6 && py <= beamBottom) {
           f.possessedTimer = 46;
           f.possessedSpinAngle = 0;
+          f.ufoTargetWorldY = e.worldY;
         }
         return;
       }
@@ -1721,8 +1777,13 @@ class CannonGame {
         const W = this.canvas.width;
         const L = Math.max(260, W * 0.7); // fuselage length
         const s = L / 300; // scale factor everything else rides on
-        const bob = Math.sin(f * 0.03 + ex * 0.01) * 8;
-        const bank = Math.sin(f * 0.03 + ex * 0.01 + 0.6) * 0.05;
+        const bob = e.phase === 'climb' ? 0 : Math.sin(f * 0.03 + ex * 0.01) * 8;
+        // Gentle wobble while cruising alongside; a hard climbing bank
+        // once it peels off -- "dramatically does a flight maneuver."
+        const climbProgress = e.phase === 'climb' ? 1 - Math.max(0, e.phaseTimer) / 60 : 0;
+        const bank = e.phase === 'climb'
+          ? -0.55 - climbProgress * 0.5
+          : Math.sin(f * 0.03 + ex * 0.01 + 0.6) * 0.05;
         const sy2 = sy + bob;
         ctx.save();
         ctx.translate(ex, sy2); ctx.rotate(bank); ctx.translate(-ex, -sy2);
@@ -1773,6 +1834,18 @@ class CannonGame {
         ctx.fillStyle = '#3a2a1a';
         ctx.beginPath(); ctx.arc(ex + 155 * s, sy2 + 3 * s, 4 * s, 0, Math.PI); ctx.fill();
 
+        // The hat tip -- flying alongside for a beat, then a friendly
+        // greeting before the big exit. A small hand rises to the
+        // turban's brim and holds for the gesture's duration.
+        if (e.hatTipping) {
+          const tipT = 1 - Math.max(0, e.phaseTimer) / 34;
+          const rise = Math.min(1, tipT * 3) * (1 - Math.max(0, tipT - 0.7) / 0.3);
+          ctx.fillStyle = '#c68a5a';
+          ctx.beginPath();
+          ctx.arc(ex + 148 * s, sy2 - 8 * s - rise * 6 * s, 3.2 * s, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
         // Tail fin.
         ctx.fillStyle = '#dfe6ea';
         ctx.beginPath();
@@ -1794,6 +1867,17 @@ class CannonGame {
         for (let i = 0; i < 20; i++) ctx.fillRect(ex - 130 * s + i * 13 * s, sy2 - 8 * s, 6 * s, 4 * s);
 
         ctx.restore();
+
+        // Vapor streak trailing the climb-away, outside the bank/translate
+        // transform so it stays screen-straight instead of banking with
+        // the plane.
+        if (e.phase === 'climb') {
+          ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 4 * s;
+          ctx.beginPath();
+          ctx.moveTo(ex - 150 * s, sy2 + 30 * s);
+          ctx.lineTo(ex - 260 * s, sy2 + 90 * s);
+          ctx.stroke();
+        }
         break;
       }
     }

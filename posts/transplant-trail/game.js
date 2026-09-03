@@ -73,6 +73,7 @@ class TransplantTrail {
       inventory: {},
       bodegaScore: 0,
       boroughBucks: 0,
+      cannonProgress: null,
       bodegaDone: false,
       zoomiesOffered: false,
     };
@@ -514,6 +515,7 @@ class TransplantTrail {
       inventory: { ...this.state.inventory },
       bodegaScore: this.state.bodegaScore || 0,
       boroughBucks: this.state.boroughBucks || 0,
+      cannonProgress: this.state.cannonProgress || null,
       trailState: trailStateSnapshot,
     };
     saves.latestChapter = Math.max(saves.latestChapter || 1, chapterNum);
@@ -556,6 +558,7 @@ class TransplantTrail {
     this.state.inventory          = { ...save.inventory };
     this.state.bodegaScore        = save.bodegaScore || 0;
     this.state.boroughBucks       = save.boroughBucks || 0;
+    this.state.cannonProgress     = save.cannonProgress || null;
 
     this.showScreen('trail-screen');
     trailGame = new TrailGame(this.state);
