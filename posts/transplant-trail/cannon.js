@@ -37,7 +37,7 @@ const CANNON_UPGRADES = {
 
 const TARGET_BOROUGHS = [
   {
-    id: 'hoboken', name: 'Hoboken, NJ', angle: 290, minBlocks: 650, color: '#e67e22',
+    id: 'hoboken', name: 'Hoboken, NJ', angle: 290, minBlocks: 800, color: '#e67e22',
     river: { name: 'Hudson River', atBlock: 180, width: 340, bridge: 'sully' },
     unlock: {
       title: 'Giant Cannoli + MAGA Girlfriend',
@@ -45,7 +45,7 @@ const TARGET_BOROUGHS = [
     },
   },
   {
-    id: 'brooklyn-heights', name: 'Brooklyn Heights', angle: 145, minBlocks: 1150, color: '#3498db',
+    id: 'brooklyn-heights', name: 'Brooklyn Heights', angle: 145, minBlocks: 1450, color: '#3498db',
     river: { name: 'East River', atBlock: 480, width: 345, bridge: 'brooklyn_bridge' },
     unlock: {
       title: 'Park Slope Food Co-op + Legal Summons',
@@ -53,7 +53,7 @@ const TARGET_BOROUGHS = [
     },
   },
   {
-    id: 'bushwick', name: 'Bushwick', angle: 110, minBlocks: 2450, color: '#9b59b6',
+    id: 'bushwick', name: 'Bushwick', angle: 110, minBlocks: 3200, color: '#9b59b6',
     river: { name: 'East River', atBlock: 480, width: 345, bridge: 'brooklyn_bridge' },
     unlock: {
       title: 'Septum Piercing + ENM Marriage Reshuffle Goodybag',
@@ -61,7 +61,7 @@ const TARGET_BOROUGHS = [
     },
   },
   {
-    id: 'astoria', name: 'Astoria, Queens', angle: 35, minBlocks: 3700, color: '#2ecc71',
+    id: 'astoria', name: 'Astoria, Queens', angle: 35, minBlocks: 5300, color: '#2ecc71',
     river: { name: 'East River', atBlock: 600, width: 405, bridge: 'queensboro' },
     unlock: {
       title: 'Reasonable Rent + Boring Personality',
@@ -533,6 +533,7 @@ class CannonGame {
       // per flight regardless of altitude. Both fire exactly once.
       moonSpawned: false, moonBanner: 0, pilotSpawned: false, pilotBannerTimer: 0,
       ufoAbducted: false, ufoAbductTimer: 0, ufoDropped: false, ufoDeath: false, bloodParticles: [],
+      possessedTimer: 0, possessedSpinAngle: 0,
       finishCrossed: false, finishEventTimer: 0,
       // Hit feedback for taking damage from a hazard mid-air (pigeons,
       // helicopters, the various thrown-object arcs, running a cab on the
@@ -738,8 +739,20 @@ class CannonGame {
     }
 
     // ---- AIRBORNE ----
-    // UFO abduction: hauled straight up, held, then shot back down hard.
-    // Skips normal physics entirely while it's reeling you in.
+    // UFO beam sequence: fly into the beam (not the saucer itself) and
+    // you're frozen in place, spinning like you're possessed for a
+    // beat, THEN hauled straight up into the ship, THEN shot back down
+    // hard. Three distinct phases, in that order.
+    if (f.possessedTimer > 0) {
+      f.possessedTimer--;
+      f.possessedSpinAngle += 0.55;
+      f.vx = 0; f.vy = 0;
+      if (f.possessedTimer <= 0) {
+        f.ufoAbducted = true;
+        f.ufoAbductTimer = 40;
+      }
+      return;
+    }
     if (f.ufoAbducted) {
       if (f.ufoAbductTimer > 0) {
         f.ufoAbductTimer--;
@@ -844,11 +857,10 @@ class CannonGame {
       f.moonSpawned = true;
       f.entities.push({ type: 'moon', x: this.canvas.width + 260, worldY: Math.max(f.worldY + 180, 1050), collected: false });
     }
-    // Banner plane cameo — a rare easter egg, not something every flight
-    // sees. Only shows up once you're genuinely flying high, and once
-    // spawned it fires the big flashy "KNICKS IN 5!" banner for its whole
-    // pass across the sky.
-    if (!f.pilotSpawned && f.worldY > 500) {
+    // Banner plane cameo — a genuine rare easter egg, not something most
+    // flights ever see. Gated well above the moon (850) so reaching it
+    // takes real effort/luck, not routine climbing.
+    if (!f.pilotSpawned && f.worldY > 1400) {
       f.pilotSpawned = true;
       f.pilotBannerTimer = 220;
       f.entities.push({ type: 'pilot_flyby', x: this.canvas.width + 80, worldY: f.worldY + (Math.random() * 80 - 20), noCollide: true, collected: false });
@@ -878,6 +890,13 @@ class CannonGame {
       // actually flies across the sky under its own power.
       if (e.type === 'pilot_flyby') e.x -= 3.5;
       if (e.type === 'heli_rocket') e.x -= 7;
+      // UFOs actually move around the sky under their own power on top
+      // of normal parallax drift — a wandering flight path, not scenery
+      // scrolling by at a fixed altitude.
+      if (e.type === 'ufo') {
+        e.worldY += Math.sin(this._frame * 0.025 + e.wanderPhaseY) * 2.4;
+        e.x += Math.sin(this._frame * 0.018 + e.wanderPhaseX) * 1.7;
+      }
       if (e.isArc && e.arcWorldY !== undefined && e.arcWorldY < -10) return false;
       return e.x > -120;
     });
@@ -953,8 +972,8 @@ class CannonGame {
     if (escalate[type] && Math.random() < hazardBias) type = escalate[type];
 
     // Deep space — above the cloud layer, swap in UFOs and aliens instead of
-    // the usual pigeons/helicopters. UFO is a friendly beam-you-up boost,
-    // alien is a small zap — new sky, new hazards.
+    // the usual pigeons/helicopters. UFO's beam possesses/abducts/drops you
+    // (see checkCollisions/updateFlight), alien is a small zap.
     if (this.flight.worldY > 900) {
       const sr = Math.random();
       if (sr < 0.22) type = 'ufo';
@@ -971,7 +990,10 @@ class CannonGame {
     const spread = 260;
     const low = Math.max(base, this.flight.worldY - spread * 0.5);
     const worldY = low + Math.random() * spread;
-    this.flight.entities.push({ type, x: W + 60, worldY, collected: false });
+    const extra = type === 'ufo'
+      ? { beamLen: 90 + Math.random() * 150, wanderPhaseY: Math.random() * Math.PI * 2, wanderPhaseX: Math.random() * Math.PI * 2 }
+      : null;
+    this.flight.entities.push({ type, x: W + 60, worldY, collected: false, ...extra });
   }
 
   spawnGround() {
@@ -1026,6 +1048,22 @@ class CannonGame {
       if (e.collected) return;
       if (e.noCollide) return;
       if (LAUNCHER_TYPES.has(e.type)) return;
+
+      // UFOs are special-geometry: the hazard is the beam hanging below
+      // the saucer, not the saucer itself. The beam is a vertical strip
+      // from the UFO's own position down to its (variable) length --
+      // doesn't reuse the generic hTol/vTol box below at all.
+      if (e.type === 'ufo') {
+        if (f.possessedTimer > 0 || f.ufoAbducted || f.ufoDropped) return;
+        const esyU = this.wToS(e.worldY || 900);
+        const beamBottom = esyU + (e.beamLen || 100);
+        if (Math.abs(px - e.x) < 30 && py >= esyU - 6 && py <= beamBottom) {
+          f.possessedTimer = 46;
+          f.possessedSpinAngle = 0;
+        }
+        return;
+      }
+
       const isArc    = ARC_TYPES.has(e.type);
       const isGround = e.groundEnt && !isArc;
 
@@ -1033,10 +1071,8 @@ class CannonGame {
       // Ground hazards get a wider vertical catch zone than sky ones — "flying
       // low" needs to be a reliably readable risk, not a one-frame coincidence.
       // The moon is huge and meant to be an easy grab once you're up there.
-      // The UFO's catch zone is taller than a normal hazard's — it's meant
-      // to represent the beam cone hanging below it, not just the saucer.
-      const vTol = isGround ? 55 : (e.type === 'moon' ? 70 : e.type === 'ufo' ? 55 : 32);
-      const hTol = e.type === 'moon' ? 60 : e.type === 'ufo' ? 40 : 34;
+      const vTol = isGround ? 55 : (e.type === 'moon' ? 70 : 32);
+      const hTol = e.type === 'moon' ? 60 : 34;
       if (Math.abs(px - e.x) > hTol || Math.abs(py - esy) > vTol) return;
 
       e.collected = true;
@@ -1064,13 +1100,8 @@ class CannonGame {
         case 'manhole':       f.vx *= 0.5; if (f.ratMode) f.ratVx *= 0.5; break;
         case 'cab_ground':    f.vx *= 0.4; f.damage += 15; break;
         case 'moon':          f.moonBanner = 100; this.ts.boroughBucks += 60; break;
-        // Not a pickup anymore — fly into the beam and it hauls you straight
-        // up, then drops you like a rock. checkCollisions already flags the
-        // entity itself as collected; the abduction sequence plays out over
-        // several frames in updateFlight.
-        case 'ufo':
-          if (!f.ufoAbducted && !f.ufoDropped) { f.ufoAbducted = true; f.ufoAbductTimer = 40; }
-          break;
+        // 'ufo' is handled entirely above, before this switch -- beam
+        // geometry, not a point pickup, so it never reaches here.
         case 'alien':         f.damage += 8; f.vx -= 1; break;
         case 'heli_rocket':   f.damage += 16; f.vy -= 6; f.vx -= 2; break;
       }
@@ -1632,15 +1663,24 @@ class CannonGame {
       }
       case 'ufo': {
         const hover = Math.sin(f * 0.08 + ex * 0.03) * 4, sy2 = sy + hover;
-        ctx.fillStyle = 'rgba(150,255,180,0.16)';
+        const len = e.beamLen || 100;
+        const pulse = 0.14 + Math.sin(f * 0.15) * 0.06;
+        // The beam is the actual hazard now, not the saucer -- widens
+        // out to its full (variable) length, pulsing to read as
+        // dangerous rather than a friendly pickup.
+        ctx.fillStyle = `rgba(150,255,180,${pulse})`;
         ctx.beginPath(); ctx.moveTo(ex - 10, sy2 + 8); ctx.lineTo(ex + 10, sy2 + 8);
-        ctx.lineTo(ex + 26, sy2 + 58); ctx.lineTo(ex - 26, sy2 + 58); ctx.closePath(); ctx.fill();
+        ctx.lineTo(ex + 10 + len * 0.28, sy2 + len); ctx.lineTo(ex - 10 - len * 0.28, sy2 + len);
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = `rgba(150,255,180,${pulse + 0.15})`; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(ex - 10, sy2 + 8); ctx.lineTo(ex - 10 - len * 0.28, sy2 + len); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(ex + 10, sy2 + 8); ctx.lineTo(ex + 10 + len * 0.28, sy2 + len); ctx.stroke();
         ctx.fillStyle = '#7f8c8d';
         ctx.beginPath(); ctx.ellipse(ex, sy2, 26, 9, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#95d8d8';
         ctx.beginPath(); ctx.arc(ex, sy2 - 8, 12, Math.PI, 0); ctx.fill();
-        ctx.fillStyle = '#2ecc71'; ctx.font = '11px VT323'; ctx.textAlign = 'center';
-        ctx.fillText('BEAM ME UP', ex, sy2 + 26);
+        ctx.fillStyle = '#7ee8a0'; ctx.font = '11px VT323'; ctx.textAlign = 'center';
+        ctx.fillText('DANGER', ex, sy2 + 26);
         break;
       }
       case 'alien': {
@@ -1673,34 +1713,86 @@ class CannonGame {
         break;
       }
       case 'pilot_flyby': {
-        // A gentle bob + bank so it actually reads as flying, not scenery
-        // drifting past.
-        const bob = Math.sin(f * 0.045 + ex * 0.02) * 10;
-        const bank = Math.sin(f * 0.045 + ex * 0.02 + 0.6) * 0.09;
+        // A genuine 747-scale plane — direct feedback: "make it up
+        // really high in the sky, make the plane HUGE, take up a ton of
+        // the screen, look like a giant 747 with the pilot in a
+        // cockpit." Sized off the canvas so it actually dominates the
+        // frame instead of reading as another small sprite.
+        const W = this.canvas.width;
+        const L = Math.max(260, W * 0.7); // fuselage length
+        const s = L / 300; // scale factor everything else rides on
+        const bob = Math.sin(f * 0.03 + ex * 0.01) * 8;
+        const bank = Math.sin(f * 0.03 + ex * 0.01 + 0.6) * 0.05;
         const sy2 = sy + bob;
         ctx.save();
         ctx.translate(ex, sy2); ctx.rotate(bank); ctx.translate(-ex, -sy2);
-        // Fuselage + tail
+
+        // Wings (drawn first, sit behind the fuselage), swept-back delta.
+        ctx.fillStyle = '#c9d0d6';
+        ctx.beginPath();
+        ctx.moveTo(ex - 10 * s, sy2 + 6 * s);
+        ctx.lineTo(ex + 40 * s, sy2 + 95 * s);
+        ctx.lineTo(ex + 85 * s, sy2 + 95 * s);
+        ctx.lineTo(ex + 55 * s, sy2 + 10 * s);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(ex - 10 * s, sy2 - 6 * s);
+        ctx.lineTo(ex + 40 * s, sy2 - 95 * s);
+        ctx.lineTo(ex + 85 * s, sy2 - 95 * s);
+        ctx.lineTo(ex + 55 * s, sy2 - 10 * s);
+        ctx.closePath(); ctx.fill();
+        // Engine pods under each wing.
+        ctx.fillStyle = '#7f8c8d';
+        [58, 100].forEach(d => {
+          [1, -1].forEach(side => {
+            ctx.fillRect(ex + d * s - 14 * s, sy2 + side * 55 * s - 7 * s, 30 * s, 14 * s);
+          });
+        });
+
+        // Fuselage, with the 747's signature upper-deck hump up front.
         ctx.fillStyle = '#ecf0f1';
-        ctx.beginPath(); ctx.ellipse(ex, sy2, 22, 7, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#bdc3c7';
-        ctx.beginPath(); ctx.moveTo(ex - 8, sy2 - 2); ctx.lineTo(ex - 8, sy2 - 16); ctx.lineTo(ex + 8, sy2 - 2); ctx.closePath(); ctx.fill();
-        // Cockpit window + pilot (turban, beard) at the controls
-        ctx.fillStyle = '#2c3e50';
-        ctx.beginPath(); ctx.arc(ex + 10, sy2 - 2, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(ex, sy2, 150 * s, 17 * s, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(ex + 78 * s, sy2 - 14 * s, 42 * s, 11 * s, -0.1, Math.PI, 0);
+        ctx.fill();
+
+        // Cockpit windows strip + nose cone.
+        ctx.fillStyle = '#1a2530';
+        for (let i = 0; i < 7; i++) ctx.fillRect(ex + 108 * s + i * 9 * s, sy2 - 6 * s, 5 * s, 7 * s);
+
+        // Cockpit — visible pilot at the controls (bearded, turbaned; a
+        // Knicks fan, nothing more — see cannon.js history for why).
+        ctx.fillStyle = '#0e161e';
+        ctx.beginPath(); ctx.ellipse(ex + 158 * s, sy2 - 3 * s, 16 * s, 10 * s, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#e67e22';
-        ctx.beginPath(); ctx.arc(ex + 10, sy2 - 4, 4.5, Math.PI, 0); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex + 155 * s, sy2 - 6 * s, 7 * s, Math.PI, 0); ctx.fill();
         ctx.fillStyle = '#c68a5a';
-        ctx.beginPath(); ctx.arc(ex + 10, sy2 - 1, 3.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex + 155 * s, sy2 - 1 * s, 5 * s, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#3a2a1a';
-        ctx.beginPath(); ctx.arc(ex + 10, sy2 + 2, 2.5, 0, Math.PI); ctx.fill();
-        // Small trailing pennant — the big screen banner carries the joke now
-        ctx.strokeStyle = '#999'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(ex - 24, sy2); ctx.lineTo(ex - 46, sy2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(ex + 155 * s, sy2 + 3 * s, 4 * s, 0, Math.PI); ctx.fill();
+
+        // Tail fin.
+        ctx.fillStyle = '#dfe6ea';
+        ctx.beginPath();
+        ctx.moveTo(ex - 145 * s, sy2 - 8 * s);
+        ctx.lineTo(ex - 175 * s, sy2 - 62 * s);
+        ctx.lineTo(ex - 130 * s, sy2 - 62 * s);
+        ctx.lineTo(ex - 118 * s, sy2 - 8 * s);
+        ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#f58426';
         ctx.beginPath();
-        ctx.moveTo(ex - 46, sy2 - 10); ctx.lineTo(ex - 70, sy2); ctx.lineTo(ex - 46, sy2 + 10);
+        ctx.moveTo(ex - 168 * s, sy2 - 58 * s); ctx.lineTo(ex - 145 * s, sy2 - 58 * s);
+        ctx.lineTo(ex - 138 * s, sy2 - 30 * s); ctx.lineTo(ex - 158 * s, sy2 - 30 * s);
         ctx.closePath(); ctx.fill();
+
+        // Livery stripe + fuselage windows.
+        ctx.strokeStyle = '#f58426'; ctx.lineWidth = 5 * s;
+        ctx.beginPath(); ctx.moveTo(ex - 148 * s, sy2 + 3 * s); ctx.lineTo(ex + 145 * s, sy2 + 3 * s); ctx.stroke();
+        ctx.fillStyle = '#1a2530';
+        for (let i = 0; i < 20; i++) ctx.fillRect(ex - 130 * s + i * 13 * s, sy2 - 8 * s, 6 * s, 4 * s);
+
         ctx.restore();
         break;
       }
@@ -1849,9 +1941,16 @@ class CannonGame {
   renderPlayer(x, y, f) {
     const ctx = this.ctx;
     ctx.save(); ctx.translate(x, y);
-    // Tilt: positive vy = going up = nose up (negative tilt)
-    const tilt = Math.max(-0.42, Math.min(0.42, -f.vy * 0.022));
-    ctx.rotate(tilt);
+    // Possessed: frozen in place, spinning fast, sickly green glow --
+    // caught in the UFO's beam, not flying under your own power anymore.
+    if (f.possessedTimer > 0) {
+      ctx.rotate(f.possessedSpinAngle);
+      ctx.shadowColor = '#7ee8a0'; ctx.shadowBlur = 18 + Math.sin(this._frame * 0.6) * 8;
+    } else {
+      // Tilt: positive vy = going up = nose up (negative tilt)
+      const tilt = Math.max(-0.42, Math.min(0.42, -f.vy * 0.022));
+      ctx.rotate(tilt);
+    }
 
     if (f.flapFlash > 0) { ctx.shadowColor = '#3498db'; ctx.shadowBlur = 20; }
 
