@@ -173,7 +173,9 @@ class ZoomiesGame {
       const x = e.clientX - rect.left;
       this.steerDir = x < rect.width / 2 ? -1 : 1;
       this._steerPointerId = e.pointerId;
-      if (this.state === 'primer' && this._primerStep === 0) this._primerHoldFrames++;
+      // "TAP TO START" (primer step 2) doesn't name the jump button --
+      // a direct tap anywhere on the canvas should also confirm it.
+      if (this.state === 'primer' && this._primerStep === 2) this._action();
     };
     this._pointerUp = (e) => {
       if (e.pointerId === this._steerPointerId) { this.steerDir = 0; this._steerPointerId = null; }
@@ -196,8 +198,10 @@ class ZoomiesGame {
   _action() {
     if (this.finished) return;
     if (this.state === 'primer') {
-      if (this._primerStep === 0 && this._primerHoldFrames > 8) { this._primerStep = 1; }
-      else if (this._primerStep === 1) { this._primerStep = 2; this.jumpFlash = 14; }
+      // Step 0 (hold to steer) advances itself in _updatePrimer() from a
+      // real sustained hold -- pressing jump/tapping early here is a
+      // no-op on purpose, not a shortcut past it.
+      if (this._primerStep === 1) { this._primerStep = 2; this.jumpFlash = 14; }
       else if (this._primerStep === 2) { this.state = 'run'; }
       return;
     }
@@ -263,6 +267,16 @@ class ZoomiesGame {
   _updatePrimer() {
     this.spinAngle += 0.14;
     this.bank += ((this.steerDir * -0.3) - this.bank) * 0.15;
+    // Step 0 ("HOLD LEFT OR RIGHT SIDE") has to advance from an actual
+    // sustained hold, checked every frame -- it used to only count a
+    // pointerdown *event* (once per touch, not once per frame held),
+    // so a real hold never accumulated past 1 and the primer could
+    // never be gotten past this way at all. Advances itself once held
+    // long enough; no extra jump-button press needed to "confirm" it.
+    if (this._primerStep === 0) {
+      if (this.steerDir !== 0) this._primerHoldFrames++;
+      if (this._primerHoldFrames > 20) { this._primerStep = 1; this._primerHoldFrames = 0; }
+    }
   }
 
   update() {
