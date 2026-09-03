@@ -528,6 +528,10 @@ class CannonGame {
       splashed: false, splashTimer: 0, splashX: 0,
       jetpackHeat: 0, exploded: false,
       groundSpawnCount: 0, ratSpawned: false,
+      // High-altitude one-time cameos: a hittable moon once you climb deep
+      // enough into the cloud layer, and a banner plane that cruises by once
+      // per flight regardless of altitude. Both fire exactly once.
+      moonSpawned: false, moonBanner: 0, pilotSpawned: false,
       // Hit feedback for taking damage from a hazard mid-air (pigeons,
       // helicopters, the various thrown-object arcs, running a cab on the
       // ground): before this, "Damage: 22%" ticking up in the corner was
@@ -591,6 +595,7 @@ class CannonGame {
     if (this.flight.flapCooldown > 0) this.flight.flapCooldown--;
     if (this.flight.flapFlash > 0)    this.flight.flapFlash--;
     if (this.flight.hitFlash > 0)     this.flight.hitFlash--;
+    if (this.flight.moonBanner > 0)   this.flight.moonBanner--;
     this.flight.shakeX *= 0.72;
     this.flight.shakeY *= 0.72;
     this.flight.hitParticles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.25; p.life--; });
@@ -773,6 +778,18 @@ class CannonGame {
 
     if (f.vx < 0.2 && f.worldY < 10) { f.worldY = 0; f.landed = true; return; }
 
+    // Moon — a one-time hittable target once you climb deep into the cloud
+    // layer, sitting a bit further up so reaching it still takes real climb.
+    if (!f.moonSpawned && f.worldY > 850) {
+      f.moonSpawned = true;
+      f.entities.push({ type: 'moon', x: this.canvas.width + 260, worldY: Math.max(f.worldY + 180, 1050), collected: false });
+    }
+    // Banner plane cameo — pure flavor, no gameplay effect either way.
+    if (!f.pilotSpawned && f.distance > 260) {
+      f.pilotSpawned = true;
+      f.entities.push({ type: 'pilot_flyby', x: this.canvas.width + 80, worldY: Math.min(f.worldY + 60, 500), noCollide: true, collected: false });
+    }
+
     f.spawnTimer++;
     // Spawn rate ramps up with distance — a long endurance flight gets busier, not
     // calmer — but starts dense and generous right out of the cannon (no more
@@ -852,8 +869,17 @@ class CannonGame {
     const escalate = { coin: 'dark_cloud', ring: 'pigeon_obs', light_cloud: 'helicopter', pretzel: 'pigeon_obs' };
     if (escalate[type] && Math.random() < hazardBias) type = escalate[type];
 
+    // Deep space — above the cloud layer, swap in UFOs and aliens instead of
+    // the usual pigeons/helicopters. UFO is a friendly beam-you-up boost,
+    // alien is a small zap — new sky, new hazards.
+    if (this.flight.worldY > 900) {
+      const sr = Math.random();
+      if (sr < 0.22) type = 'ufo';
+      else if (sr < 0.36) type = 'alien';
+    }
+
     const minWY = { coin:40, ring:50, light_cloud:70, dark_cloud:90, rainbow_cloud:200,
-      pretzel:50, pigeon_flock:80, pigeon_obs:70, helicopter:220, updraft:25 };
+      pretzel:50, pigeon_flock:80, pigeon_obs:70, helicopter:220, updraft:25, ufo:900, alien:900 };
     const base = minWY[type] || 50;
 
     // Band tracks the player's CURRENT altitude at a fixed width, so climbing high
@@ -915,6 +941,7 @@ class CannonGame {
 
     f.entities.forEach(e => {
       if (e.collected) return;
+      if (e.noCollide) return;
       if (LAUNCHER_TYPES.has(e.type)) return;
       const isArc    = ARC_TYPES.has(e.type);
       const isGround = e.groundEnt && !isArc;
@@ -922,8 +949,10 @@ class CannonGame {
       const esy = isArc ? this.wToS(e.arcWorldY || 0) : isGround ? this.wToS(0) : this.wToS(e.worldY || 80);
       // Ground hazards get a wider vertical catch zone than sky ones — "flying
       // low" needs to be a reliably readable risk, not a one-frame coincidence.
-      const vTol = isGround ? 55 : 32;
-      if (Math.abs(px - e.x) > 34 || Math.abs(py - esy) > vTol) return;
+      // The moon is huge and meant to be an easy grab once you're up there.
+      const vTol = isGround ? 55 : (e.type === 'moon' ? 70 : 32);
+      const hTol = e.type === 'moon' ? 60 : 34;
+      if (Math.abs(px - e.x) > hTol || Math.abs(py - esy) > vTol) return;
 
       e.collected = true;
       const dmgBefore = f.damage;
@@ -949,6 +978,9 @@ class CannonGame {
         case 'rat_dumpster':  f.ratMode = true; f.ratVx = Math.max(f.vx, f.ratVx) * 0.85; f.vx = 0; f.sliding = false; f.worldY = 0; break;
         case 'manhole':       f.vx *= 0.5; if (f.ratMode) f.ratVx *= 0.5; break;
         case 'cab_ground':    f.vx *= 0.4; f.damage += 15; break;
+        case 'moon':          f.moonBanner = 100; this.ts.boroughBucks += 60; break;
+        case 'ufo':           f.vy += 9; this.ts.boroughBucks += 15; break;
+        case 'alien':         f.damage += 8; f.vx -= 1; break;
       }
       // Any hazard that actually landed damage gets a real impact: a red
       // flash, a camera kick (same shakeX/shakeY the ground bounce already
@@ -1087,6 +1119,14 @@ class CannonGame {
         ctx.fillStyle = colors[i % colors.length];
         ctx.fillText(txt[i], W / 2 - txt.length * 10 + i * 21, H * 0.27);
       }
+      ctx.globalAlpha = 1;
+    }
+
+    // Moon hit banner
+    if (f.moonBanner > 0) {
+      ctx.globalAlpha = Math.min(1, f.moonBanner / 30);
+      ctx.fillStyle = '#e8e8f0'; ctx.font = 'bold 34px VT323'; ctx.textAlign = 'center';
+      ctx.fillText('YOU HIT THE MOON!', W / 2, H * 0.3);
       ctx.globalAlpha = 1;
     }
 
@@ -1406,6 +1446,66 @@ class CannonGame {
         ctx.fillStyle='rgba(46,204,113,0.14)';ctx.beginPath();ctx.arc(ex,sy,20,0,Math.PI*2);ctx.fill();
         ctx.fillStyle='#2ecc71';ctx.font='13px VT323';ctx.textAlign='center';ctx.fillText('UP',ex,sy+6);
         break;
+      case 'moon': {
+        ctx.fillStyle = '#e6e6e6';
+        ctx.beginPath(); ctx.arc(ex, sy, 55, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#bbb'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(ex, sy, 55, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = 'rgba(160,160,160,0.5)';
+        ctx.beginPath(); ctx.arc(ex - 18, sy - 14, 10, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex + 15, sy + 6, 7, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex - 6, sy + 22, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#9b59b6'; ctx.font = '13px VT323'; ctx.textAlign = 'center';
+        ctx.fillText('THE MOON', ex, sy + 74);
+        break;
+      }
+      case 'ufo': {
+        const hover = Math.sin(f * 0.08 + ex * 0.03) * 4, sy2 = sy + hover;
+        ctx.fillStyle = 'rgba(150,255,180,0.16)';
+        ctx.beginPath(); ctx.moveTo(ex - 10, sy2 + 8); ctx.lineTo(ex + 10, sy2 + 8);
+        ctx.lineTo(ex + 26, sy2 + 58); ctx.lineTo(ex - 26, sy2 + 58); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#7f8c8d';
+        ctx.beginPath(); ctx.ellipse(ex, sy2, 26, 9, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#95d8d8';
+        ctx.beginPath(); ctx.arc(ex, sy2 - 8, 12, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = '#2ecc71'; ctx.font = '11px VT323'; ctx.textAlign = 'center';
+        ctx.fillText('BEAM ME UP', ex, sy2 + 26);
+        break;
+      }
+      case 'alien': {
+        ctx.fillStyle = '#7ee87e';
+        ctx.beginPath(); ctx.ellipse(ex, sy, 11, 14, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#111';
+        ctx.beginPath(); ctx.ellipse(ex - 4, sy - 2, 4, 6, -0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(ex + 4, sy - 2, 4, 6, 0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'rgba(231,76,60,0.4)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(ex, sy, 20, 0, Math.PI * 2); ctx.stroke();
+        break;
+      }
+      case 'pilot_flyby': {
+        // Fuselage + tail
+        ctx.fillStyle = '#ecf0f1';
+        ctx.beginPath(); ctx.ellipse(ex, sy, 22, 7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#bdc3c7';
+        ctx.beginPath(); ctx.moveTo(ex - 8, sy - 2); ctx.lineTo(ex - 8, sy - 16); ctx.lineTo(ex + 8, sy - 2); ctx.closePath(); ctx.fill();
+        // Cockpit window + pilot (turban, beard) at the controls
+        ctx.fillStyle = '#2c3e50';
+        ctx.beginPath(); ctx.arc(ex + 10, sy - 2, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#e67e22';
+        ctx.beginPath(); ctx.arc(ex + 10, sy - 4, 4.5, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = '#c68a5a';
+        ctx.beginPath(); ctx.arc(ex + 10, sy - 1, 3.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#3a2a1a';
+        ctx.beginPath(); ctx.arc(ex + 10, sy + 2, 2.5, 0, Math.PI); ctx.fill();
+        // Tow banner
+        ctx.strokeStyle = '#999'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(ex - 24, sy); ctx.lineTo(ex - 70, sy); ctx.stroke();
+        ctx.fillStyle = '#f1c40f'; ctx.fillRect(ex - 152, sy - 12, 84, 24);
+        ctx.strokeStyle = '#c8860a'; ctx.lineWidth = 1.5; ctx.strokeRect(ex - 152, sy - 12, 84, 24);
+        ctx.fillStyle = '#1a1a1a'; ctx.font = 'bold 13px VT323'; ctx.textAlign = 'center';
+        ctx.fillText('KNICKS IN 5!', ex - 110, sy + 4);
+        break;
+      }
     }
   }
 
