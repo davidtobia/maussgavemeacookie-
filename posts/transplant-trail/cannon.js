@@ -532,6 +532,7 @@ class CannonGame {
       // enough into the cloud layer, and a banner plane that cruises by once
       // per flight regardless of altitude. Both fire exactly once.
       moonSpawned: false, moonBanner: 0, pilotSpawned: false,
+      finishCrossed: false, finishEventTimer: 0,
       // Hit feedback for taking damage from a hazard mid-air (pigeons,
       // helicopters, the various thrown-object arcs, running a cab on the
       // ground): before this, "Damage: 22%" ticking up in the corner was
@@ -664,6 +665,16 @@ class CannonGame {
       }
     }
     if (f.riverEventTimer > 0) f.riverEventTimer--;
+
+    // Finish line — first moment distance crosses the target's minBlocks,
+    // regardless of altitude, damage, or river state (endFlight still does
+    // the real win/fail check on landing; this is purely a visual beat).
+    const targetB = TARGET_BOROUGHS.find(b => b.id === this.ts.targetBorough);
+    if (targetB && !f.finishCrossed && f.distance >= targetB.minBlocks) {
+      f.finishCrossed = true;
+      f.finishEventTimer = 90;
+    }
+    if (f.finishEventTimer > 0) f.finishEventTimer--;
 
     // ---- RAT MODE ----
     if (f.ratMode) {
@@ -1032,6 +1043,7 @@ class CannonGame {
     }
 
     this.renderYardageMarkers(W, H, f.bgOffset, f.distance, groundScreenY);
+    this.renderFinishGate(W, H, f.bgOffset);
 
     // Entities
     f.entities.forEach(e => {
@@ -1131,6 +1143,7 @@ class CannonGame {
     }
 
     if (f.riverEventTimer > 0) this.renderRiverEventBanner(W, H, f);
+    if (f.finishEventTimer > 0) this.renderFinishEventBanner(W, H, f);
     this.renderHUD(W, H, f);
   }
 
@@ -1336,6 +1349,52 @@ class CannonGame {
     ctx.strokeRect(0, H * 0.34, W, 76);
     ctx.fillStyle = '#5dade2'; ctx.font = 'bold 44px VT323'; ctx.textAlign = 'center';
     ctx.fillText('CROSSING THE ' + riverName + '!', W / 2, H * 0.34 + 48);
+    ctx.globalAlpha = 1;
+  }
+
+  // A big checkered gate hanging in the sky at the target borough's unlock
+  // distance — visible well before you reach it, not just a flash on crossing.
+  renderFinishGate(W, H, bgOffset) {
+    const target = TARGET_BOROUGHS.find(b => b.id === this.ts.targetBorough);
+    if (!target) return;
+    const ctx = this.ctx;
+    const bgPer100 = 180;
+    const gateBg = (target.minBlocks / 100) * bgPer100;
+    const sx = W + (gateBg - bgOffset);
+    if (sx < -80 || sx > W + 80) return;
+
+    const topY = 0, botY = H;
+    // Checkered pole-to-pole banner
+    const squares = 14, sqH = (botY - topY) / squares, sqW = 22;
+    for (let i = 0; i < squares; i++) {
+      ctx.fillStyle = (i % 2 === 0) ? '#f5f5f5' : '#1a1a1a';
+      ctx.fillRect(sx - sqW / 2, topY + i * sqH, sqW, sqH);
+    }
+    ctx.strokeStyle = target.color; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(sx - sqW / 2, topY); ctx.lineTo(sx - sqW / 2, botY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx + sqW / 2, topY); ctx.lineTo(sx + sqW / 2, botY); ctx.stroke();
+
+    // Pennant flag near the top
+    ctx.fillStyle = target.color;
+    ctx.beginPath();
+    ctx.moveTo(sx + sqW / 2, 30); ctx.lineTo(sx + sqW / 2 + 46, 44); ctx.lineTo(sx + sqW / 2, 58);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 14px VT323'; ctx.textAlign = 'left';
+    ctx.fillText('FINISH', sx + sqW / 2 + 6, 48);
+  }
+
+  renderFinishEventBanner(W, H, f) {
+    const ctx = this.ctx;
+    const t = f.finishEventTimer;
+    const alpha = Math.min(1, t / 25) * (t > 8 ? 1 : t / 8);
+    const target = TARGET_BOROUGHS.find(b => b.id === this.ts.targetBorough);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(0,0,0,0.82)';
+    ctx.fillRect(0, H * 0.44, W, 70);
+    ctx.strokeStyle = target ? target.color : '#f1c40f'; ctx.lineWidth = 2;
+    ctx.strokeRect(0, H * 0.44, W, 70);
+    ctx.fillStyle = target ? target.color : '#f1c40f'; ctx.font = 'bold 40px VT323'; ctx.textAlign = 'center';
+    ctx.fillText('FINISH LINE!', W / 2, H * 0.44 + 46);
     ctx.globalAlpha = 1;
   }
 
