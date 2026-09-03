@@ -948,6 +948,9 @@ class TrailGame {
     // walking through them.
     if (landmark.id === 'murray-hill') {
       this.apartmentHunt();
+    } else if (landmark.id === 'midtown' && this.gameState.bodegaDone && !this.gameState.zoomiesOffered) {
+      this.gameState.zoomiesOffered = true;
+      this.showZoomiesOffer();
     } else if (landmark.id === 'washington-square-park') {
       this.showEvent('You arrive at Washington Square Park. Three figures are waiting by the arch.', () => this.startCannonGame());
     } else if (landmark.type === 'fort') {
@@ -1045,6 +1048,9 @@ class TrailGame {
     bodegaGame = new BodegaGame(this.gameState, () => {
       // Save chapter 2 checkpoint after bodega completes
       game.saveChapter(2, this.getTrailStateSnapshot());
+      // Arms the one-time zoomies offer at the next landmark (midtown) --
+      // see reachLandmark()/showZoomiesOffer().
+      this.gameState.bodegaDone = true;
       game.showScreen('trail-screen');
       this.start();
     });
@@ -1162,6 +1168,43 @@ class TrailGame {
     document.getElementById('wise-erics-yes').onclick = proceed;
     document.getElementById('wise-erics-ofcourse').onclick = proceed;
     document.getElementById('wise-erics-implicitly').onclick = proceed;
+  }
+
+  // One-time offer, midtown, after bodega -- see reachLandmark(). The
+  // actual choice text is user-authored content (not written here, see
+  // the [PLACEHOLDER] marker in index.html); this just wires the two
+  // outcomes.
+  showZoomiesOffer() {
+    const box = document.getElementById('zoomies-choice');
+    box.classList.remove('hidden');
+    this.state.paused = true;
+    document.getElementById('zoomies-yes').onclick = () => {
+      box.classList.add('hidden');
+      this.startZoomiesGame();
+    };
+    document.getElementById('zoomies-no').onclick = () => {
+      box.classList.add('hidden');
+      this.state.paused = false;
+    };
+  }
+
+  startZoomiesGame() {
+    this.stop();
+    game.showScreen('zoomies-game');
+    zoomiesGame = new ZoomiesGame(this.gameState, (result) => {
+      // Keeping this light and non-punishing on purpose -- the real
+      // "comedown" consequence is future narrative work the user is
+      // writing themselves, not something to invent here. A small
+      // reward for now so the detour reads as a genuine treat, not a
+      // trap.
+      if (result) {
+        this.gameState.aura = (this.gameState.aura || 0) + Math.min(20, Math.floor(result.coins / 15));
+      }
+      game.showScreen('trail-screen');
+      this.state.paused = false;
+      this.start();
+    });
+    zoomiesGame.init();
   }
 
   getTrailStateSnapshot() {

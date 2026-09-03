@@ -270,6 +270,17 @@
           </div>
         </div>
       </div>
+
+      <!-- One-time offer after the bodega run, before Washington Square Park -->
+      <div id="zoomies-choice" class="trail-event hidden">
+        <div class="event-box">
+          <p id="zoomies-offer-text">[PLACEHOLDER — someone on the street offers you something. Do you take it?]</p>
+          <div class="menu-options" style="margin-top: 18px;">
+            <button class="menu-option" id="zoomies-yes">Yes</button>
+            <button class="menu-option" id="zoomies-no">No</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Transportation Selection -->
@@ -708,6 +719,39 @@
       -->
     </div>
 
+    <!-- Zoomies -->
+    <div id="zoomies-game" class="screen">
+      <canvas id="zoomies-canvas"></canvas>
+
+      <div id="zoomies-hud" class="heist-hud hidden">
+        <p id="zoomies-hud-title" class="heist-hud-title"></p>
+        <p id="zoomies-hud-hint" class="heist-hud-hint"></p>
+        <p id="zoomies-hud-meta" class="heist-hud-meta"></p>
+      </div>
+
+      <div id="zoomies-controls" class="heist-getaway-controls hidden">
+        <button id="zoomies-action-btn" class="heist-getaway-btn heist-jump-btn zoomies-action-btn">
+          <span class="zoomies-action-label">HOLD</span>
+        </button>
+      </div>
+
+      <div id="zoomies-charge-wrap" class="zoomies-charge-wrap hidden">
+        <div id="zoomies-charge-fill" class="zoomies-charge-fill"></div>
+      </div>
+
+      <div id="zoomies-results" class="cannon-overlay hidden">
+        <div class="cannon-splash">
+          <h2 class="cannon-splash-title">[PLACEHOLDER — zoomies results title]</h2>
+          <p id="zoomies-results-flavor" class="cannon-splash-sub">[PLACEHOLDER — result flavor text]</p>
+          <div class="cannon-feat-stats" style="margin-top: 18px;">
+            <span class="cannon-feat-stat">Coins: <span id="zoomies-results-coins" class="cannon-feat-val"></span></span>
+            <span class="cannon-feat-stat">Best chain: <span id="zoomies-results-chain" class="cannon-feat-val"></span></span>
+          </div>
+          <button id="zoomies-results-continue" class="menu-option" style="margin-top: 20px;">Keep walking</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Apartment Hunt -->
     <div id="apartment-hunt" class="screen">
       <div class="border-decoration top"></div>
@@ -730,14 +774,15 @@
   <script src="characters.js?v=2"></script>
   <script src="store.js?v=2"></script>
   <script src="trail-data.js?v=5"></script>
-  <script src="trail.js?v=21"></script>
+  <script src="trail.js?v=22"></script>
   <script src="bodega.js?v=8"></script>
+  <script src="zoomies.js?v=2"></script>
   <script src="cannon.js?v=21"></script>
   <script src="heist.js?v=32"></script>
   <script src="jail-data.js?v=1"></script>
   <script src="jail-minigames.js?v=2"></script>
   <script src="jail.js?v=3"></script>
-  <script src="game.js?v=20"></script>
+  <script src="game.js?v=21"></script>
 
   <!-- GoatCounter Analytics -->
   <script data-goatcounter="https://maussgavemeacookie.goatcounter.com/count"
