@@ -531,7 +531,8 @@ class CannonGame {
       // High-altitude one-time cameos: a hittable moon once you climb deep
       // enough into the cloud layer, and a banner plane that cruises by once
       // per flight regardless of altitude. Both fire exactly once.
-      moonSpawned: false, moonBanner: 0, pilotSpawned: false,
+      moonSpawned: false, moonBanner: 0, pilotSpawned: false, pilotBannerTimer: 0,
+      ufoAbducted: false, ufoAbductTimer: 0, ufoDropped: false, ufoDeath: false, bloodParticles: [],
       finishCrossed: false, finishEventTimer: 0,
       // Hit feedback for taking damage from a hazard mid-air (pigeons,
       // helicopters, the various thrown-object arcs, running a cab on the
@@ -601,6 +602,8 @@ class CannonGame {
     this.flight.shakeY *= 0.72;
     this.flight.hitParticles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.25; p.life--; });
     this.flight.hitParticles = this.flight.hitParticles.filter(p => p.life > 0);
+    this.flight.bloodParticles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.3; p.life--; });
+    this.flight.bloodParticles = this.flight.bloodParticles.filter(p => p.life > 0);
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     if (!this.flight.landed) this.updateFlight();
     if (this.flight.splashTimer > 0) this.flight.splashTimer--;
@@ -643,6 +646,31 @@ class CannonGame {
     f.worldY = 0; f.vx = 0; f.vy = 0;
     f.sliding = false; f.ratMode = false;
     f.landed = true;
+  }
+
+  // Shot straight down out of a UFO's grip — no bounce, no slide, no
+  // skipping across the water. Just a hard, final impact. Called from
+  // wherever a dropped player actually comes to rest, since a UFO drop
+  // always starts with vx = 0 and can hit the "basically stopped, low
+  // enough to call it landed" fallback before it ever reaches the normal
+  // worldY <= 0 ground-collision check.
+  triggerUfoDeath() {
+    const f = this.flight;
+    f.ufoDropped = false;
+    f.ufoDeath = true;
+    f.vx = 0; f.vy = 0; f.worldY = 0;
+    f.sliding = false; f.ratMode = false;
+    f.landed = true;
+    f.splashTimer = 40; // reuse the same lingering-visual beat as a splash/explosion
+    f.shakeX = (Math.random() - 0.5) * 16; f.shakeY = 14;
+    for (let i = 0; i < 16; i++) {
+      const a = Math.random() * Math.PI * 2, speed = 1.5 + Math.random() * 5;
+      f.bloodParticles.push({
+        x: 80, y: this.wToS(0),
+        vx: Math.cos(a) * speed, vy: Math.sin(a) * speed - 2.5,
+        life: 26 + Math.floor(Math.random() * 20),
+      });
+    }
   }
 
   updateFlight() {
@@ -710,6 +738,21 @@ class CannonGame {
     }
 
     // ---- AIRBORNE ----
+    // UFO abduction: hauled straight up, held, then shot back down hard.
+    // Skips normal physics entirely while it's reeling you in.
+    if (f.ufoAbducted) {
+      if (f.ufoAbductTimer > 0) {
+        f.ufoAbductTimer--;
+        f.worldY += 16;
+        f.vx = 0; f.vy = 0;
+        return;
+      }
+      f.ufoAbducted = false;
+      f.ufoDropped = true;
+      f.vy = -34;
+      f.vx = 0;
+    }
+
     // Fatigue: past ~20s of flight, an extra pull kicks in and ramps up hard
     // over the next ~12s. The old numbers here (start 40s, cap +0.30, ramp
     // over a minute) were sized against naked/pigeon/eagle's flap-force-per-
@@ -752,6 +795,9 @@ class CannonGame {
     // Ground (or water) collision
     if (f.worldY <= 0) {
       const overWater = this.isOverWater(f.distance);
+
+      if (f.ufoDropped) { this.triggerUfoDeath(); return; }
+
       const canBounce = Math.abs(f.vy) > 2.0 && f.vx > 1.5;
 
       if (overWater) {
@@ -787,7 +833,10 @@ class CannonGame {
       return;
     }
 
-    if (f.vx < 0.2 && f.worldY < 10) { f.worldY = 0; f.landed = true; return; }
+    if (f.vx < 0.2 && f.worldY < 10) {
+      if (f.ufoDropped) { this.triggerUfoDeath(); return; }
+      f.worldY = 0; f.landed = true; return;
+    }
 
     // Moon — a one-time hittable target once you climb deep into the cloud
     // layer, sitting a bit further up so reaching it still takes real climb.
@@ -795,11 +844,16 @@ class CannonGame {
       f.moonSpawned = true;
       f.entities.push({ type: 'moon', x: this.canvas.width + 260, worldY: Math.max(f.worldY + 180, 1050), collected: false });
     }
-    // Banner plane cameo — pure flavor, no gameplay effect either way.
-    if (!f.pilotSpawned && f.distance > 260) {
+    // Banner plane cameo — a rare easter egg, not something every flight
+    // sees. Only shows up once you're genuinely flying high, and once
+    // spawned it fires the big flashy "KNICKS IN 5!" banner for its whole
+    // pass across the sky.
+    if (!f.pilotSpawned && f.worldY > 500) {
       f.pilotSpawned = true;
-      f.entities.push({ type: 'pilot_flyby', x: this.canvas.width + 80, worldY: Math.min(f.worldY + 60, 500), noCollide: true, collected: false });
+      f.pilotBannerTimer = 220;
+      f.entities.push({ type: 'pilot_flyby', x: this.canvas.width + 80, worldY: f.worldY + (Math.random() * 80 - 20), noCollide: true, collected: false });
     }
+    if (f.pilotBannerTimer > 0) f.pilotBannerTimer--;
 
     f.spawnTimer++;
     // Spawn rate ramps up with distance — a long endurance flight gets busier, not
@@ -820,6 +874,10 @@ class CannonGame {
     this.updateLaunchersAndArcs();
     f.entities = f.entities.filter(e => {
       e.x -= dx * 0.85 + 1.5;
+      // The banner plane has its own engine, not just parallax drift — it
+      // actually flies across the sky under its own power.
+      if (e.type === 'pilot_flyby') e.x -= 3.5;
+      if (e.type === 'heli_rocket') e.x -= 7;
       if (e.isArc && e.arcWorldY !== undefined && e.arcWorldY < -10) return false;
       return e.x > -120;
     });
@@ -838,6 +896,16 @@ class CannonGame {
             arcWorldY: 18, arcVy: 8 + Math.random() * 5,
             isArc: true, collected: false, rotation: 0,
           });
+        }
+      }
+      // Helicopters get real teeth once you're flying high — a beeline
+      // rocket, not just contact damage if you happen to clip one.
+      if (e.type === 'helicopter' && !e.collected && f.worldY > 400) {
+        if (e.rocketTimer === undefined) e.rocketTimer = 45 + Math.floor(Math.random() * 30);
+        e.rocketTimer--;
+        if (e.rocketTimer <= 0) {
+          e.rocketTimer = 90;
+          newArcs.push({ type: 'heli_rocket', x: e.x - 20, worldY: e.worldY, collected: false });
         }
       }
       if (e.isArc) {
@@ -965,8 +1033,10 @@ class CannonGame {
       // Ground hazards get a wider vertical catch zone than sky ones — "flying
       // low" needs to be a reliably readable risk, not a one-frame coincidence.
       // The moon is huge and meant to be an easy grab once you're up there.
-      const vTol = isGround ? 55 : (e.type === 'moon' ? 70 : 32);
-      const hTol = e.type === 'moon' ? 60 : 34;
+      // The UFO's catch zone is taller than a normal hazard's — it's meant
+      // to represent the beam cone hanging below it, not just the saucer.
+      const vTol = isGround ? 55 : (e.type === 'moon' ? 70 : e.type === 'ufo' ? 55 : 32);
+      const hTol = e.type === 'moon' ? 60 : e.type === 'ufo' ? 40 : 34;
       if (Math.abs(px - e.x) > hTol || Math.abs(py - esy) > vTol) return;
 
       e.collected = true;
@@ -994,8 +1064,15 @@ class CannonGame {
         case 'manhole':       f.vx *= 0.5; if (f.ratMode) f.ratVx *= 0.5; break;
         case 'cab_ground':    f.vx *= 0.4; f.damage += 15; break;
         case 'moon':          f.moonBanner = 100; this.ts.boroughBucks += 60; break;
-        case 'ufo':           f.vy += 9; this.ts.boroughBucks += 15; break;
+        // Not a pickup anymore — fly into the beam and it hauls you straight
+        // up, then drops you like a rock. checkCollisions already flags the
+        // entity itself as collected; the abduction sequence plays out over
+        // several frames in updateFlight.
+        case 'ufo':
+          if (!f.ufoAbducted && !f.ufoDropped) { f.ufoAbducted = true; f.ufoAbductTimer = 40; }
+          break;
         case 'alien':         f.damage += 8; f.vx -= 1; break;
+        case 'heli_rocket':   f.damage += 16; f.vy -= 6; f.vx -= 2; break;
       }
       // Any hazard that actually landed damage gets a real impact: a red
       // flash, a camera kick (same shakeX/shakeY the ground bounce already
@@ -1058,7 +1135,7 @@ class CannonGame {
     });
 
     if (f.ratMode) this.renderRat(80, groundScreenY);
-    else if (!f.splashed && !f.exploded) this.renderPlayer(80, playerScreenY, f);
+    else if (!f.splashed && !f.exploded && !f.ufoDeath) this.renderPlayer(80, playerScreenY, f);
 
     // Hit debris -- rides the same camera shake as everything else in this
     // block since it's meant to read as part of the world, not a screen
@@ -1066,6 +1143,11 @@ class CannonGame {
     f.hitParticles.forEach(p => {
       ctx.globalAlpha = Math.max(0, p.life / 30);
       ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+    });
+    f.bloodParticles.forEach(p => {
+      ctx.globalAlpha = Math.max(0, p.life / 30);
+      ctx.fillStyle = '#8e0e0e';
       ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
     });
     ctx.globalAlpha = 1;
@@ -1103,8 +1185,17 @@ class CannonGame {
       ctx.fillText('The jetpack could not take it anymore.', W / 2, H * 0.38 + 30);
     }
 
+    // UFO drop — a hard, final impact. Own beat, own text, doesn't share
+    // the fire/water beats above.
+    if (f.ufoDeath && f.splashTimer > 0) {
+      ctx.globalAlpha = Math.min(1, f.splashTimer / 40);
+      ctx.fillStyle = '#8e0e0e'; ctx.font = 'bold 40px VT323'; ctx.textAlign = 'center';
+      ctx.fillText('SPLAT!', W / 2, H * 0.38);
+      ctx.globalAlpha = 1;
+    }
+
     // Splash — either a water-skip (flight continues) or the fail state (landed)
-    if (!f.exploded && f.splashTimer > 0) {
+    if (!f.exploded && !f.ufoDeath && f.splashTimer > 0) {
       const sy = this.wToS(0);
       const t = f.splashed ? f.splashTimer / 40 : f.splashTimer / 20;
       ctx.globalAlpha = Math.min(1, t);
@@ -1134,6 +1225,23 @@ class CannonGame {
       for (let i = 0; i < txt.length; i++) {
         ctx.fillStyle = colors[i % colors.length];
         ctx.fillText(txt[i], W / 2 - txt.length * 10 + i * 21, H * 0.27);
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // Banner plane cameo — big, flashy, Knicks-colored, timed to its pass
+    // across the sky (same fade-envelope idea as Pride, just a longer hold
+    // since it needs to cover the plane's whole transit).
+    if (f.pilotBannerTimer > 0) {
+      const t = f.pilotBannerTimer, total = 220;
+      const alpha = t > total - 20 ? (total - t) / 20 : t < 30 ? t / 30 : 1;
+      ctx.globalAlpha = alpha;
+      const txt = 'KNICKS IN 5!', colors = ['#f58426', '#006bb6'];
+      ctx.font = 'bold 42px VT323'; ctx.textAlign = 'center';
+      for (let i = 0; i < txt.length; i++) {
+        const bounce = Math.sin(this._frame * 0.25 + i * 0.6) * 6;
+        ctx.fillStyle = colors[i % colors.length];
+        ctx.fillText(txt[i], W / 2 - txt.length * 11 + i * 23, H * 0.2 + bounce);
       }
       ctx.globalAlpha = 1;
     }
@@ -1545,28 +1653,55 @@ class CannonGame {
         ctx.beginPath(); ctx.arc(ex, sy, 20, 0, Math.PI * 2); ctx.stroke();
         break;
       }
+      case 'heli_rocket': {
+        // Nose points left — it's always flying toward the player.
+        ctx.fillStyle = '#7f8c8d';
+        ctx.beginPath();
+        ctx.moveTo(ex - 16, sy); ctx.lineTo(ex, sy - 4); ctx.lineTo(ex, sy + 4);
+        ctx.closePath(); ctx.fill();
+        ctx.fillRect(ex, sy - 3.5, 8, 7);
+        ctx.fillStyle = '#c0392b';
+        ctx.beginPath();
+        ctx.moveTo(ex + 8, sy - 3.5); ctx.lineTo(ex + 14, sy); ctx.lineTo(ex + 8, sy + 3.5);
+        ctx.closePath(); ctx.fill();
+        // Flame trail — trails off the back, opposite the direction of travel.
+        const flick = (f % 4 < 2) ? 1 : 0.7;
+        ctx.fillStyle = `rgba(241,196,15,${flick})`;
+        ctx.beginPath();
+        ctx.moveTo(ex + 14, sy - 3); ctx.lineTo(ex + 30, sy); ctx.lineTo(ex + 14, sy + 3);
+        ctx.closePath(); ctx.fill();
+        break;
+      }
       case 'pilot_flyby': {
+        // A gentle bob + bank so it actually reads as flying, not scenery
+        // drifting past.
+        const bob = Math.sin(f * 0.045 + ex * 0.02) * 10;
+        const bank = Math.sin(f * 0.045 + ex * 0.02 + 0.6) * 0.09;
+        const sy2 = sy + bob;
+        ctx.save();
+        ctx.translate(ex, sy2); ctx.rotate(bank); ctx.translate(-ex, -sy2);
         // Fuselage + tail
         ctx.fillStyle = '#ecf0f1';
-        ctx.beginPath(); ctx.ellipse(ex, sy, 22, 7, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(ex, sy2, 22, 7, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#bdc3c7';
-        ctx.beginPath(); ctx.moveTo(ex - 8, sy - 2); ctx.lineTo(ex - 8, sy - 16); ctx.lineTo(ex + 8, sy - 2); ctx.closePath(); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(ex - 8, sy2 - 2); ctx.lineTo(ex - 8, sy2 - 16); ctx.lineTo(ex + 8, sy2 - 2); ctx.closePath(); ctx.fill();
         // Cockpit window + pilot (turban, beard) at the controls
         ctx.fillStyle = '#2c3e50';
-        ctx.beginPath(); ctx.arc(ex + 10, sy - 2, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex + 10, sy2 - 2, 6, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#e67e22';
-        ctx.beginPath(); ctx.arc(ex + 10, sy - 4, 4.5, Math.PI, 0); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex + 10, sy2 - 4, 4.5, Math.PI, 0); ctx.fill();
         ctx.fillStyle = '#c68a5a';
-        ctx.beginPath(); ctx.arc(ex + 10, sy - 1, 3.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(ex + 10, sy2 - 1, 3.2, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#3a2a1a';
-        ctx.beginPath(); ctx.arc(ex + 10, sy + 2, 2.5, 0, Math.PI); ctx.fill();
-        // Tow banner
+        ctx.beginPath(); ctx.arc(ex + 10, sy2 + 2, 2.5, 0, Math.PI); ctx.fill();
+        // Small trailing pennant — the big screen banner carries the joke now
         ctx.strokeStyle = '#999'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(ex - 24, sy); ctx.lineTo(ex - 70, sy); ctx.stroke();
-        ctx.fillStyle = '#f1c40f'; ctx.fillRect(ex - 152, sy - 12, 84, 24);
-        ctx.strokeStyle = '#c8860a'; ctx.lineWidth = 1.5; ctx.strokeRect(ex - 152, sy - 12, 84, 24);
-        ctx.fillStyle = '#1a1a1a'; ctx.font = 'bold 13px VT323'; ctx.textAlign = 'center';
-        ctx.fillText('KNICKS IN 5!', ex - 110, sy + 4);
+        ctx.beginPath(); ctx.moveTo(ex - 24, sy2); ctx.lineTo(ex - 46, sy2); ctx.stroke();
+        ctx.fillStyle = '#f58426';
+        ctx.beginPath();
+        ctx.moveTo(ex - 46, sy2 - 10); ctx.lineTo(ex - 70, sy2); ctx.lineTo(ex - 46, sy2 + 10);
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
         break;
       }
     }
@@ -1873,7 +2008,8 @@ class CannonGame {
     const distance = Math.floor(this.flight.distance);
     const splashed = this.flight.splashed;
     const exploded = this.flight.exploded;
-    const failed   = splashed || exploded;
+    const ufoDeath = this.flight.ufoDeath;
+    const failed   = splashed || exploded || ufoDeath;
     // A failed attempt still earns Borough Bucks for the distance you did
     // cover — the failure is not reaching the borough, not the run being
     // worthless.
