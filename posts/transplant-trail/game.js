@@ -207,21 +207,25 @@ class TransplantTrail {
   // content while it's actively being iterated on.
   maybeDebugJump() {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('jail') !== '1') return false;
+    const target = params.get('jail') === '1' ? 'jail'
+                 : params.get('cannon') === '1' ? 'cannon'
+                 : null;
+    if (!target) return false;
     // This runs synchronously inside the TransplantTrail constructor --
     // but `game = new TransplantTrail()` (bottom of this file) hasn't
     // finished assigning the global yet at this point, and
-    // startJailGame() (trail.js) calls game.showScreen(...). Calling it
-    // from here directly hit `game` still undefined, threw, and silently
-    // aborted before any screen change -- which looked exactly like
-    // "the link just goes to the beginning of the game." Deferring one
+    // startJailGame()/startCannonGame() (trail.js) call game.showScreen(...).
+    // Calling either from here directly hit `game` still undefined, threw,
+    // and silently aborted before any screen change -- which looked exactly
+    // like "the link just goes to the beginning of the game." Deferring one
     // tick lets the constructor finish and `game` get assigned first.
     setTimeout(() => {
       this.selectCharacter('remote-worker');
       this.state.playerName = 'Tester';
       this.state.departureMonth = 'may';
       trailGame = new TrailGame(this.state);
-      trailGame.startJailGame();
+      if (target === 'jail') trailGame.startJailGame();
+      else trailGame.startCannonGame();
     }, 0);
     return true;
   }
