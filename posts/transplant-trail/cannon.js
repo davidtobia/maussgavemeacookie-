@@ -37,7 +37,7 @@ const CANNON_UPGRADES = {
 
 const TARGET_BOROUGHS = [
   {
-    id: 'hoboken', name: 'Hoboken, NJ', angle: 290, minBlocks: 550, color: '#e67e22',
+    id: 'hoboken', name: 'Hoboken, NJ', angle: 290, minBlocks: 650, color: '#e67e22',
     river: { name: 'Hudson River', atBlock: 180, width: 340, bridge: 'sully' },
     unlock: {
       title: 'Giant Cannoli + MAGA Girlfriend',
@@ -45,7 +45,7 @@ const TARGET_BOROUGHS = [
     },
   },
   {
-    id: 'brooklyn-heights', name: 'Brooklyn Heights', angle: 145, minBlocks: 975, color: '#3498db',
+    id: 'brooklyn-heights', name: 'Brooklyn Heights', angle: 145, minBlocks: 1150, color: '#3498db',
     river: { name: 'East River', atBlock: 480, width: 345, bridge: 'brooklyn_bridge' },
     unlock: {
       title: 'Park Slope Food Co-op + Legal Summons',
@@ -53,7 +53,7 @@ const TARGET_BOROUGHS = [
     },
   },
   {
-    id: 'bushwick', name: 'Bushwick', angle: 110, minBlocks: 1950, color: '#9b59b6',
+    id: 'bushwick', name: 'Bushwick', angle: 110, minBlocks: 2450, color: '#9b59b6',
     river: { name: 'East River', atBlock: 480, width: 345, bridge: 'brooklyn_bridge' },
     unlock: {
       title: 'Septum Piercing + ENM Marriage Reshuffle Goodybag',
@@ -61,7 +61,7 @@ const TARGET_BOROUGHS = [
     },
   },
   {
-    id: 'astoria', name: 'Astoria, Queens', angle: 35, minBlocks: 2850, color: '#2ecc71',
+    id: 'astoria', name: 'Astoria, Queens', angle: 35, minBlocks: 3700, color: '#2ecc71',
     river: { name: 'East River', atBlock: 600, width: 405, bridge: 'queensboro' },
     unlock: {
       title: 'Reasonable Rent + Boring Personality',
@@ -809,8 +809,12 @@ class CannonGame {
     // simulated across free and mid-tier gear, this alone roughly doubles
     // hazard encounters per flight without dropping mid-tier win rates (still
     // 100% everywhere) or moving turn-1 win rates outside noise.
-    const skyInterval = Math.max(16, 32 - Math.floor(f.distance / 250));
-    const groundInterval = Math.max(30, 54 - Math.floor(f.distance / 250));
+    // Density pass #2 (per direct playtest feedback: fully-geared runs beat
+    // levels "basically immediately"): base/floor tightened another ~15-20%
+    // on top of the prior density pass, so there's simply more to dodge at
+    // every stage, not just later in long flights.
+    const skyInterval = Math.max(13, 27 - Math.floor(f.distance / 250));
+    const groundInterval = Math.max(24, 45 - Math.floor(f.distance / 250));
     if (f.spawnTimer % skyInterval === 0) this.spawnSky();
     if (f.spawnTimer % groundInterval === 0 && f.distance > 15) this.spawnGround();
     this.updateLaunchersAndArcs();
@@ -876,7 +880,7 @@ class CannonGame {
 
     // Long flights get meaner: occasionally upgrade a benign pickup into a hazard,
     // scaling with distance. Keeps endurance suits (eagle/jetpack) from being a free ride.
-    const hazardBias = Math.min(0.35, this.flight.distance / 3000);
+    const hazardBias = Math.min(0.42, this.flight.distance / 3000);
     const escalate = { coin: 'dark_cloud', ring: 'pigeon_obs', light_cloud: 'helicopter', pretzel: 'pigeon_obs' };
     if (escalate[type] && Math.random() < hazardBias) type = escalate[type];
 
