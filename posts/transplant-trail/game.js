@@ -201,31 +201,33 @@ class TransplantTrail {
   }
 
   // Dev-only shortcut for playtesting one chapter without playing the
-  // whole game up to it: ?jail=1 in the URL seeds a default character
-  // and boots straight into Act 3, skipping the trail/heist entirely.
-  // Not a real game feature -- just a fast way to get eyes on new
-  // content while it's actively being iterated on.
+  // whole game up to it: ?<chapter>=1 in the URL seeds a default
+  // character and boots straight into that chapter, skipping everything
+  // before it. Not a real game feature -- just a fast way to get eyes on
+  // new content while it's actively being iterated on.
   maybeDebugJump() {
     const params = new URLSearchParams(window.location.search);
-    const target = params.get('jail') === '1' ? 'jail'
-                 : params.get('cannon') === '1' ? 'cannon'
-                 : null;
+    const targets = ['apartment', 'bodega', 'cannon', 'heist', 'jail'];
+    const target = targets.find(t => params.get(t) === '1') || null;
     if (!target) return false;
     // This runs synchronously inside the TransplantTrail constructor --
     // but `game = new TransplantTrail()` (bottom of this file) hasn't
-    // finished assigning the global yet at this point, and
-    // startJailGame()/startCannonGame() (trail.js) call game.showScreen(...).
-    // Calling either from here directly hit `game` still undefined, threw,
-    // and silently aborted before any screen change -- which looked exactly
-    // like "the link just goes to the beginning of the game." Deferring one
-    // tick lets the constructor finish and `game` get assigned first.
+    // finished assigning the global yet at this point, and each of these
+    // chapter-start methods (trail.js) calls game.showScreen(...). Calling
+    // one from here directly hit `game` still undefined, threw, and
+    // silently aborted before any screen change -- which looked exactly
+    // like "the link just goes to the beginning of the game." Deferring
+    // one tick lets the constructor finish and `game` get assigned first.
     setTimeout(() => {
       this.selectCharacter('remote-worker');
       this.state.playerName = 'Tester';
       this.state.departureMonth = 'may';
       trailGame = new TrailGame(this.state);
-      if (target === 'jail') trailGame.startJailGame();
-      else trailGame.startCannonGame();
+      if (target === 'apartment')     trailGame.apartmentHunt();
+      else if (target === 'bodega')   trailGame.startBodegaGame();
+      else if (target === 'cannon')   trailGame.startCannonGame();
+      else if (target === 'heist')    trailGame.startHeistGame();
+      else if (target === 'jail')     trailGame.startJailGame();
     }, 0);
     return true;
   }
@@ -627,37 +629,12 @@ class TransplantTrail {
 let game;
 document.addEventListener('DOMContentLoaded', () => {
   game = new TransplantTrail();
-
-  // Dev shortcuts: ?scene=bodega, ?scene=cannon or ?scene=heist
-  const params = new URLSearchParams(window.location.search);
-  const scene  = params.get('scene');
-
-  if (scene === 'bodega' || scene === 'cannon' || scene === 'heist') {
-    const char = getCharacter('remote-worker');
-    game.state.selectedCharacter = char;
-    game.state.playerName        = 'Dev';
-    game.state.checkingAccount   = char.checkingAccount;
-    game.state.balances          = { ...char.balances };
-    game.state.departureMonth    = 'march';
-
-    if (scene === 'bodega') {
-      game.showScreen('trail-screen');
-      trailGame = new TrailGame(game.state);
-      trailGame.startBodegaGame();
-    } else if (scene === 'heist') {
-      // Jump straight into Act 2 through the same entry point the trail uses,
-      // so the dev shortcut exercises the real wiring and not a parallel path.
-      game.state.wisemenJoined   = true;
-      game.state.wiseEricsPitched = true;
-      game.showScreen('trail-screen');
-      trailGame = new TrailGame(game.state);
-      trailGame.startHeistGame();
-    } else {
-      game.showScreen('cannon-game');
-      cannonGame = new CannonGame(game.state, () => {
-        alert('Cannon game complete! (dev mode)');
-      });
-      cannonGame.init();
-    }
-  }
+  // Dev shortcuts (?apartment=1, ?bodega=1, ?cannon=1, ?heist=1, ?jail=1)
+  // are handled inside the constructor via maybeDebugJump() -- see game.js
+  // above. (There used to be a second, older ?scene=bodega/cannon/heist
+  // mechanism here too, with its own divergent dev-character setup and a
+  // cannon path that skipped startCannonGame() entirely -- meaning
+  // wisemenJoined never got set, so completing it wouldn't actually chain
+  // into the heist the way real play does. Consolidated onto the one
+  // path that's actually been tested.)
 });
