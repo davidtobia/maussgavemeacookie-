@@ -158,6 +158,12 @@ class JailRhythmGame {
     this.missShake = 0;
     this.finished = false;
 
+    // The dancer — eases toward a target "energy" level driven by recent
+    // hit quality, so the character actually performs better the better
+    // you're playing instead of just sitting there as scenery.
+    this.danceEnergy = 0.3;
+    this._danceTarget = 0.3;
+
     this._buildChart();
     this.maxPossible = this.notes.length * 100;
     this._startAudio();
@@ -289,6 +295,7 @@ class JailRhythmGame {
     });
     if (!best || bestDist > 150) {
       this.combo = 0;
+      this._danceTarget = 0.08;
       this._flashJudge(lane, 'MISS', '#7a6a5a');
       return;
     }
@@ -301,6 +308,8 @@ class JailRhythmGame {
     this.maxCombo = Math.max(this.maxCombo, this.combo);
     const mult = 1 + Math.min(10, Math.floor(this.combo / 10)) * 0.1;
     this.earned += score * mult;
+    // The higher the combo, the harder the character goes.
+    this._danceTarget = jailClamp(0.45 + (grade === 'PERFECT' ? 0.4 : grade === 'GREAT' ? 0.25 : 0.1) + this.combo * 0.02, 0, 1);
     this._flashJudge(lane, grade, color);
     this._hitFx(lane, color, grade === 'PERFECT');
   }
@@ -324,6 +333,70 @@ class JailRhythmGame {
     return { x: (W - w) / 2, y: H * 0.05, w, h };
   }
 
+  // A cute, reactive chibi dancer behind the lanes -- the whole point is
+  // this game "spiritually" being a Mario-Party rhythm minigame, and
+  // those always sell the beat through a character, not just abstract
+  // lanes. Twerk motion + how hard the character's going both scale with
+  // this.danceEnergy, which eases toward a target set by recent hit
+  // quality (see _hitLane / the miss-timeout in _loop) -- play well and
+  // the character visibly goes off; whiff a run of notes and it deflates.
+  _drawDancer(t, b) {
+    const ctx = this.ctx;
+    const cx = b.x + b.w / 2;
+    const groundY = b.y + b.h * 0.9;
+    const e = this.danceEnergy;
+
+    const beatMs = (60000 / JAIL_RHYTHM_CHART.bpm) / 2;
+    const phase = ((t % beatMs) / beatMs + 1) % 1;
+    const bounce = Math.sin(phase * Math.PI * 2) * (6 + e * 16);
+    const twerk = Math.sin(phase * Math.PI * 4) * (5 + e * 26);
+    const scale = 0.92 + e * 0.16;
+    const wobble = this.missShake > 0 && !this._reduced ? (Math.random() - 0.5) * this.missShake * 0.6 : 0;
+
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    ctx.translate(cx + wobble, groundY - Math.max(0, bounce));
+    ctx.scale(scale, scale);
+
+    // Legs, planted
+    ctx.fillStyle = jailShade(this.char.color, -45);
+    ctx.fillRect(-24, -2, 15, 36);
+    ctx.fillRect(9, -2, 15, 36);
+
+    // Booty — the twerk element, oscillating on double time
+    ctx.save();
+    ctx.translate(0, -22);
+    ctx.rotate(twerk * 0.012);
+    ctx.fillStyle = this.char.color;
+    ctx.beginPath();
+    ctx.ellipse(0, 8 + Math.abs(twerk) * 0.5, 36, 24, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Torso
+    ctx.fillStyle = jailShade(this.char.color, 15);
+    jailRoundRectPath(ctx, -20, -74, 40, 56, 14);
+    ctx.fill();
+
+    // Arms — thrown up celebrating at high energy, hanging low and sad
+    // when the run's going badly.
+    const armLift = jailClamp((e - 0.3) / 0.7, 0, 1);
+    const armX = -20 - armLift * 12, armY = -55 - armLift * 40;
+    ctx.strokeStyle = jailShade(this.char.color, -20);
+    ctx.lineWidth = 10; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-18, -58); ctx.lineTo(armX, armY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(18, -58); ctx.lineTo(-armX, armY); ctx.stroke();
+
+    // Head + shades — a chibi silhouette, not a likeness
+    ctx.fillStyle = '#d9a878';
+    ctx.beginPath(); ctx.arc(0, -90, 21, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#0c0c0c';
+    jailRoundRectPath(ctx, -17, -94, 34, 10, 4);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
   _updateHud() {
     const acc = this.maxPossible > 0 ? jailClamp(this.earned / this.maxPossible, 0, 1) : 0;
     const comboEl = document.getElementById('jail-rhythm-combo');
@@ -338,9 +411,11 @@ class JailRhythmGame {
       if (!n.judged && t - n.t > 150) {
         n.judged = true;
         this.combo = 0;
+        this._danceTarget = 0.08;
         if (!this._reduced) this.missShake = 8;
       }
     });
+    this.danceEnergy += (this._danceTarget - this.danceEnergy) * 0.08;
     if (this.judgeFlash) { this.judgeFlash.t--; if (this.judgeFlash.t <= 0) this.judgeFlash = null; }
     if (this.perfectFlash > 0) this.perfectFlash--;
     if (this.missShake > 0) this.missShake--;
@@ -381,6 +456,8 @@ class JailRhythmGame {
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo(b.x + laneW * i, b.y); ctx.lineTo(b.x + laneW * i, b.y + b.h); ctx.stroke();
     }
+
+    this._drawDancer(t, b);
 
     const barMs = (60000 / JAIL_RHYTHM_CHART.bpm) * 4;
     const beatPhase = (t % (barMs / 4)) / (barMs / 4);
