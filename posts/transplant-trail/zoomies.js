@@ -27,10 +27,6 @@
 // just place names"), everything else follows the existing short-
 // functional-label precedent (SPLASH!, PERFECT) or is [PLACEHOLDER].
 
-function zoomiesReducedMotion() {
-  try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
-  catch (e) { return false; }
-}
 function zoomiesAlpha(hex, a) {
   const h = hex.replace('#', '');
   const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
@@ -126,7 +122,6 @@ class ZoomiesGame {
     this._af = null;
     this._frame = 0;
     this._resizeHandler = null;
-    this._reduced = zoomiesReducedMotion();
   }
 
   init() {
@@ -512,8 +507,9 @@ class ZoomiesGame {
 
     // Rush -> saturation/hue via canvas filters -- global, cheap,
     // exactly the "world gets more psychedelic" effect the meter needs.
-    // Skipped under reduced-motion (hue-rotate especially).
-    if (!this._reduced) {
+    // Always on, full intensity -- this is a small-friend-group game,
+    // not shipping to a general audience, so no reduced-motion handling.
+    {
       const sat = 75 + this.rush * 110;
       const hue = this.rush > 0.66 ? (this._frame * 1.3) % 360 : 0;
       ctx.filter = `saturate(${sat}%)${hue ? ` hue-rotate(${hue}deg)` : ''}`;
@@ -703,7 +699,7 @@ class ZoomiesGame {
         });
       }
       // Dappled light blobs.
-      if (!this._reduced && seg.index % 5 === 0) {
+      if (seg.index % 5 === 0) {
         const wx = seg.worldX + (Math.sin(seg.index) * seg.w * 0.6);
         const pr = this._project(wx, 5, segZ);
         if (pr && pr.scale > 0) {
