@@ -948,9 +948,16 @@ class TrailGame {
     // walking through them.
     if (landmark.id === 'murray-hill') {
       this.apartmentHunt();
-    } else if (landmark.id === 'midtown' && this.gameState.bodegaDone && !this.gameState.zoomiesOffered) {
-      this.gameState.zoomiesOffered = true;
-      this.showZoomiesOffer();
+    // The midtown zoomies offer is pulled for now -- v4's rooftop-jump
+    // build had a real, confirmed structural bug (a respawn trap that
+    // could strand a player failing the same jump forever) plus a
+    // direct "ugly, not fun, doesn't work" verdict. Removed from the
+    // reachable game per explicit instruction ("remove it from the
+    // game right now... we can design it in a fun way later") rather
+    // than left live while broken. showZoomiesOffer()/startZoomiesGame()
+    // and zoomies.js itself are untouched as a base for a future
+    // redesign -- only this trigger and the debug/test entry points are
+    // disabled. See memory: transplant-trail-future-vision.md.
     } else if (landmark.id === 'washington-square-park') {
       this.showEvent('You arrive at Washington Square Park. Three figures are waiting by the arch.', () => this.startCannonGame());
     } else if (landmark.type === 'fort') {
@@ -1048,8 +1055,6 @@ class TrailGame {
     bodegaGame = new BodegaGame(this.gameState, () => {
       // Save chapter 2 checkpoint after bodega completes
       game.saveChapter(2, this.getTrailStateSnapshot());
-      // Arms the one-time zoomies offer at the next landmark (midtown) --
-      // see reachLandmark()/showZoomiesOffer().
       this.gameState.bodegaDone = true;
       game.showScreen('trail-screen');
       this.start();

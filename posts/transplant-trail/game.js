@@ -211,7 +211,7 @@ class TransplantTrail {
   // new content while it's actively being iterated on.
   maybeDebugJump() {
     const params = new URLSearchParams(window.location.search);
-    const targets = ['apartment', 'bodega', 'zoomies', 'cannon', 'heist', 'jail'];
+    const targets = ['apartment', 'bodega', 'cannon', 'heist', 'jail']; // 'zoomies' pulled -- see reachLandmark() in trail.js
     const target = targets.find(t => params.get(t) === '1') || null;
     if (!target) return false;
     // This runs synchronously inside the TransplantTrail constructor --
@@ -229,7 +229,6 @@ class TransplantTrail {
       trailGame = new TrailGame(this.state);
       if (target === 'apartment')     trailGame.apartmentHunt();
       else if (target === 'bodega')   trailGame.startBodegaGame();
-      else if (target === 'zoomies')  trailGame.startZoomiesGame();
       else if (target === 'cannon')   trailGame.startCannonGame();
       else if (target === 'heist')    trailGame.startHeistGame();
       else if (target === 'jail')     trailGame.startJailGame();
