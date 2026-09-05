@@ -74,6 +74,12 @@ class TransplantTrail {
       bodegaScore: 0,
       boroughBucks: 0,
       cannonProgress: null,
+      // zoomiesScore/bodegaDone/zoomiesOffered: only ever read by the
+      // zoomies trail-offer, which is currently disabled (see
+      // reachLandmark() in trail.js) after a confirmed-broken build was
+      // pulled from live play. Kept, not deleted, as part of the same
+      // scaffolding-for-a-future-redesign decision -- write-only until
+      // that trigger is reconnected.
       zoomiesScore: 0,
       bodegaDone: false,
       zoomiesOffered: false,
