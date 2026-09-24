@@ -2131,15 +2131,21 @@ class HeistGame {
       // run could easily end without ever handing you a gun (confirmed --
       // "I never got the ability to shoot the guns" was bad luck on a
       // ~4% chance per spawn, not a bug, but a mechanic nobody ever sees
-      // isn't much of a mechanic). Each of the four pickup types is
-      // guaranteed to appear at least once, spaced through the run,
-      // independent of the random spawns that still happen on top.
-      pickupQueue: ['gun', 'nitro', 'rocket', 'speedpwr'].sort(() => Math.random() - 0.5),
+      // isn't much of a mechanic). Gun and rocket each guaranteed TWICE
+      // per run now, not once -- direct feedback: "shooting is the fun
+      // part," so weapons are weighted toward showing up more than the
+      // utility pickups (nitro/speedpwr still get one guaranteed
+      // appearance each), independent of the random spawns on top of
+      // this queue (see spawnGetawayObstacle() below, also reweighted).
+      pickupQueue: ['gun', 'nitro', 'rocket', 'gun', 'speedpwr', 'rocket'].sort(() => Math.random() - 0.5),
       nextGuaranteedAt: 0,
       laneUp: () => { const g = this.mech; if (g && g.lane > 0) g.lane--; },
       laneDown: () => { const g = this.mech; if (g && g.lane < 2) g.lane++; },
     };
-    this.mech.nextGuaranteedAt = this.mech.durationFrames * 0.12;
+    // 6 guaranteed items now (was 4) -- tighter spacing so they still all
+    // land with room to use the last one (8%, 23%, 38%, 53%, 68%, 83%
+    // through the run) instead of bunching up near the end.
+    this.mech.nextGuaranteedAt = this.mech.durationFrames * 0.08;
     this.mech.laneY = this.laneCenterY(1);
     this.getawayJumpHeld = false;
     this.jumpedOffBridge = false;
@@ -2279,7 +2285,7 @@ class HeistGame {
       if (g.pickupQueue.length > 0 && g.elapsed >= g.nextGuaranteedAt) {
         const type = g.pickupQueue.shift();
         g.obstacles.push({ kind: 'pickup', type, lane: Math.floor(Math.random() * 3), x: this.canvas.width + 80, hit: false });
-        g.nextGuaranteedAt += g.durationFrames * 0.20;
+        g.nextGuaranteedAt += g.durationFrames * 0.15;
       }
 
     }
@@ -2424,10 +2430,13 @@ class HeistGame {
     const roll = Math.random();
     const lane = Math.floor(Math.random() * 3);
     const W = this.canvas.width;
-    if (roll < 0.16) {
-      // A pickup instead of a hazard -- nitro most common, rockets rarest.
+    // Pickup chance raised 0.16 -> 0.24, and the split inside it
+    // reweighted toward the guns -- direct feedback: "shooting is the
+    // fun part," so weapon pickups should be the common case here, not
+    // the rare one nitro/speedpwr used to crowd out.
+    if (roll < 0.24) {
       const pickupRoll = Math.random();
-      const type = pickupRoll < 0.35 ? 'nitro' : pickupRoll < 0.6 ? 'speedpwr' : pickupRoll < 0.85 ? 'gun' : 'rocket';
+      const type = pickupRoll < 0.20 ? 'nitro' : pickupRoll < 0.38 ? 'speedpwr' : pickupRoll < 0.70 ? 'gun' : 'rocket';
       this.mech.obstacles.push({ kind: 'pickup', type, lane, x: W + 80, hit: false });
       return;
     }
@@ -3290,11 +3299,26 @@ class HeistGame {
         ctx.lineTo(x + 3, y + 18); ctx.lineTo(x - 9, y + 2); ctx.lineTo(x, y + 2);
         ctx.closePath(); ctx.fill();
         break;
-      case 'gun':
-        // Was two flat grey rectangles -- read as a blob on a phone
-        // screen. An actual rifle silhouette instead, curved magazine
-        // included, same as the FIRE button icon.
+      case 'gun': {
+        // Direct feedback: "make the gun and rocket launcher more
+        // visually obvious -- shooting is the fun part." The rifle
+        // silhouette itself (dark, thin lines) was already correct but
+        // still lost in a busy road at speed -- nothing set a weapon
+        // pickup apart from a dumpster or a pothole at a glance. A
+        // pulsing glow disc behind it (same orange as the FIRE button
+        // itself, so the color association reads instantly) plus a
+        // label, same treatment nitro's "N2O" already had.
+        const pulse = 0.7 + Math.sin(this._frame * 0.15) * 0.3;
         ctx.save();
+        const glow = ctx.createRadialGradient(x, y, 2, x, y, 34);
+        glow.addColorStop(0, `rgba(224,120,42,${0.55 * pulse})`);
+        glow.addColorStop(1, 'rgba(224,120,42,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(x, y, 34, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = `rgba(255,178,110,${0.6 * pulse})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x, y, 27, 0, Math.PI * 2); ctx.stroke();
+
         ctx.translate(x, y);
         ctx.fillStyle = '#3a322a';
         ctx.fillRect(-26, -3, 38, 6);          // barrel + body
@@ -3311,15 +3335,35 @@ class HeistGame {
         ctx.quadraticCurveTo(-9, 14, -7, 3);
         ctx.closePath(); ctx.fill();
         ctx.restore();
+        ctx.fillStyle = '#ffd9a8';
+        ctx.font = 'bold 10px VT323, monospace'; ctx.textAlign = 'center';
+        ctx.fillText('GUN', x, y + 30);
         break;
-      case 'rocket':
+      }
+      case 'rocket': {
+        const pulse = 0.7 + Math.sin(this._frame * 0.15 + 1.6) * 0.3;
+        ctx.save();
+        const glow = ctx.createRadialGradient(x, y, 2, x, y, 36);
+        glow.addColorStop(0, `rgba(200,60,50,${0.6 * pulse})`);
+        glow.addColorStop(1, 'rgba(200,60,50,0)');
+        ctx.fillStyle = glow;
+        ctx.beginPath(); ctx.arc(x, y, 36, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = `rgba(255,150,120,${0.65 * pulse})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(x, y, 29, 0, Math.PI * 2); ctx.stroke();
+
         ctx.fillStyle = '#8a4a3a';
         ctx.fillRect(x - 8, y - 20, 16, 34);
         ctx.fillStyle = '#c8402f';
         ctx.beginPath(); ctx.moveTo(x - 8, y - 20); ctx.lineTo(x, y - 32); ctx.lineTo(x + 8, y - 20); ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#e2622c';
         ctx.fillRect(x - 10, y + 14, 6, 8); ctx.fillRect(x + 4, y + 14, 6, 8);
+        ctx.restore();
+        ctx.fillStyle = '#ffcdb8';
+        ctx.font = 'bold 10px VT323, monospace'; ctx.textAlign = 'center';
+        ctx.fillText('RKT', x, y + 32);
         break;
+      }
       case 'cab':
         ctx.fillStyle = '#e8b32a';
         ctx.fillRect(x - 36, y - 16, 72, 30);
