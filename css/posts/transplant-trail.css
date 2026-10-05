@@ -33,6 +33,20 @@ body.game-zoom-lock {
   overscroll-behavior: none;
 }
 
+/* A held or repeated tap on a game canvas must never turn into a text
+   selection, the iOS long-press callout/magnifier, or a tap highlight --
+   any of those swallows the touch the game was waiting for. */
+html.game-zoom-lock * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html.game-zoom-lock button {
+  touch-action: manipulation;
+}
+
 /* Game Container */
 .game-container {
   min-height: 100vh;

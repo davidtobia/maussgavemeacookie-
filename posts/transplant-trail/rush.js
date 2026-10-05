@@ -96,8 +96,15 @@ class RushGame {
     this._resize();
     window.addEventListener('resize', this._resize);
 
-    this._down = (e) => { e.preventDefault(); this.press(); };
-    this._up = () => this.release();
+    // Touch goes through touchstart, not pointerdown: preventDefault on
+    // the touch itself is the one thing iOS reliably honors for stopping
+    // double-tap zoom and the long-press callout, and when the browser
+    // does claim a gesture it cancels the pointer stream (a dropped
+    // jump). Pointer events are left for mouse/pen only.
+    this._down = (e) => { if (e.pointerType === 'touch') return; e.preventDefault(); this.press(); };
+    this._up = (e) => { if (e && e.pointerType === 'touch') return; this.release(); };
+    this._ts = (e) => { e.preventDefault(); for (let i = 0; i < e.changedTouches.length; i++) this.press(); };
+    this._te = (e) => { e.preventDefault(); if (e.touches.length === 0) this.release(); };
     this._kd = (e) => {
       if (e.key !== ' ' && e.key !== 'ArrowUp' && e.key.toLowerCase() !== 'w') return;
       e.preventDefault();
@@ -107,6 +114,9 @@ class RushGame {
       if (e.key === ' ' || e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') this.release();
     };
     this.canvas.addEventListener('pointerdown', this._down);
+    this.canvas.addEventListener('touchstart', this._ts, { passive: false });
+    this.canvas.addEventListener('touchend', this._te, { passive: false });
+    this.canvas.addEventListener('touchcancel', this._te, { passive: false });
     window.addEventListener('pointerup', this._up);
     window.addEventListener('pointercancel', this._up);
     window.addEventListener('keydown', this._kd);
@@ -171,7 +181,12 @@ class RushGame {
     if (this._af) cancelAnimationFrame(this._af);
     this._af = null;
     window.removeEventListener('resize', this._resize);
-    if (this.canvas) this.canvas.removeEventListener('pointerdown', this._down);
+    if (this.canvas) {
+      this.canvas.removeEventListener('pointerdown', this._down);
+      this.canvas.removeEventListener('touchstart', this._ts);
+      this.canvas.removeEventListener('touchend', this._te);
+      this.canvas.removeEventListener('touchcancel', this._te);
+    }
     window.removeEventListener('pointerup', this._up);
     window.removeEventListener('pointercancel', this._up);
     window.removeEventListener('keydown', this._kd);

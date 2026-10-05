@@ -79,7 +79,34 @@ class TransplantTrail {
     };
   }
 
+  // iOS Safari still double-tap-zooms (and pinch-zooms) through
+  // touch-action: none and user-scalable=no in some versions -- found
+  // live: "the tapping can cause the phone to zoom instead." CSS alone
+  // isn't enough, so while a canvas game screen is up these cancel the
+  // gestures directly: any pinch, and the second tap of a quick pair
+  // anywhere that isn't a button (buttons get touch-action: manipulation
+  // instead, so their clicks are never eaten).
+  setupZoomGuard() {
+    const locked = () => document.documentElement.classList.contains('game-zoom-lock');
+    const opts = { passive: false };
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev =>
+      document.addEventListener(ev, (e) => { if (locked()) e.preventDefault(); }, opts));
+    document.addEventListener('touchmove', (e) => {
+      if (locked() && e.touches.length > 1) e.preventDefault();
+    }, opts);
+    let lastEnd = 0;
+    document.addEventListener('touchend', (e) => {
+      if (!locked()) return;
+      const now = Date.now();
+      const quick = now - lastEnd < 400;
+      lastEnd = now;
+      if (quick && !(e.target.closest && e.target.closest('button, a, input'))) e.preventDefault();
+    }, opts);
+    document.addEventListener('dblclick', (e) => { if (locked()) e.preventDefault(); }, opts);
+  }
+
   init() {
+    this.setupZoomGuard();
     if (this.maybeDebugJump()) return;
 
     // Load screen - press any key or click to continue

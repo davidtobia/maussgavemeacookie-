@@ -276,15 +276,27 @@ class JailRhythmGame {
     // slightly-off thumb still registers as that lane; pointerdown
     // covers touch and mouse both, and each finger is its own event so
     // two-lane chords work on a phone.
-    this._canvasDownH = (e) => {
-      e.preventDefault();
+    const laneAt = (clientX) => {
       const rect = this.canvas.getBoundingClientRect();
-      const x = (e.clientX - rect.left) * (this.canvas.width / (rect.width || 1));
+      const x = (clientX - rect.left) * (this.canvas.width / (rect.width || 1));
       const b = this._bounds();
-      const lane = jailClamp(Math.floor((x - b.x) / (b.w / 3)), 0, 2);
-      this._hitLane(lane);
+      return jailClamp(Math.floor((x - b.x) / (b.w / 3)), 0, 2);
     };
+    // Mouse/pen via pointerdown; touch via touchstart with preventDefault
+    // (the reliable way to stop iOS double-tap zoom eating fast taps).
+    this._canvasDownH = (e) => {
+      if (e.pointerType === 'touch') return;
+      e.preventDefault();
+      this._hitLane(laneAt(e.clientX));
+    };
+    this._canvasTouchH = (e) => {
+      e.preventDefault();
+      for (let i = 0; i < e.changedTouches.length; i++) this._hitLane(laneAt(e.changedTouches[i].clientX));
+    };
+    this._canvasTouchEndH = (e) => e.preventDefault();
     this.canvas.addEventListener('pointerdown', this._canvasDownH);
+    this.canvas.addEventListener('touchstart', this._canvasTouchH, { passive: false });
+    this.canvas.addEventListener('touchend', this._canvasTouchEndH, { passive: false });
   }
 
   _hitLane(lane) {
@@ -560,6 +572,8 @@ class JailRhythmGame {
     if (this._schedulerTimer) clearInterval(this._schedulerTimer);
     window.removeEventListener('keydown', this._keyDownH);
     this.canvas.removeEventListener('pointerdown', this._canvasDownH);
+    this.canvas.removeEventListener('touchstart', this._canvasTouchH);
+    this.canvas.removeEventListener('touchend', this._canvasTouchEndH);
     document.getElementById('jail-rhythm-hud').classList.add('hidden');
     if (this.audioCtx) { try { this.audioCtx.close(); } catch (e) { /* ignore */ } }
   }
