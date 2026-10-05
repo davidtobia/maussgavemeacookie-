@@ -74,15 +74,8 @@ class TransplantTrail {
       bodegaScore: 0,
       boroughBucks: 0,
       cannonProgress: null,
-      // zoomiesScore/bodegaDone/zoomiesOffered: only ever read by the
-      // zoomies trail-offer, which is currently disabled (see
-      // reachLandmark() in trail.js) after a confirmed-broken build was
-      // pulled from live play. Kept, not deleted, as part of the same
-      // scaffolding-for-a-future-redesign decision -- write-only until
-      // that trigger is reconnected.
-      zoomiesScore: 0,
       bodegaDone: false,
-      zoomiesOffered: false,
+      rushScore: 0,
     };
   }
 
@@ -132,7 +125,7 @@ class TransplantTrail {
     // finger can't be outside the locked subtree -- everything on screen
     // during a canvas game is inside it. Restored the moment you're back
     // on a reading screen, where pinch/double-tap zoom is still wanted.
-    const CANVAS_GAME_SCREENS = new Set(['cannon-game', 'heist-game', 'bodega-game', 'jail-game']);
+    const CANVAS_GAME_SCREENS = new Set(['cannon-game', 'heist-game', 'bodega-game', 'jail-game', 'rush-game']);
     const lockZoom = CANVAS_GAME_SCREENS.has(screenId);
     document.documentElement.classList.toggle('game-zoom-lock', lockZoom);
     document.body.classList.toggle('game-zoom-lock', lockZoom);
@@ -180,14 +173,6 @@ class TransplantTrail {
       { label: 'Travel the trail', action: 'start' },
       ...(hasSave ? [{ label: 'Continue', action: 'continue' }] : []),
       ...(hasSave ? [{ label: 'Choose chapter', action: 'chapters' }] : []),
-      // "Learn about the trail" cut -- dead stub, no content ever
-      // written, and the game already explains itself inline (premise
-      // screen, event text). "See the leaderboard" and "Turn sound off"
-      // stay even though both are still stubs -- a local personal-best
-      // leaderboard is real, buildable work (see the note where
-      // showLeaderboard() used to alert()), and sound is planned.
-      { label: 'See the leaderboard', action: 'leaderboard' },
-      { label: 'Turn sound off', action: 'sound' },
     ];
 
     actions.forEach((a, i) => {
@@ -205,8 +190,6 @@ class TransplantTrail {
       case 'start':       this.startGame(); break;
       case 'continue':    this.continueGame(); break;
       case 'chapters':    this.showChapterSelect(); break;
-      case 'leaderboard': this.showLeaderboard(); break;
-      case 'sound':       this.toggleSound(); break;
     }
   }
 
@@ -217,7 +200,7 @@ class TransplantTrail {
   // new content while it's actively being iterated on.
   maybeDebugJump() {
     const params = new URLSearchParams(window.location.search);
-    const targets = ['apartment', 'bodega', 'cannon', 'heist', 'jail']; // 'zoomies' pulled -- see reachLandmark() in trail.js
+    const targets = ['apartment', 'bodega', 'rush', 'cannon', 'heist', 'jail'];
     const target = targets.find(t => params.get(t) === '1') || null;
     if (!target) return false;
     // This runs synchronously inside the TransplantTrail constructor --
@@ -235,6 +218,7 @@ class TransplantTrail {
       trailGame = new TrailGame(this.state);
       if (target === 'apartment')     trailGame.apartmentHunt();
       else if (target === 'bodega')   trailGame.startBodegaGame();
+      else if (target === 'rush')     trailGame.startRushGame();
       else if (target === 'cannon')   trailGame.startCannonGame();
       else if (target === 'heist')    trailGame.startHeistGame();
       else if (target === 'jail')     trailGame.startJailGame();
@@ -250,16 +234,6 @@ class TransplantTrail {
   startGame() {
     this.state.gameStarted = true;
     this.showCharacterSelect();
-  }
-
-  showLeaderboard() {
-    // TODO: Add leaderboard
-    alert('Leaderboard - Coming soon!');
-  }
-
-  toggleSound() {
-    // TODO: Add sound toggle
-    alert('Sound toggle - Coming soon!');
   }
 
   // ============================================
@@ -330,10 +304,6 @@ class TransplantTrail {
   backToCharacterSelect() {
     this.state.selectedCharacter = null;
     this.showCharacterSelect();
-  }
-
-  showCharacterComparison() {
-    this.showScreen('character-comparison');
   }
 
   // ============================================
@@ -474,7 +444,9 @@ class TransplantTrail {
     const remaining = this.state.balances.chaseSapphire - spent;
 
     document.getElementById('spent-amount').textContent = `$${spent}`;
-    document.getElementById('remaining-amount').textContent = `$${remaining}`;
+    const remainingEl = document.getElementById('remaining-amount');
+    remainingEl.textContent = remaining < 0 ? `-$${-remaining}` : `$${remaining}`;
+    remainingEl.classList.toggle('store-negative', remaining < 0);
   }
 
   leaveStore() {
@@ -520,6 +492,7 @@ class TransplantTrail {
       aura: this.state.aura,
       inventory: { ...this.state.inventory },
       bodegaScore: this.state.bodegaScore || 0,
+      rushScore: this.state.rushScore || 0,
       boroughBucks: this.state.boroughBucks || 0,
       cannonProgress: this.state.cannonProgress || null,
       trailState: trailStateSnapshot,
@@ -563,6 +536,7 @@ class TransplantTrail {
     this.state.aura               = save.aura;
     this.state.inventory          = { ...save.inventory };
     this.state.bodegaScore        = save.bodegaScore || 0;
+    this.state.rushScore          = save.rushScore || 0;
     this.state.boroughBucks       = save.boroughBucks || 0;
     this.state.cannonProgress     = save.cannonProgress || null;
 

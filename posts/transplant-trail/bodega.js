@@ -12,6 +12,21 @@ const BODEGA_ITEMS = [
   { label: 'Mouthwash',       good: false, color: '#2980b9', points: -5 },
 ];
 
+// The whole round is one continuous ramp instead of three flat steps:
+// items start about as fast as the old round ENDED and keep going from
+// there. Direct feedback: "a little more chaotic and fun. Stuff should
+// move fast." All speeds are px per 60fps-frame; the loop scales by real
+// elapsed time so a 120Hz phone doesn't play at double speed.
+const BODEGA_ROUND_SECONDS = 40;
+const BODEGA_TUNING = {
+  fallStart: 5.2, fallEnd: 12,
+  spawnStart: 30, spawnEnd: 11,   // frames between spawns
+  frenzyEvery: 10, frenzyLength: 2.4, frenzySpawnMult: 0.45,
+  tossChance: 0.3,                // thrown in from a side instead of dropped
+  goldenChance: 0.22, goldenPoints: 50, // share of chopped cheeses that come down golden
+  comboStep: 3, comboMaxMult: 5,
+};
+
 class BodegaGame {
   constructor(gameState, onComplete) {
     this.gameState = gameState;
@@ -19,7 +34,12 @@ class BodegaGame {
     this.canvas = null;
     this.ctx = null;
     this.score = 0;
-    this.timeLeft = 45;
+    this.timeLeft = BODEGA_ROUND_SECONDS;
+    this.elapsed = 0;        // seconds of actual play, drives the difficulty ramp
+    this.spawnClock = 0;
+    this.combo = 0;
+    this.frenzy = 0;         // 0..1 visual pulse while a frenzy wave is on
+    this._lastT = 0;
     this.items = [];
     this.basketX = 200;
     // Catch feedback: a catch used to just tick the DOM score text with
@@ -124,6 +144,7 @@ class BodegaGame {
     window.addEventListener('resize', this._resizeHandler);
     this.running = true;
     this.timerInterval = setInterval(() => this.tickTimer(), 1000);
+    this._lastT = performance.now();
     this.gameLoop();
   }
 
@@ -169,54 +190,117 @@ class BodegaGame {
     if (this.timeLeft <= 0) this.endCatching();
   }
 
+  progress() {
+    return Math.min(1, this.elapsed / BODEGA_ROUND_SECONDS);
+  }
+
+  // Every frenzyEvery seconds the spawn rate more than doubles for a
+  // couple of seconds -- a wave you can see coming and have to scramble
+  // through, then a breath.
+  inFrenzy() {
+    const T = BODEGA_TUNING;
+    return this.elapsed > 4 && (this.elapsed % T.frenzyEvery) > (T.frenzyEvery - T.frenzyLength);
+  }
+
   getSpawnRate() {
-    if (this.timeLeft > 30) return 90;
-    if (this.timeLeft > 15) return 60;
-    return 38;
+    const T = BODEGA_TUNING;
+    const base = T.spawnStart + (T.spawnEnd - T.spawnStart) * this.progress();
+    return this.inFrenzy() ? base * T.frenzySpawnMult : base;
   }
 
   getFallSpeed() {
-    if (this.timeLeft > 30) return 2.5;
-    if (this.timeLeft > 15) return 4.0;
-    return 6.0;
+    const T = BODEGA_TUNING;
+    // Taller canvases get proportionally faster items, so a tall phone
+    // doesn't give more reaction time than a short one.
+    const hScale = Math.max(0.85, this.canvas.height / 760);
+    return (T.fallStart + (T.fallEnd - T.fallStart) * this.progress()) * hScale;
   }
 
   spawnItem() {
-    const item = BODEGA_ITEMS[Math.floor(Math.random() * BODEGA_ITEMS.length)];
+    const T = BODEGA_TUNING;
+    const base = BODEGA_ITEMS[Math.floor(Math.random() * BODEGA_ITEMS.length)];
+    const item = { ...base };
+    if (item.label === 'Chopped Cheese' && Math.random() < T.goldenChance) {
+      item.golden = true;
+      item.points = T.goldenPoints;
+    }
     const w = 80;
     const margin = w / 2 + 5;
-    this.items.push({
-      ...item,
-      x: margin + Math.random() * (this.canvas.width - margin * 2),
-      y: -54,
-      w,
-      h: 42,
-      speed: this.getFallSpeed() + Math.random() * 0.6
-    });
+    const W = this.canvas.width, H = this.canvas.height;
+    const p = this.progress();
+    const speed = this.getFallSpeed() * (0.85 + Math.random() * 0.4) * (item.golden ? 1.3 : 1);
+    const spin = (Math.random() - 0.5) * (0.04 + p * 0.14);
+    if (Math.random() < T.tossChance) {
+      // Thrown in from a side on an arc, not dropped straight down.
+      const fromLeft = Math.random() < 0.5;
+      this.items.push({
+        ...item, w, h: 42, rot: 0, spin: spin * 2,
+        x: fromLeft ? -30 : W + 30,
+        y: H * (0.05 + Math.random() * 0.3),
+        vx: (fromLeft ? 1 : -1) * (2.5 + Math.random() * 3.5 + p * 2) * Math.max(1, W / 500),
+        vy: -(2 + Math.random() * 3),
+        gravity: 0.16 + p * 0.14,
+        speed,
+      });
+    } else {
+      this.items.push({
+        ...item, w, h: 42, rot: 0, spin,
+        x: margin + Math.random() * (W - margin * 2),
+        y: -54,
+        vx: (Math.random() - 0.5) * (1 + p * 6),
+        vy: speed,
+        gravity: 0,
+        speed,
+      });
+    }
   }
 
   gameLoop() {
     if (!this.running) return;
+    const now = performance.now();
+    // k = how many 60fps-frames of time actually passed (capped so a
+    // backgrounded tab doesn't teleport everything on return).
+    const k = Math.min(3, Math.max(0.2, (now - this._lastT) / 16.667));
+    this._lastT = now;
+    this.elapsed += k / 60;
     this.frameCounter++;
 
-    if (this.frameCounter % this.getSpawnRate() === 0) {
+    this.spawnClock += k;
+    const rate = this.getSpawnRate();
+    while (this.spawnClock >= rate) {
+      this.spawnClock -= rate;
       this.spawnItem();
     }
+    this.frenzy += ((this.inFrenzy() ? 1 : 0) - this.frenzy) * 0.12;
 
-    this.items.forEach(item => { item.y += item.speed; });
+    const W = this.canvas.width;
+    this.items.forEach(item => {
+      item.vy = Math.min(item.speed * 1.25, item.vy + item.gravity * k);
+      item.x += item.vx * k;
+      item.y += item.vy * k;
+      item.rot += item.spin * k;
+      // Bounce off the side walls so nothing drifts out of reach.
+      if (item.x < item.w / 2 && item.vx < 0) item.vx = -item.vx;
+      if (item.x > W - item.w / 2 && item.vx > 0) item.vx = -item.vx;
+    });
 
     const basketY = this.canvas.height - 85;
     const halfW   = 68;
 
     this.items = this.items.filter(item => {
       const caught =
+        item.vy > 0 &&
         item.y + item.h >= basketY &&
         item.y          <= basketY + 30 &&
         item.x          >  this.basketX - halfW &&
         item.x          <  this.basketX + halfW;
 
       if (caught) {
-        this.score = Math.max(0, this.score + item.points);
+        const T = BODEGA_TUNING;
+        if (item.good) this.combo++; else this.combo = 0;
+        const mult = item.good ? Math.min(T.comboMaxMult, 1 + Math.floor((this.combo - 1) / T.comboStep)) : 1;
+        item.awarded = item.points * mult;
+        this.score = Math.max(0, this.score + item.awarded);
         document.getElementById('bodega-score').textContent = `Score: ${this.score}`;
         this.spawnCatchFx(item);
         return false;
@@ -224,7 +308,7 @@ class BodegaGame {
       return item.y < this.canvas.height + 60;
     });
 
-    this.updateFx();
+    this.updateFx(k);
     this.render();
     this.animFrame = requestAnimationFrame(() => this.gameLoop());
   }
@@ -235,7 +319,7 @@ class BodegaGame {
   // instead of only the running total changing.
   spawnCatchFx(item) {
     const x = this.basketX, y = this.canvas.height - 85;
-    const n = 10;
+    const n = item.golden ? 26 : 10;
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
       const speed = 1.2 + Math.random() * 3;
@@ -247,7 +331,8 @@ class BodegaGame {
       });
     }
     this.popups.push({
-      x, y: y - 20, text: (item.points > 0 ? '+' : '') + item.points,
+      x, y: y - 20, text: (item.awarded > 0 ? '+' : '') + item.awarded,
+      big: item.awarded >= 30,
       life: 46, maxLife: 46, good: item.good,
     });
     if (item.good) this.bagPunch = 1;
@@ -257,12 +342,13 @@ class BodegaGame {
     if (item.label === 'Poop') this.triggerPoopSplat();
   }
 
-  // ~130 frames at 60fps is "two seconds" as asked for. Locks basket
+  // ~1.6 seconds (was ~2 -- shortened now that items fall about twice
+  // as fast, so one cat doesn't cost half a wave). Locks basket
   // input for the whole thing, not just while the cat is at full size --
   // losing control during the leap-in/leap-out feels like part of the
   // same chaos instead of a separate mechanic.
   triggerCatInvasion() {
-    this.catInvasion = { timer: 130, maxTimer: 130, x: this.basketX };
+    this.catInvasion = { timer: 95, maxTimer: 95, x: this.basketX };
     this.basketLocked = true;
   }
 
@@ -284,20 +370,20 @@ class BodegaGame {
     this.poopSplat = { timer: 100, maxTimer: 100, blobs };
   }
 
-  updateFx() {
-    this.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.2; p.life--; });
+  updateFx(k = 1) {
+    this.particles.forEach(p => { p.x += p.vx * k; p.y += p.vy * k; p.vy += 0.2 * k; p.life -= k; });
     this.particles = this.particles.filter(p => p.life > 0);
-    this.popups.forEach(p => { p.y -= 0.7; p.life--; });
+    this.popups.forEach(p => { p.y -= 0.7 * k; p.life -= k; });
     this.popups = this.popups.filter(p => p.life > 0);
     this.bagPunch *= 0.82;
     this.bagShake *= 0.78;
 
     if (this.catInvasion) {
-      this.catInvasion.timer--;
+      this.catInvasion.timer -= k;
       if (this.catInvasion.timer <= 0) { this.catInvasion = null; this.basketLocked = false; }
     }
     if (this.poopSplat) {
-      this.poopSplat.timer--;
+      this.poopSplat.timer -= k;
       if (this.poopSplat.timer <= 0) this.poopSplat = null;
     }
     // Basket topples toward a fixed lean while locked, rights itself
@@ -607,12 +693,26 @@ class BodegaGame {
     this.renderBackground();
 
     // Falling items
+    // Frenzy wave: a pulsing warm wash so the surge is something you
+    // see arrive, not just a spawn-rate number changing.
+    if (this.frenzy > 0.02) {
+      ctx.fillStyle = `rgba(255,120,40,${this.frenzy * (0.1 + 0.06 * Math.sin(this.frameCounter * 0.5))})`;
+      ctx.fillRect(0, 0, width, height);
+    }
+
     this.items.forEach(item => {
+      ctx.save();
+      ctx.translate(item.x, item.y + item.h / 2);
+      ctx.rotate(item.rot);
+      ctx.translate(-item.x, -(item.y + item.h / 2));
+
       // Drop shadow
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
       ctx.fillRect(item.x - item.w / 2 + 4, item.y + 4, item.w, item.h);
 
+      if (item.golden) { ctx.shadowColor = '#ffd84a'; ctx.shadowBlur = 22; }
       this.drawItemShape(ctx, item);
+      ctx.shadowBlur = 0;
 
       // Colored border: gold for good, red for bad
       if (item.good) {
@@ -622,7 +722,9 @@ class BodegaGame {
         ctx.strokeStyle = 'rgba(231,76,60,0.7)';
         ctx.lineWidth = 1.5;
       }
+      if (item.golden) { ctx.strokeStyle = '#ffd84a'; ctx.lineWidth = 3; }
       ctx.strokeRect(item.x - item.w / 2, item.y, item.w, item.h);
+      ctx.restore();
 
       // Small label below item
       ctx.textAlign = 'center';
@@ -707,12 +809,21 @@ class BodegaGame {
     // off to the side.
     this.popups.forEach(p => {
       ctx.globalAlpha = Math.min(1, p.life / (p.maxLife * 0.6));
-      ctx.font = 'bold 20px VT323';
+      ctx.font = p.big ? 'bold 32px VT323' : 'bold 20px VT323';
       ctx.textAlign = 'center';
-      ctx.fillStyle = p.good ? '#7ec89a' : '#e74c3c';
+      ctx.fillStyle = p.good ? (p.big ? '#ffd84a' : '#7ec89a') : '#e74c3c';
       ctx.fillText(p.text, p.x, p.y);
       ctx.globalAlpha = 1;
     });
+
+    // Combo multiplier, riding just above the bag once it's worth something.
+    const comboMult = Math.min(BODEGA_TUNING.comboMaxMult, 1 + Math.floor(Math.max(0, this.combo - 1) / BODEGA_TUNING.comboStep));
+    if (comboMult > 1) {
+      ctx.font = 'bold 26px VT323';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#ffd84a';
+      ctx.fillText(`x${comboMult}`, cx, basketY - 28);
+    }
 
     // Both chaos overlays draw last, on top of everything -- the poop
     // splat is supposed to actually block your view of falling items,

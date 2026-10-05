@@ -157,6 +157,7 @@ class JailRhythmGame {
     this.perfectFlash = 0;
     this.missShake = 0;
     this.finished = false;
+    this.lanePress = [0, 0, 0];
 
     // The dancer — eases toward a target "energy" level driven by recent
     // hit quality, so the character actually performs better the better
@@ -270,22 +271,25 @@ class JailRhythmGame {
       this._hitLane(lane);
     };
     window.addEventListener('keydown', this._keyDownH);
-    this._btnHandlers = [];
-    for (let lane = 0; lane < 3; lane++) {
-      const btn = document.getElementById(`jail-rhythm-btn-${lane}`);
-      if (!btn) continue;
-      const down = (e) => { e.preventDefault(); btn.classList.add('pressed'); this._hitLane(lane); };
-      const up = () => btn.classList.remove('pressed');
-      btn.addEventListener('pointerdown', down);
-      btn.addEventListener('pointerup', up);
-      btn.addEventListener('pointerleave', up);
-      btn.addEventListener('pointercancel', up);
-      this._btnHandlers.push({ btn, down, up });
-    }
+    // Tap (or click) the lane's circle directly -- the separate J/K/L
+    // button row is gone. Anywhere in a lane's column counts, so a
+    // slightly-off thumb still registers as that lane; pointerdown
+    // covers touch and mouse both, and each finger is its own event so
+    // two-lane chords work on a phone.
+    this._canvasDownH = (e) => {
+      e.preventDefault();
+      const rect = this.canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (this.canvas.width / (rect.width || 1));
+      const b = this._bounds();
+      const lane = jailClamp(Math.floor((x - b.x) / (b.w / 3)), 0, 2);
+      this._hitLane(lane);
+    };
+    this.canvas.addEventListener('pointerdown', this._canvasDownH);
   }
 
   _hitLane(lane) {
     if (this.finished) return;
+    this.lanePress[lane] = 1;
     const t = this.now();
     let best = null, bestDist = Infinity;
     this.notes.forEach(n => {
@@ -328,8 +332,8 @@ class JailRhythmGame {
 
   _bounds() {
     const W = this.canvas.width, H = this.canvas.height;
-    const w = Math.min(W * 0.92, 520);
-    const h = H * 0.86;
+    const w = Math.min(W * 0.94, 520);
+    const h = H * 0.9;
     return { x: (W - w) / 2, y: H * 0.05, w, h };
   }
 
@@ -419,6 +423,7 @@ class JailRhythmGame {
     if (this.judgeFlash) { this.judgeFlash.t--; if (this.judgeFlash.t <= 0) this.judgeFlash = null; }
     if (this.perfectFlash > 0) this.perfectFlash--;
     if (this.missShake > 0) this.missShake--;
+    for (let i = 0; i < 3; i++) this.lanePress[i] *= 0.82;
     this.particles.update();
     this.floaters.update();
     this._updateHud();
@@ -463,6 +468,8 @@ class JailRhythmGame {
     const beatPhase = (t % (barMs / 4)) / (barMs / 4);
     const pulse = 1 + (1 - beatPhase) * 0.12;
     const judgeY = b.y + b.h * 0.78;
+    // The tap targets: one big circle per lane, sized for a thumb.
+    const padR = Math.min(laneW * 0.4, 52);
     ctx.save();
     ctx.strokeStyle = jailAlpha(this.char.color, 0.9);
     ctx.lineWidth = 3 * pulse;
@@ -481,7 +488,10 @@ class JailRhythmGame {
       ctx.save();
       ctx.shadowColor = laneColors[n.lane]; ctx.shadowBlur = 10;
       ctx.fillStyle = laneColors[n.lane];
-      jailRoundRectPath(ctx, nx - laneW * 0.32, ny - 7, laneW * 0.64, 14, 6);
+      ctx.beginPath(); ctx.arc(nx, ny, padR * 0.72, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.beginPath(); ctx.arc(nx, ny, padR * 0.34, 0, Math.PI * 2);
       ctx.fill();
       ctx.restore();
     });
@@ -490,10 +500,13 @@ class JailRhythmGame {
 
     for (let i = 0; i < 3; i++) {
       const cx = b.x + laneW * (i + 0.5);
+      const press = this.lanePress[i];
       ctx.beginPath();
-      ctx.arc(cx, judgeY, 12, 0, Math.PI * 2);
-      ctx.strokeStyle = jailAlpha(laneColors[i], 0.7);
-      ctx.lineWidth = 2;
+      ctx.arc(cx, judgeY, padR * (1 - press * 0.12), 0, Math.PI * 2);
+      ctx.fillStyle = jailAlpha(laneColors[i], 0.14 + press * 0.5);
+      ctx.fill();
+      ctx.strokeStyle = jailAlpha(laneColors[i], 0.95);
+      ctx.lineWidth = 3 + press * 3;
       ctx.stroke();
     }
 
@@ -546,12 +559,7 @@ class JailRhythmGame {
     this._af = null;
     if (this._schedulerTimer) clearInterval(this._schedulerTimer);
     window.removeEventListener('keydown', this._keyDownH);
-    (this._btnHandlers || []).forEach(({ btn, down, up }) => {
-      btn.removeEventListener('pointerdown', down);
-      btn.removeEventListener('pointerup', up);
-      btn.removeEventListener('pointerleave', up);
-      btn.removeEventListener('pointercancel', up);
-    });
+    this.canvas.removeEventListener('pointerdown', this._canvasDownH);
     document.getElementById('jail-rhythm-hud').classList.add('hidden');
     if (this.audioCtx) { try { this.audioCtx.close(); } catch (e) { /* ignore */ } }
   }

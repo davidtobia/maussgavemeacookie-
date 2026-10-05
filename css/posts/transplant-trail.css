@@ -378,26 +378,6 @@ body.game-zoom-lock {
 }
 
 /* Character Comparison */
-.comparison-table {
-  margin: 40px 0;
-  width: 100%;
-}
-
-.comparison-row {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
-  padding: 12px 20px;
-  font-size: 24px;
-  border-bottom: 1px solid rgba(212, 165, 116, 0.2);
-}
-
-.comparison-row.header {
-  opacity: 0.6;
-  font-size: 20px;
-  border-bottom: 2px solid #d4a574;
-  margin-bottom: 10px;
-}
-
 /* Character Info */
 .info-content {
   padding: 20px;
@@ -614,6 +594,17 @@ body.game-zoom-lock {
   margin-top: 50px;
   padding-top: 30px;
   border-top: 2px solid #d4a574;
+}
+
+.store-note {
+  font-size: 20px;
+  opacity: 0.75;
+  margin: 14px 0 6px;
+  text-align: center;
+}
+
+#remaining-amount.store-negative {
+  color: #e74c3c;
 }
 
 .store-total {
@@ -947,7 +938,7 @@ body.game-zoom-lock {
   touch-action: none;
 }
 
-#zoomies-game {
+#rush-game {
   width: 100%;
   height: 100vh;
   height: 100dvh; /* actual visible viewport on mobile -- 100vh includes space the browser's own address bar covers */
@@ -959,17 +950,17 @@ body.game-zoom-lock {
   overflow: hidden;
 }
 
-#zoomies-game.active {
+#rush-game.active {
   display: block;
   touch-action: none;
 }
 
-.game-container:has(#zoomies-game.active) {
+.game-container:has(#rush-game.active) {
   padding: 0;
   align-items: stretch;
 }
 
-#zoomies-canvas {
+#rush-canvas {
   position: absolute;
   top: 0;
   left: 0;
@@ -2667,65 +2658,3 @@ button.menu-option.cannon-shop-exit-btn:hover {
   .jail-bench-hold-btn { font-size: 19px; padding: 18px 0; }
 }
 
-/* ==================================================================
-   ZOOMIES — spin-dash rush sequence
-   ================================================================== */
-
-.zoomies-action-btn {
-  width: 92px;
-  height: 92px;
-  background: rgba(80, 200, 220, 0.85);
-  color: #04222a;
-  border-color: #1a5a68;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  overflow: hidden;
-}
-
-.zoomies-action-btn:active,
-.zoomies-action-btn.pressed {
-  background: rgba(120, 230, 250, 0.95);
-}
-
-.zoomies-action-label {
-  font-size: 13px;
-  line-height: 1.15;
-  display: block;
-}
-
-.zoomies-charge-wrap {
-  position: absolute;
-  left: 50%;
-  bottom: 128px;
-  transform: translateX(-50%);
-  width: 160px;
-  height: 12px;
-  background: rgba(0, 0, 0, 0.55);
-  border: 2px solid #1a5a68;
-  border-radius: 999px;
-  overflow: hidden;
-  z-index: 4;
-}
-
-.zoomies-charge-wrap.hidden {
-  display: none;
-}
-
-.zoomies-charge-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, #50c8dc, #a86ad8, #f4c542);
-  transition: width 0.05s linear;
-}
-/* zoomies-controls uses position:fixed (not the inherited absolute from
-   .heist-getaway-controls) -- anchoring directly to the viewport instead
-   of #zoomies-game's containing block sidesteps a layout issue where the
-   button rendered past the right edge of narrow viewports. */
-#zoomies-controls {
-  position: fixed;
-}
-#zoomies-charge-wrap {
-  position: fixed;
-}

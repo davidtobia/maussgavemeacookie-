@@ -948,16 +948,8 @@ class TrailGame {
     // walking through them.
     if (landmark.id === 'murray-hill') {
       this.apartmentHunt();
-    // The midtown zoomies offer is pulled for now -- v4's rooftop-jump
-    // build had a real, confirmed structural bug (a respawn trap that
-    // could strand a player failing the same jump forever) plus a
-    // direct "ugly, not fun, doesn't work" verdict. Removed from the
-    // reachable game per explicit instruction ("remove it from the
-    // game right now... we can design it in a fun way later") rather
-    // than left live while broken. showZoomiesOffer()/startZoomiesGame()
-    // and zoomies.js itself are untouched as a base for a future
-    // redesign -- only this trigger and the debug/test entry points are
-    // disabled. See memory: transplant-trail-future-vision.md.
+    } else if (landmark.id === 'midtown' && this.gameState.bodegaDone) {
+      this.showRushOffer();
     } else if (landmark.id === 'washington-square-park') {
       this.showEvent('You arrive at Washington Square Park. Three figures are waiting by the arch.', () => this.startCannonGame());
     } else if (landmark.type === 'fort') {
@@ -1175,49 +1167,40 @@ class TrailGame {
     document.getElementById('wise-erics-implicitly').onclick = proceed;
   }
 
-  // One-time offer, midtown, after bodega -- see reachLandmark(). The
-  // actual choice text is user-authored content (not written here, see
-  // the [PLACEHOLDER] marker in index.html); this just wires the two
-  // outcomes.
-  showZoomiesOffer() {
-    const box = document.getElementById('zoomies-choice');
+  // One-time offer at Midtown, after bodega -- see reachLandmark().
+  showRushOffer() {
+    const box = document.getElementById('rush-choice');
     box.classList.remove('hidden');
     this.state.paused = true;
-    document.getElementById('zoomies-yes').onclick = () => {
+    document.getElementById('rush-yes').onclick = () => {
       box.classList.add('hidden');
-      this.startZoomiesGame();
+      this.startRushGame();
     };
-    document.getElementById('zoomies-no').onclick = () => {
+    document.getElementById('rush-no').onclick = () => {
       box.classList.add('hidden');
       this.state.paused = false;
     };
   }
 
-  startZoomiesGame() {
+  startRushGame() {
     this.stop();
-    game.showScreen('zoomies-game');
-    zoomiesGame = new ZoomiesGame(this.gameState, (result) => {
-      // Explicit instruction: "should not feed into money or health, it
-      // is just for fun and SCORE. everything is about score." No
-      // checkingAccount/aura/balances touch here, ever -- score is its
-      // own thing, tracked purely as a running high score.
+    game.showScreen('rush-game');
+    rushGame = new RushGame(this.gameState, (result) => {
+      // Score only -- never touches checkingAccount/aura/balances. A
+      // wipeout (out of hearts before the finish) costs trail time
+      // instead, same addHours pattern the random-event pool uses.
       if (result) {
-        this.gameState.zoomiesScore = Math.max(this.gameState.zoomiesScore || 0, result.score || 0);
-        // "yeah sure you can lose in this game and if you do maybe you
-        // lose a few days to have to recover" -- a rough trip (missed
-        // more jumps than you landed cleanly) costs real trail time,
-        // same addHours pattern the random-event pool already uses. A
-        // clean run costs nothing.
-        if ((result.misses || 0) >= 4) {
-          this.state.hoursElapsed += 40;
-          this.state.currentDate.setHours(this.state.currentDate.getHours() + 40);
+        this.gameState.rushScore = Math.max(this.gameState.rushScore || 0, result.score || 0);
+        if (result.wipedOut) {
+          this.state.hoursElapsed += RUSH_WIPEOUT_HOURS;
+          this.state.currentDate.setHours(this.state.currentDate.getHours() + RUSH_WIPEOUT_HOURS);
         }
       }
       game.showScreen('trail-screen');
       this.state.paused = false;
       this.start();
     });
-    zoomiesGame.init();
+    rushGame.init();
   }
 
   getTrailStateSnapshot() {
@@ -1371,14 +1354,6 @@ class TrailGame {
       .map(([id, qty]) => `${id.replace(/-/g, ' ')} x${qty}`)
       .join(', ');
     this.showEvent(items ? `You have: ${items}` : 'Your bags are empty.');
-  }
-
-  lookAtMap() {
-    this.toggleMenu();
-    const current = this.getCurrentLandmark();
-    const next = this.getNextLandmark();
-    const miles = Math.floor(this.state.milesPerLandmark - this.state.milesFromLandmark);
-    this.showEvent(`You are near ${current.name}. Next stop: ${next.name} (${miles} miles).`);
   }
 
   changeTransportation() {

@@ -68,35 +68,11 @@
           <button class="menu-option" onclick="game.selectCharacter('remote-worker')">1. Be a remote worker from Austin</button>
           <button class="menu-option" onclick="game.selectCharacter('nursing-student')">2. Be a nursing student from Akron</button>
           <button class="menu-option" onclick="game.selectCharacter('hockey-coach')">3. Be a youth hockey coach from Massapequa</button>
-          <button class="menu-option" onclick="game.showCharacterComparison()">4. Find out the differences between these choices</button>
         </div>
 
         <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
       </div>
 
-      <div class="border-decoration bottom"></div>
-    </div>
-
-    <!-- Character Comparison -->
-    <div id="character-comparison" class="screen">
-      <div class="border-decoration top"></div>
-      <div class="menu-content">
-        <div class="comparison-table">
-          <div class="comparison-row header">
-            <span></span><span>Money</span><span>Multiplier</span>
-          </div>
-          <div class="comparison-row">
-            <span>Remote Worker</span><span>$1,400</span><span>1x</span>
-          </div>
-          <div class="comparison-row">
-            <span>Nursing Student</span><span>$800</span><span>2x</span>
-          </div>
-          <div class="comparison-row">
-            <span>Hockey Coach</span><span>$500</span><span>3x</span>
-          </div>
-        </div>
-        <button class="menu-option" style="margin-top: 60px;" onclick="game.showCharacterSelect()">Go back</button>
-      </div>
       <div class="border-decoration bottom"></div>
     </div>
 
@@ -160,6 +136,7 @@
           <p id="adams-text"></p>
           <div id="adams-shop-items" class="adams-shop-items hidden"></div>
           <div id="adams-shop-footer" class="hidden">
+            <p class="store-note">Tap + to buy. You can spend more than you have -- your balance can go negative.</p>
             <p class="store-total">Spent: <span id="spent-amount">$0</span> &nbsp;|&nbsp; Remaining: <span id="remaining-amount">$0</span></p>
           </div>
           <button id="adams-advance" class="menu-option" style="margin-top: 20px;"></button>
@@ -239,12 +216,11 @@
           <div class="menu-options">
             <button class="menu-option" onclick="trailGame.continueTrail()">1. Continue on trail</button>
             <button class="menu-option" onclick="trailGame.checkSupplies()">2. Check supplies</button>
-            <button class="menu-option" onclick="trailGame.lookAtMap()">3. Look at map</button>
-            <button class="menu-option" onclick="trailGame.changeTransportation()">4. Change transportation</button>
-            <button class="menu-option" onclick="trailGame.changeSpending()">5. Change spending mode</button>
-            <button class="menu-option" onclick="trailGame.rest()">6. Stop to rest</button>
-            <button class="menu-option" onclick="trailGame.goOut()">7. Go out</button>
-            <button class="menu-option" onclick="trailGame.returnToChapterSelect()">8. Jump to a chapter</button>
+            <button class="menu-option" onclick="trailGame.changeTransportation()">3. Change transportation</button>
+            <button class="menu-option" onclick="trailGame.changeSpending()">4. Change spending mode</button>
+            <button class="menu-option" onclick="trailGame.rest()">5. Stop to rest</button>
+            <button class="menu-option" onclick="trailGame.goOut()">6. Go out</button>
+            <button class="menu-option" onclick="trailGame.returnToChapterSelect()">7. Jump to a chapter</button>
           </div>
           <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
         </div>
@@ -271,13 +247,13 @@
         </div>
       </div>
 
-      <!-- One-time offer after the bodega run, before Washington Square Park -->
-      <div id="zoomies-choice" class="trail-event hidden">
+      <!-- One-time offer at Midtown, after the bodega run -->
+      <div id="rush-choice" class="trail-event hidden">
         <div class="event-box">
-          <p id="zoomies-offer-text">[PLACEHOLDER — someone on the street offers you something. Do you take it?]</p>
+          <p id="rush-offer-text">Do cocaine?</p>
           <div class="menu-options" style="margin-top: 18px;">
-            <button class="menu-option" id="zoomies-yes">Yes</button>
-            <button class="menu-option" id="zoomies-no">No</button>
+            <button class="menu-option" id="rush-yes">Yes</button>
+            <button class="menu-option" id="rush-no">No</button>
           </div>
         </div>
       </div>
@@ -322,7 +298,7 @@
       <!-- Canvas layer (always visible) -->
       <div id="bodega-catching">
         <div class="bodega-hud hidden" id="bodega-hud">
-          <span id="bodega-timer">0:45</span>
+          <span id="bodega-timer">0:40</span>
           <span id="bodega-score">Score: 0</span>
         </div>
         <canvas id="bodega-canvas"></canvas>
@@ -653,11 +629,6 @@
           <span id="jail-rhythm-acc" class="jail-rhythm-acc">0%</span>
           <span id="jail-rhythm-combo" class="jail-rhythm-combo"></span>
         </div>
-        <div class="jail-rhythm-btns">
-          <button id="jail-rhythm-btn-0" class="jail-btn jail-rhythm-btn">J</button>
-          <button id="jail-rhythm-btn-1" class="jail-btn jail-rhythm-btn">K</button>
-          <button id="jail-rhythm-btn-2" class="jail-btn jail-rhythm-btn">L</button>
-        </div>
       </div>
 
       <!-- Bench-press mini-game HUD (Luigi) -->
@@ -719,35 +690,17 @@
       -->
     </div>
 
-    <!-- Zoomies -->
-    <div id="zoomies-game" class="screen">
-      <canvas id="zoomies-canvas"></canvas>
-
-      <div id="zoomies-hud" class="heist-hud hidden">
-        <p id="zoomies-hud-title" class="heist-hud-title"></p>
-        <p id="zoomies-hud-hint" class="heist-hud-hint"></p>
-        <p id="zoomies-hud-meta" class="heist-hud-meta"></p>
-      </div>
-
-      <div id="zoomies-controls" class="heist-getaway-controls hidden">
-        <button id="zoomies-action-btn" class="heist-getaway-btn heist-jump-btn zoomies-action-btn">
-          <span class="zoomies-action-label">HOLD</span>
-        </button>
-      </div>
-
-      <div id="zoomies-charge-wrap" class="zoomies-charge-wrap hidden">
-        <div id="zoomies-charge-fill" class="zoomies-charge-fill"></div>
-      </div>
-
-      <div id="zoomies-results" class="cannon-overlay hidden">
+    <!-- Rush: side-scrolling run -->
+    <div id="rush-game" class="screen">
+      <canvas id="rush-canvas"></canvas>
+      <div id="rush-results" class="cannon-overlay hidden">
         <div class="cannon-splash">
-          <h2 class="cannon-splash-title">[PLACEHOLDER — zoomies results title]</h2>
-          <p id="zoomies-results-flavor" class="cannon-splash-sub">[PLACEHOLDER — result flavor text]</p>
-          <div class="cannon-feat-stats" style="margin-top: 18px;">
-            <span class="cannon-feat-stat">Score: <span id="zoomies-results-coins" class="cannon-feat-val"></span></span>
-            <span class="cannon-feat-stat">Best streak: <span id="zoomies-results-chain" class="cannon-feat-val"></span></span>
+          <h2 id="rush-results-title" class="cannon-splash-title"></h2>
+          <div id="rush-results-stats"></div>
+          <div class="menu-options" style="margin-top: 20px;">
+            <button id="rush-results-again" class="menu-option">Run it back</button>
+            <button id="rush-results-continue" class="menu-option">Continue</button>
           </div>
-          <button id="zoomies-results-continue" class="menu-option" style="margin-top: 20px;">Keep walking</button>
         </div>
       </div>
     </div>
@@ -774,15 +727,15 @@
   <script src="characters.js?v=2"></script>
   <script src="store.js?v=2"></script>
   <script src="trail-data.js?v=5"></script>
-  <script src="trail.js?v=24"></script>
-  <script src="bodega.js?v=8"></script>
-  <script src="zoomies.js?v=15"></script>
+  <script src="trail.js?v=25"></script>
+  <script src="bodega.js?v=9"></script>
+  <script src="rush.js?v=1"></script>
   <script src="cannon.js?v=23"></script>
   <script src="heist.js?v=33"></script>
   <script src="jail-data.js?v=1"></script>
-  <script src="jail-minigames.js?v=2"></script>
+  <script src="jail-minigames.js?v=3"></script>
   <script src="jail.js?v=3"></script>
-  <script src="game.js?v=23"></script>
+  <script src="game.js?v=24"></script>
 
   <!-- GoatCounter Analytics -->
   <script data-goatcounter="https://maussgavemeacookie.goatcounter.com/count"
