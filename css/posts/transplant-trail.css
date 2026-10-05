@@ -952,16 +952,21 @@ html.game-zoom-lock button {
   touch-action: none;
 }
 
+/* Pinned to the viewport itself (fixed + inset), not laid out inside the
+   page like the other game screens: nothing about page scroll position,
+   the .screen max-width, or the address bar showing/hiding can push any
+   of it off screen. */
 #rush-game {
-  width: 100%;
-  height: 100vh;
-  height: 100dvh; /* actual visible viewport on mobile -- 100vh includes space the browser's own address bar covers */
+  position: fixed;
+  inset: 0;
+  width: auto;
+  max-width: none;
+  height: auto;
+  margin: 0;
   display: none;
   background: #000;
-  position: absolute;
-  top: 0;
-  left: 0;
   overflow: hidden;
+  z-index: 5;
 }
 
 #rush-game.active {

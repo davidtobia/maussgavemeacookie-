@@ -95,6 +95,13 @@ class RushGame {
     };
     this._resize();
     window.addEventListener('resize', this._resize);
+    // The address bar sliding away changes the canvas's box without
+    // always firing a window resize; watch the element itself.
+    if (typeof ResizeObserver === 'function') {
+      this._ro = new ResizeObserver(this._resize);
+      this._ro.observe(this.canvas);
+    }
+    window.scrollTo(0, 0);
 
     // Touch goes through touchstart, not pointerdown: preventDefault on
     // the touch itself is the one thing iOS reliably honors for stopping
@@ -181,6 +188,7 @@ class RushGame {
     if (this._af) cancelAnimationFrame(this._af);
     this._af = null;
     window.removeEventListener('resize', this._resize);
+    if (this._ro) { this._ro.disconnect(); this._ro = null; }
     if (this.canvas) {
       this.canvas.removeEventListener('pointerdown', this._down);
       this.canvas.removeEventListener('touchstart', this._ts);
