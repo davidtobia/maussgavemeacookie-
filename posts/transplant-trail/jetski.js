@@ -6,10 +6,13 @@
  * slope made of water, and race cops and pirates on jet skis to a
  * splashdown at Battery Park. Camera behind you.
  *
- * Phase 1 is only the ride: launch, slope, drag-to-steer, rivals, finish.
- * Planned on top (not built yet): proximity prompts that fire quick skill
- * games, attacks that fill a boost meter (tap to go faster) and a special-
- * move meter, and jumps with a trick wheel.
+ * Drag anywhere to steer. Get near a rival and a faint red circle appears
+ * on them: tap it and a one-second skill game runs (race in slow motion
+ * underneath -- see JETSKI_SKILLS at the bottom). Land it and you knock
+ * them back and fill two meters: BOOST (tap for a burst of speed) and
+ * SPECIAL (when full: breakdance on the handlebars, the jet ski turns
+ * into a helicopter, fly at 3x for 5 seconds over everything).
+ * Not built yet: jumps with a trick wheel.
  *
  * You can't get caught or fail -- placing only changes your score.
  *
@@ -36,6 +39,21 @@ const JS = {
   ],
   finishBonus: [6000, 4000, 3000, 2000, 1500, 1200, 1000, 800],
   passBonus: 100,
+  // attacks
+  promptRange: 2600,  // how far ahead (world units) a rival can be to get a red circle
+  promptCooldown: 4,  // seconds before the same rival can be targeted again
+  skillSlowmo: 0.3,   // the race runs at this speed while a skill game is up
+  hitScore: 300,
+  hitBoost: 0.34,     // boost meter gained per landed hit (meter is 0..1)
+  hitSpecial: 0.26,   // special meter gained per landed hit
+  // boost
+  boostCost: 0.25,
+  boostTime: 1.6,
+  boostSpeed: 1.4,    // x max speed while boosting
+  // special: breakdance -> helicopter
+  danceTime: 0.9,
+  flyTime: 5,
+  flySpeed: 3,        // x base speed
 };
 JS.depth = 1 / Math.tan((JS.fov / 2) * Math.PI / 180);
 JS.playerZ = JS.camHeight * JS.depth; // how far ahead of the camera you sit
@@ -67,30 +85,55 @@ class JetskiGame {
     }
 
     // Drag to steer: the jet ski follows how far your thumb has moved
-    // since it went down, wherever on the screen that is. Touch goes
-    // through touch events (reliable preventDefault on iOS), mouse/pen
-    // through pointer events.
+    // since it went down, wherever on the screen that is. Every touch is
+    // tracked by id, so one thumb can steer while the other taps a red
+    // circle or the boost button. A touch that lands on a circle/button
+    // is a tap, not a steer. Touch goes through touch events (reliable
+    // preventDefault on iOS), mouse/pen through pointer events.
+    this._dragId = null;
     this._drag = null;
-    const start = (x) => { this._drag = { x0: x, t0: this.steerTarget }; this._tap(); };
-    const move = (x) => {
-      if (!this._drag) return;
+    const local = (cx, cy) => {
+      const r = this.canvas.getBoundingClientRect();
+      return [cx - r.left, cy - r.top];
+    };
+    const press = (x, y, id) => {
+      if (this.state === 'intro') { this._tap(); return; }
+      if (this.skill) { this.skill.down(); this._skillId = id; return; }
+      const ui = this.state === 'race' ? this._hitUI(x, y) : null;
+      if (ui) { this._useUI(ui); return; }
+      if (this._dragId === null) { this._dragId = id; this._drag = { x0: x, t0: this.steerTarget }; }
+    };
+    const move = (x, id) => {
+      if (id !== this._dragId || !this._drag) return;
       this.steerTarget = Math.max(-1.15, Math.min(1.15, this._drag.t0 + ((x - this._drag.x0) / (this.W * 0.42)) * 1.6));
     };
-    const end = () => { this._drag = null; };
-    this._ts = (e) => { e.preventDefault(); start(e.touches[0].clientX); };
-    this._tm = (e) => { e.preventDefault(); move(e.touches[0].clientX); };
-    this._te = (e) => { e.preventDefault(); if (!e.touches.length) end(); };
-    this._pd = (e) => { if (e.pointerType === 'touch') return; start(e.clientX); };
-    this._pm = (e) => { if (e.pointerType === 'touch') return; move(e.clientX); };
-    this._pu = (e) => { if (e.pointerType === 'touch') return; end(); };
+    const release = (id) => {
+      if (this.skill && id === this._skillId) { this.skill.up(); this._skillId = null; }
+      if (id === this._dragId) { this._dragId = null; this._drag = null; }
+    };
+    this._ts = (e) => { e.preventDefault(); for (const t of e.changedTouches) press(...local(t.clientX, t.clientY), t.identifier); };
+    this._tm = (e) => { e.preventDefault(); for (const t of e.changedTouches) move(local(t.clientX, t.clientY)[0], t.identifier); };
+    this._te = (e) => { e.preventDefault(); for (const t of e.changedTouches) release(t.identifier); };
+    this._pd = (e) => { if (e.pointerType === 'touch') return; press(...local(e.clientX, e.clientY), 'm'); };
+    this._pm = (e) => { if (e.pointerType === 'touch') return; move(local(e.clientX, e.clientY)[0], 'm'); };
+    this._pu = (e) => { if (e.pointerType === 'touch') return; release('m'); };
     this._kd = (e) => {
+      if (e.repeat) return;
       if (e.key === 'ArrowLeft' || e.key === 'a') this._keyDir = -1;
       else if (e.key === 'ArrowRight' || e.key === 'd') this._keyDir = 1;
-      else if (e.key === ' ' || e.key === 'Enter') this._tap();
+      else if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault();
+        if (this.state === 'intro') this._tap();
+        else if (this.skill) { this.skill.down(); this._skillId = 'k'; }
+        else if (this.prompt) this._useUI('prompt');
+      }
+      else if (e.key === 'b' || e.key === 'Shift') this._useUI('boost');
+      else if (e.key === 'e') this._useUI('special');
     };
     this._ku = (e) => {
       if ((e.key === 'ArrowLeft' || e.key === 'a') && this._keyDir === -1) this._keyDir = 0;
       if ((e.key === 'ArrowRight' || e.key === 'd') && this._keyDir === 1) this._keyDir = 0;
+      if ((e.key === ' ' || e.key === 'Enter') && this.skill && this._skillId === 'k') { this.skill.up(); this._skillId = null; }
     };
     const c = this.canvas;
     c.addEventListener('touchstart', this._ts, { passive: false });
@@ -171,6 +214,14 @@ class JetskiGame {
     this.endT = 0;
     this.particles = [];
     this.popups = [];
+    this.boost = 0;            // 0..1 meter, filled by landing hits
+    this.special = 0;          // 0..1 meter, filled by landing hits
+    this.boostT = 0;
+    this.skill = null;         // active skill game
+    this.prompt = null;        // { racer, x, y, r } -- the red circle on screen
+    this.heli = null;          // { phase: 'dance'|'fly'|'land', t }
+    this.hits = 0;
+    this._ui = {};
     // Everyone gets launched together and lands in a loose pack.
     this.racers = JS.rivals.map((kind, i) => ({
       kind,
@@ -182,6 +233,8 @@ class JetskiGame {
       retarget: Math.random() * 2,
       bob: Math.random() * 6,
       bump: 0,
+      cool: 0,
+      knock: 0,
       ahead: true,
     }));
   }
@@ -274,6 +327,12 @@ class JetskiGame {
   // ------------------------------------------------------------------
 
   step(dt) {
+    // A skill game runs in real time while the race crawls in slow motion.
+    if (this.skill) {
+      this.skill.update(dt);
+      if (this.skill.done) this._resolveSkill();
+      else dt *= JS.skillSlowmo;
+    }
     this.t += dt;
     this._updateFx(dt);
     if (this.state === 'intro') {
@@ -288,9 +347,26 @@ class JetskiGame {
     const slope = seg.grade;
 
     if (this.state === 'race') {
-      // speed: downhill pulls you faster
-      const target = Math.min(JS.maxSpeed, JS.baseSpeed + slope * JS.slopeAccel);
-      this.speed += (target - this.speed) * Math.min(1, dt * 0.9);
+      // speed: downhill pulls you faster; boost lifts the cap; the
+      // helicopter ignores all of it
+      this.boostT = Math.max(0, this.boostT - dt);
+      let target = Math.min(JS.maxSpeed, JS.baseSpeed + slope * JS.slopeAccel);
+      if (this.boostT > 0) target = JS.maxSpeed * JS.boostSpeed;
+      if (this.heli) {
+        this.heli.t += dt;
+        if (this.heli.phase === 'dance') {
+          target = this.speed;
+          if (this.heli.t > JS.danceTime) { this.heli = { phase: 'fly', t: 0 }; this.flash = 0.8; this.shake = 10; }
+        } else if (this.heli.phase === 'fly') {
+          target = JS.baseSpeed * JS.flySpeed;
+          if (this.heli.t > JS.flyTime) this.heli = { phase: 'land', t: 0 };
+        } else if (this.heli.t > 0.6) {
+          this.heli = null;
+          this._splash(0, 0.5, '#ffffff', 20);
+          this.shake = 8;
+        }
+      }
+      this.speed += (target - this.speed) * Math.min(1, dt * (this.heli || this.boostT > 0 ? 3 : 0.9));
 
       // steering: ease toward where your thumb says
       if (this._keyDir) this.steerTarget = Math.max(-1.15, Math.min(1.15, this.steerTarget + this._keyDir * dt * 2.2));
@@ -322,9 +398,75 @@ class JetskiGame {
     this.camDrop = Math.max(0, this.camDrop - dt * 0.9);
 
     if (this.state === 'race') {
-      this._collideJunk(playerZ);
+      if (!this.heli) this._collideJunk(playerZ);
       this._updateRivals(dt, playerZ);
+      if (!this.skill) this._pickPrompt(playerZ);
       if (playerZ >= this.finishSeg * JS.seg) this._finish();
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // ATTACKS, BOOST, SPECIAL
+  // ------------------------------------------------------------------
+
+  // The red circle goes on the nearest rival you're close enough to hit.
+  _pickPrompt(playerZ) {
+    let best = null;
+    if (!this.heli) {
+      for (const r of this.racers) {
+        if (r.cool > 0 || r.knock > 0) continue;
+        const dz = r.z - playerZ;
+        if (dz < -150 || dz > JS.promptRange || Math.abs(r.x - this.playerX) > 0.9) continue;
+        if (!best || dz < best.z - playerZ) best = r;
+      }
+    }
+    if (!best) { this.prompt = null; return; }
+    if (!this.prompt || this.prompt.racer !== best) this.prompt = { racer: best, born: this.t };
+  }
+
+  _hitUI(x, y) {
+    const near = (o, pad) => o && Math.hypot(x - o.x, y - o.y) < o.r * pad;
+    if (this.special >= 1 && !this.heli && near(this._ui.special, 1.2)) return 'special';
+    if (this.boost >= JS.boostCost && near(this._ui.boost, 1.2)) return 'boost';
+    if (this.prompt && this.prompt.sx != null && near({ x: this.prompt.sx, y: this.prompt.sy, r: this.prompt.r }, 1.5)) return 'prompt';
+    return null;
+  }
+
+  _useUI(kind) {
+    if (this.state !== 'race') return;
+    if (kind === 'prompt' && this.prompt && !this.skill) {
+      this.skill = jetskiSkillGame(this.prompt.racer);
+      this.prompt.racer.cool = JS.promptCooldown;
+      this.prompt = null;
+    } else if (kind === 'boost' && this.boost >= JS.boostCost && !this.heli) {
+      this.boost -= JS.boostCost;
+      this.boostT = JS.boostTime;
+      this.shake = Math.max(this.shake, 6);
+      this._splash(0, 0.5, '#bff3ff', 12);
+    } else if (kind === 'special' && this.special >= 1 && !this.heli) {
+      this.special = 0;
+      this.heli = { phase: 'dance', t: 0 };
+    }
+  }
+
+  _resolveSkill() {
+    const sk = this.skill, r = sk.target;
+    this.skill = null;
+    if (sk.success) {
+      this.hits++;
+      r.knock = 1.2;
+      r.speed *= 0.45;
+      r.x += (r.x >= this.playerX ? 1 : -1) * 0.35;
+      r.tx = r.x;
+      this.boost = Math.min(1, this.boost + JS.hitBoost);
+      this.special = Math.min(1, this.special + JS.hitSpecial);
+      this._addScore(sk.perfect ? JS.hitScore * 2 : JS.hitScore, sk.perfect ? 'PERFECT' : 'POW');
+      this.shake = 14;
+      this.flash = 0.4;
+    } else {
+      this.wobble = 0.6;
+      this.speed *= 0.9;
+      this.popups.push({ text: 'MISS', life: 0.8, max: 0.8, bad: true });
     }
   }
 
@@ -358,6 +500,8 @@ class JetskiGame {
       else if (gap < -4000) target *= 1.08;
       r.speed += (target - r.speed) * Math.min(1, dt * 0.8);
       if (r.bump > 0) { r.bump -= dt; r.speed *= Math.pow(0.6, dt); }
+      if (r.cool > 0) r.cool -= dt;
+      if (r.knock > 0) { r.knock -= dt; target *= 0.6; }
       r.z += r.speed * dt;
 
       // pick a new line now and then, and steer around junk ahead
@@ -374,8 +518,8 @@ class JetskiGame {
       r.x -= seg.curve * (r.speed / JS.maxSpeed) * dt * 0.05;
       r.x = Math.max(-0.95, Math.min(0.95, r.x));
 
-      // bumping into you shoves you both apart
-      if (Math.abs(r.z - playerZ) < 280 && Math.abs(r.x - this.playerX) < 0.3) {
+      // bumping into you shoves you both apart (not while you're flying)
+      if (!this.heli && Math.abs(r.z - playerZ) < 280 && Math.abs(r.x - this.playerX) < 0.3) {
         const dir = Math.sign(this.playerX - r.x) || 1;
         this.playerX += dir * 0.08;
         this.steerTarget += dir * 0.08;
@@ -405,9 +549,9 @@ class JetskiGame {
     this._addScore(JS.finishBonus[this.place - 1] || 500);
   }
 
-  _addScore(n) {
+  _addScore(n, label) {
     this.score += n;
-    this.popups.push({ text: `+${n}`, life: 1, max: 1 });
+    this.popups.push({ text: `+${n}${label ? ' ' + label : ''}`, life: 1, max: 1 });
   }
 
   _splash(xOff, yFrac, color, n) {
@@ -512,11 +656,14 @@ class JetskiGame {
       }
       for (const r of rivalsBySeg[base + n] || []) {
         const bob = Math.sin(this.t * 6 + r.bob) * 2;
-        this._drawJetski(p.sx + p.scale * r.x * JS.road * W / 2, p.sy + bob, p.scale * W / 2 * 520, r.kind, 0);
+        const rx = p.sx + p.scale * r.x * JS.road * W / 2, rw = p.scale * W / 2 * 520;
+        this._drawJetski(rx, p.sy + bob, rw, r.kind, r.knock > 0 ? Math.sin(r.knock * 18) * 0.6 : 0);
+        if (this.prompt && this.prompt.racer === r) { this.prompt.sx = rx; this.prompt.sy = p.sy - rw * 0.35; this.prompt.r = Math.max(30, rw * 0.6); }
       }
       ctx.restore();
     }
 
+    if (this.prompt && this.prompt.sx != null && !this.skill) this._drawPrompt();
     this._renderPlayer();
 
     for (const q of this.particles) {
@@ -527,8 +674,77 @@ class JetskiGame {
     ctx.globalAlpha = 1;
     ctx.restore();
 
+    this._renderSpeedLines();
     if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${this.flash * 0.7})`; ctx.fillRect(0, 0, W, H); }
     this._renderHud();
+    if (this.state === 'race') this._renderButtons();
+    if (this.skill) this.skill.draw(ctx, W, H, this.t);
+  }
+
+  // Faint red circle on the rival you can hit -- tap it to attack.
+  _drawPrompt() {
+    const ctx = this.ctx, pr = this.prompt;
+    const age = this.t - pr.born;
+    const a = Math.min(1, age * 4) * (0.45 + 0.25 * Math.sin(this.t * 10));
+    ctx.save();
+    ctx.strokeStyle = `rgba(255,50,50,${a + 0.2})`;
+    ctx.fillStyle = `rgba(255,50,50,${a * 0.35})`;
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(pr.sx, pr.sy, pr.r * (1 + 0.08 * Math.sin(this.t * 10)), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Lines streaming out of the vanishing point while boosting or flying.
+  _renderSpeedLines() {
+    const fly = this.heli && this.heli.phase === 'fly';
+    if (!(this.boostT > 0 || fly)) return;
+    const ctx = this.ctx, W = this.W, H = this.H;
+    const cx = W / 2, cy = this.horizon + H * 0.18;
+    ctx.save();
+    ctx.strokeStyle = fly ? `hsla(${(this.t * 400) % 360},100%,80%,0.6)` : 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 2;
+    const n = fly ? 40 : 22;
+    for (let i = 0; i < n; i++) {
+      const a = rushHash(i + Math.floor(this.t * 20)) * Math.PI * 2;
+      const r0 = (0.25 + rushHash(i * 3 + Math.floor(this.t * 20)) * 0.4) * Math.max(W, H);
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0);
+      ctx.lineTo(cx + Math.cos(a) * (r0 + 120), cy + Math.sin(a) * (r0 + 120));
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // BOOST (bottom right) and the helicopter SPECIAL (bottom left). Each
+  // is a round button with its meter as a ring around it.
+  _renderButtons() {
+    const ctx = this.ctx, W = this.W, H = this.H;
+    const r = Math.max(30, Math.min(W, H) * 0.075);
+    const by = H - r - 26;
+    this._ui.boost = { x: W - r - 20, y: by, r };
+    this._ui.special = { x: r + 20, y: by, r };
+    const button = (b, fill, ready, color, label) => {
+      ctx.save();
+      ctx.globalAlpha = ready ? 1 : 0.55;
+      ctx.fillStyle = ready ? color : 'rgba(0,0,0,0.45)';
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 5, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = color; ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r + 5, -Math.PI / 2, -Math.PI / 2 + fill * Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${Math.round(b.r * 0.42)}px VT323, monospace`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, b.x, b.y);
+      ctx.restore();
+    };
+    button(this._ui.boost, this.boost, this.boost >= JS.boostCost, '#22b8ff', 'BOOST');
+    const full = this.special >= 1 && !this.heli;
+    const col = full ? `hsl(${(this.t * 300) % 360},100%,55%)` : '#ff4fd8';
+    if (full) { ctx.save(); ctx.translate(this._ui.special.x, this._ui.special.y); ctx.scale(1 + 0.08 * Math.sin(this.t * 10), 1 + 0.08 * Math.sin(this.t * 10)); ctx.translate(-this._ui.special.x, -this._ui.special.y); }
+    button(this._ui.special, this.heli ? 0 : this.special, full, col, 'SPECIAL');
+    if (full) ctx.restore();
+    ctx.textBaseline = 'alphabetic';
   }
 
   _renderSky() {
@@ -622,7 +838,8 @@ class JetskiGame {
   }
 
   // A jet ski seen from behind: hull, rider, rooster tail. kind paints it.
-  _drawJetski(x, y, w, kind, lean) {
+  _drawJetski(x, y, w, kind, lean, opts) {
+    opts = opts || {};
     const ctx = this.ctx, t = this.t;
     if (w < 2) return;
     const h = w * 0.55;
@@ -640,7 +857,8 @@ class JetskiGame {
     ctx.fillStyle = hull;
     ctx.beginPath(); ctx.moveTo(-w * 0.5, -h * 0.15); ctx.lineTo(w * 0.5, -h * 0.15); ctx.lineTo(w * 0.38, h * 0.12); ctx.lineTo(-w * 0.38, h * 0.12); ctx.fill();
     ctx.fillStyle = trim; ctx.fillRect(-w * 0.5, -h * 0.22, w, h * 0.09);
-    // rider
+    // rider (spins on the handlebars during the breakdance)
+    if (opts.spin) { ctx.save(); ctx.translate(0, -h * 0.5); ctx.rotate(opts.spin); ctx.translate(0, h * 0.5); }
     const skin = '#e8b98a';
     const shirt = kind === 'cop' ? '#23407d' : kind === 'pirate' ? '#7a1e1e' : '#27b7c9';
     ctx.fillStyle = shirt; ctx.fillRect(-w * 0.17, -h * 0.85, w * 0.34, h * 0.65);
@@ -659,6 +877,16 @@ class JetskiGame {
     } else {
       ctx.fillStyle = '#3a2a1e'; ctx.beginPath(); ctx.arc(0, -h * 1.02, w * 0.13, Math.PI, 0); ctx.fill();
     }
+    if (opts.spin) ctx.restore();
+    // helicopter mode: a mast and a blurred, spinning rotor up top
+    if (opts.rotor) {
+      ctx.fillStyle = '#333'; ctx.fillRect(-w * 0.03, -h * 1.5, w * 0.06, h * 0.4);
+      ctx.fillStyle = 'rgba(40,40,40,0.25)';
+      ctx.beginPath(); ctx.ellipse(0, -h * 1.5, w * 0.95, h * 0.12, 0, 0, Math.PI * 2); ctx.fill();
+      const b = Math.cos(t * 50) * w * 0.95;
+      ctx.strokeStyle = '#222'; ctx.lineWidth = Math.max(2, w * 0.04);
+      ctx.beginPath(); ctx.moveTo(-b, -h * 1.5); ctx.lineTo(b, -h * 1.5); ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -676,7 +904,19 @@ class JetskiGame {
       const a = (this.t * 4 + i / 6) % 1;
       ctx.beginPath(); ctx.arc(W / 2 + Math.sin(i * 2.3) * w * 0.2, this._playerSY + a * H * 0.12, w * (0.06 + a * 0.12) * (0.5 + sp), 0, Math.PI * 2); ctx.fill();
     }
-    this._drawJetski(W / 2, this._playerSY + bob, w, 'player', lean);
+    // helicopter: dance on the water, lift off, fly high, drop back in
+    let lift = 0, spin = 0, rotor = false;
+    if (this.heli) {
+      const h = this.heli;
+      if (h.phase === 'dance') spin = h.t * 22;
+      else if (h.phase === 'fly') { rotor = true; lift = Math.min(1, h.t / 0.5) * H * 0.16 + Math.sin(this.t * 3) * 6; }
+      else { rotor = true; lift = (1 - h.t / 0.6) * H * 0.16; }
+      if (lift > 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        ctx.beginPath(); ctx.ellipse(W / 2, this._playerSY + 6, w * 0.45, w * 0.08, 0, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    this._drawJetski(W / 2, this._playerSY + bob - lift, w, 'player', lean, { spin, rotor });
   }
 
   _renderHud() {
@@ -708,7 +948,7 @@ class JetskiGame {
         ctx.globalAlpha = Math.min(1, q.life * 2);
         ctx.textAlign = 'right';
         ctx.font = `bold ${Math.round(22 * u)}px VT323, monospace`;
-        ctx.fillStyle = '#ffd84a';
+        ctx.fillStyle = q.bad ? '#ff5a5a' : '#ffd84a';
         ctx.fillText(q.text, W - 16, 48 * u + 26 * u * (i + 1) - (1 - q.life) * 20);
       });
       ctx.globalAlpha = 1;
@@ -770,6 +1010,112 @@ class JetskiGame {
       ctx.fillRect(0, 0, W, H);
     }
   }
+}
+
+// ------------------------------------------------------------------
+// SKILL GAMES -- one fires when you tap a red circle. Each is about a
+// second long, one thumb, readable at a glance. The race runs in slow
+// motion underneath. Add new ones to JETSKI_SKILLS.
+// ------------------------------------------------------------------
+
+function jetskiSkillBase(target) {
+  return { target, t: 0, done: false, success: false, perfect: false, update() {}, down() {}, up() {}, draw() {} };
+}
+
+function jetskiSkillFrame(ctx, W, H, label, flash) {
+  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  ctx.fillRect(0, 0, W, H);
+  const R = Math.min(W, H) * 0.12, cx = W / 2, cy = H * 0.44;
+  ctx.font = `bold ${Math.round(R * 0.55)}px VT323, monospace`;
+  ctx.textAlign = 'center';
+  ctx.lineWidth = 6; ctx.strokeStyle = '#000'; ctx.lineJoin = 'round';
+  ctx.strokeText(label, cx, cy - R * 2.6);
+  ctx.fillStyle = flash ? '#ffd84a' : '#fff';
+  ctx.fillText(label, cx, cy - R * 2.6);
+  return { R, cx, cy };
+}
+
+const JETSKI_SKILLS = {
+  // Hold down: a big ring pulses in over the circle. Let go when they match.
+  ring(target) {
+    const g = jetskiSkillBase(target);
+    g.pressed = false; g.holdT = 0;
+    g.outer = () => 1 + 0.9 * (0.5 + 0.5 * Math.cos(g.holdT * 4.4));
+    g.update = (dt) => {
+      g.t += dt;
+      if (g.pressed) { g.holdT += dt; if (g.holdT > 2.4) g.done = true; }
+      else if (g.t > 2.2) g.done = true;
+    };
+    g.down = () => { g.pressed = true; };
+    g.up = () => {
+      if (!g.pressed || g.done) return;
+      const err = Math.abs(g.outer() - 1);
+      g.success = err < 0.13; g.perfect = err < 0.05; g.done = true;
+    };
+    g.draw = (ctx, W, H) => {
+      const { R, cx, cy } = jetskiSkillFrame(ctx, W, H, g.pressed ? 'LET GO' : 'HOLD', g.pressed && Math.abs(g.outer() - 1) < 0.13);
+      ctx.fillStyle = '#ff3b3b';
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 5;
+      ctx.beginPath(); ctx.arc(cx, cy, R * (g.pressed ? g.outer() : 1.9 + 0.05 * Math.sin(g.t * 8)), 0, Math.PI * 2); ctx.stroke();
+    };
+    return g;
+  },
+  // Two circles slide toward each other vertically. Tap when they overlap.
+  slide(target) {
+    const g = jetskiSkillBase(target);
+    g.off = () => Math.cos(g.t * 4.2);
+    g.update = (dt) => { g.t += dt; if (g.t > 3.1) g.done = true; };
+    g.down = () => {
+      if (g.done) return;
+      const err = Math.abs(g.off());
+      g.success = err < 0.2; g.perfect = err < 0.07; g.done = true;
+    };
+    g.draw = (ctx, W, H) => {
+      const { R, cx, cy } = jetskiSkillFrame(ctx, W, H, 'TAP', Math.abs(g.off()) < 0.2);
+      const A = R * 2.2, o = g.off() * A;
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(cx, cy - A - R); ctx.lineTo(cx, cy + A + R); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,59,59,0.85)';
+      ctx.beginPath(); ctx.arc(cx, cy - o, R * 0.8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.beginPath(); ctx.arc(cx, cy + o, R * 0.8, 0, Math.PI * 2); ctx.fill();
+    };
+    return g;
+  },
+  // A needle sweeps the dial. Tap while it's in the green wedge.
+  needle(target) {
+    const g = jetskiSkillBase(target);
+    g.a0 = Math.random() * Math.PI * 2;
+    g.wedge = g.a0 + Math.PI * (0.7 + Math.random() * 0.8);
+    g.ang = () => g.a0 + g.t * Math.PI * 2 * 1.05;
+    g.update = (dt) => { g.t += dt; if (g.t > 2.8) g.done = true; };
+    g.down = () => {
+      if (g.done) return;
+      let d = Math.abs(((g.ang() - g.wedge) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+      g.success = d < 0.42; g.perfect = d < 0.14; g.done = true;
+    };
+    g.draw = (ctx, W, H) => {
+      let d = Math.abs(((g.ang() - g.wedge) % (Math.PI * 2) + Math.PI * 3) % (Math.PI * 2) - Math.PI);
+      const { R, cx, cy } = jetskiSkillFrame(ctx, W, H, 'TAP', d < 0.42);
+      const r = R * 1.6;
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#2fdc6a';
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, g.wedge - 0.42, g.wedge + 0.42); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(g.ang()) * r * 0.95, cy + Math.sin(g.ang()) * r * 0.95); ctx.stroke();
+      ctx.lineCap = 'butt';
+    };
+    return g;
+  },
+};
+
+function jetskiSkillGame(target) {
+  const kinds = Object.keys(JETSKI_SKILLS);
+  return JETSKI_SKILLS[kinds[Math.floor(Math.random() * kinds.length)]](target);
 }
 
 let jetskiGame = null;
