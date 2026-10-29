@@ -7,7 +7,7 @@
  * rush.js) talks to you, and you pick how to get off the island:
  *
  *   1. Pay for the ferry      -- costs LIBERTY_FERRY_COST, that's it
- *   2. Steal a jet ski        -- minigame, not built yet
+ *   2. Steal a jet ski        -- the jet ski race (jetski.js)
  *   3. Steal a helicopter     -- minigame, not built yet
  *
  * Whichever way you cross, you come ashore at Battery Park and the trail
@@ -109,7 +109,7 @@ class LibertyScene {
     this.look = null;
     this._say(LIBERTY_LINES.choose, [
       { label: `Pay for the ferry ($${LIBERTY_FERRY_COST})`, look: 'ferry', onClick: () => this._ferry() },
-      { label: 'Steal a jet ski', look: 'jetski', onClick: () => this._notBuilt() },
+      { label: 'Steal a jet ski', look: 'jetski', onClick: () => this._finish('jetski') },
       { label: 'Steal a helicopter', look: 'heli', onClick: () => this._notBuilt() },
     ]);
   }

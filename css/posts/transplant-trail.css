@@ -979,7 +979,8 @@ html.game-zoom-lock button {
   align-items: stretch;
 }
 
-/* Liberty Island scene -- same viewport-pinned shell as the rush run. */
+/* Liberty Island scene and jet ski race -- same viewport-pinned shell as the rush run. */
+#jetski-game,
 #liberty-scene {
   position: fixed;
   inset: 0;
@@ -992,10 +993,13 @@ html.game-zoom-lock button {
   z-index: 5;
 }
 
+#jetski-game.active,
 #liberty-scene.active {
   display: block;
+  touch-action: none;
 }
 
+#jetski-canvas,
 #liberty-canvas {
   position: absolute;
   inset: 0;

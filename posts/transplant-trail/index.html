@@ -13,7 +13,7 @@
 
   <!-- Core Styles -->
   <link rel="stylesheet" href="../../css/base.css">
-  <link rel="stylesheet" href="../../css/posts/transplant-trail.css?v=5">
+  <link rel="stylesheet" href="../../css/posts/transplant-trail.css?v=6">
 </head>
 <body>
   <div class="game-container">
@@ -714,6 +714,21 @@
       </div>
     </div>
 
+    <!-- Jet ski race (from Liberty Island) -->
+    <div id="jetski-game" class="screen">
+      <canvas id="jetski-canvas"></canvas>
+      <div id="jetski-results" class="cannon-overlay hidden">
+        <div class="cannon-splash">
+          <h2 id="jetski-results-title" class="cannon-splash-title"></h2>
+          <div id="jetski-results-stats"></div>
+          <div class="menu-options" style="margin-top: 20px;">
+            <button id="jetski-results-again" class="menu-option">Run it back</button>
+            <button id="jetski-results-continue" class="menu-option">Continue</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Apartment Hunt -->
     <div id="apartment-hunt" class="screen">
       <div class="border-decoration top"></div>
@@ -736,16 +751,17 @@
   <script src="characters.js?v=2"></script>
   <script src="store.js?v=2"></script>
   <script src="trail-data.js?v=5"></script>
-  <script src="trail.js?v=27"></script>
+  <script src="trail.js?v=28"></script>
   <script src="bodega.js?v=9"></script>
   <script src="rush.js?v=9"></script>
-  <script src="liberty.js?v=2"></script>
+  <script src="liberty.js?v=3"></script>
+  <script src="jetski.js?v=2"></script>
   <script src="cannon.js?v=23"></script>
   <script src="heist.js?v=33"></script>
   <script src="jail-data.js?v=1"></script>
   <script src="jail-minigames.js?v=4"></script>
   <script src="jail.js?v=3"></script>
-  <script src="game.js?v=27"></script>
+  <script src="game.js?v=28"></script>
 
   <!-- GoatCounter Analytics -->
   <script data-goatcounter="https://maussgavemeacookie.goatcounter.com/count"

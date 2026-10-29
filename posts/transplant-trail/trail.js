@@ -1210,13 +1210,30 @@ class TrailGame {
     libertyScene = new LibertyScene(this.gameState, {
       wipedOut,
       charge: (amount) => this.chargeExpense(amount, 'chaseSapphire'),
-    }, () => {
-      game.showScreen('trail-screen');
-      this.state.paused = false;
-      this.start();
-      if (LIBERTY_LINES.arrive) this.showEvent(LIBERTY_LINES.arrive);
+    }, (out) => {
+      if (out.via === 'jetski') this.startJetskiGame();
+      else this.arriveBatteryPark();
     });
     libertyScene.init();
+  }
+
+  // Steal a jet ski: the whale-launched water-slope race (jetski.js),
+  // which splashes down at Battery Park. Score only.
+  startJetskiGame() {
+    this.stop();
+    game.showScreen('jetski-game');
+    jetskiGame = new JetskiGame(this.gameState, (result) => {
+      if (result) this.gameState.jetskiScore = Math.max(this.gameState.jetskiScore || 0, result.score || 0);
+      this.arriveBatteryPark();
+    });
+    jetskiGame.init();
+  }
+
+  arriveBatteryPark() {
+    game.showScreen('trail-screen');
+    this.state.paused = false;
+    this.start();
+    if (LIBERTY_LINES.arrive) this.showEvent(LIBERTY_LINES.arrive);
   }
 
   getTrailStateSnapshot() {

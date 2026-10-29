@@ -76,6 +76,7 @@ class TransplantTrail {
       cannonProgress: null,
       bodegaDone: false,
       rushScore: 0,
+      jetskiScore: 0,
     };
   }
 
@@ -152,7 +153,7 @@ class TransplantTrail {
     // finger can't be outside the locked subtree -- everything on screen
     // during a canvas game is inside it. Restored the moment you're back
     // on a reading screen, where pinch/double-tap zoom is still wanted.
-    const CANVAS_GAME_SCREENS = new Set(['cannon-game', 'heist-game', 'bodega-game', 'jail-game', 'rush-game', 'liberty-scene']);
+    const CANVAS_GAME_SCREENS = new Set(['cannon-game', 'heist-game', 'bodega-game', 'jail-game', 'rush-game', 'liberty-scene', 'jetski-game']);
     const lockZoom = CANVAS_GAME_SCREENS.has(screenId);
     document.documentElement.classList.toggle('game-zoom-lock', lockZoom);
     document.body.classList.toggle('game-zoom-lock', lockZoom);
@@ -227,7 +228,7 @@ class TransplantTrail {
   // new content while it's actively being iterated on.
   maybeDebugJump() {
     const params = new URLSearchParams(window.location.search);
-    const targets = ['apartment', 'bodega', 'rush', 'liberty', 'cannon', 'heist', 'jail'];
+    const targets = ['apartment', 'bodega', 'rush', 'liberty', 'jetski', 'cannon', 'heist', 'jail'];
     const target = targets.find(t => params.get(t) === '1') || null;
     if (!target) return false;
     // This runs synchronously inside the TransplantTrail constructor --
@@ -247,6 +248,7 @@ class TransplantTrail {
       else if (target === 'bodega')   trailGame.startBodegaGame();
       else if (target === 'rush')     trailGame.startRushGame();
       else if (target === 'liberty')  trailGame.startLibertyScene(false);
+      else if (target === 'jetski')   trailGame.startJetskiGame();
       else if (target === 'cannon')   trailGame.startCannonGame();
       else if (target === 'heist')    trailGame.startHeistGame();
       else if (target === 'jail')     trailGame.startJailGame();
@@ -522,6 +524,7 @@ class TransplantTrail {
       bodegaScore: this.state.bodegaScore || 0,
       bodegaDone: this.state.bodegaDone || false,
       rushScore: this.state.rushScore || 0,
+      jetskiScore: this.state.jetskiScore || 0,
       boroughBucks: this.state.boroughBucks || 0,
       cannonProgress: this.state.cannonProgress || null,
       trailState: trailStateSnapshot,
@@ -569,6 +572,7 @@ class TransplantTrail {
     // definition after the bodega.
     this.state.bodegaDone         = save.bodegaDone || chapterNum >= 2;
     this.state.rushScore          = save.rushScore || 0;
+    this.state.jetskiScore        = save.jetskiScore || 0;
     this.state.boroughBucks       = save.boroughBucks || 0;
     this.state.cannonProgress     = save.cannonProgress || null;
 
