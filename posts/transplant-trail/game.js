@@ -519,6 +519,7 @@ class TransplantTrail {
       aura: this.state.aura,
       inventory: { ...this.state.inventory },
       bodegaScore: this.state.bodegaScore || 0,
+      bodegaDone: this.state.bodegaDone || false,
       rushScore: this.state.rushScore || 0,
       boroughBucks: this.state.boroughBucks || 0,
       cannonProgress: this.state.cannonProgress || null,
@@ -563,6 +564,9 @@ class TransplantTrail {
     this.state.aura               = save.aura;
     this.state.inventory          = { ...save.inventory };
     this.state.bodegaScore        = save.bodegaScore || 0;
+    // Older ch2+ saves predate this field, but every ch2+ save is by
+    // definition after the bodega.
+    this.state.bodegaDone         = save.bodegaDone || chapterNum >= 2;
     this.state.rushScore          = save.rushScore || 0;
     this.state.boroughBucks       = save.boroughBucks || 0;
     this.state.cannonProgress     = save.cannonProgress || null;

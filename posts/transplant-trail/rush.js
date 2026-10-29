@@ -9,7 +9,10 @@
  *
  * ONE verb: jump. Tap/click/space to jump, hold for a higher one, press
  * again in the air for a double jump. ONE rule: landing on things is
- * good (you bounce), running into them is bad.
+ * good (you bounce), running into them is bad. Hanging bars: fly into
+ * one to grab it, tap to let go. Finale: 3-lap loop, ramp, slow-motion
+ * launch at the Statue of Liberty (the flagpole -- how high you hit her
+ * is the bonus). Headline text is in RUSH_HEADLINES below.
  *
  * Nothing can strand you. A pit doesn't respawn you anywhere -- it
  * costs a heart and throws you forward out the far side -- so there is
@@ -270,7 +273,7 @@ class RushGame {
   // arc traces the jump that clears whatever is under it.
 
   _buildLevel() {
-    const L = this.level = { pits: [], plats: [], obs: [], picks: [], pads: [], bars: [], triggers: [], zones: [], finishX: 0 };
+    const L = this.level = { pits: [], plats: [], obs: [], picks: [], pads: [], bars: [], zones: [], finishX: 0 };
     const ob = (type, x, y = 0) => {
       const d = RUSH_OB[type];
       L.obs.push({ type, x, y, w: d.w, h: d.h, vx: d.vx || 0, solid: !!d.solid, bounce: RUSH_TUNING[d.bounce], alive: true, scored: false });

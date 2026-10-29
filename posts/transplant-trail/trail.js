@@ -1046,8 +1046,8 @@ class TrailGame {
     game.showScreen('bodega-game');
     bodegaGame = new BodegaGame(this.gameState, () => {
       // Save chapter 2 checkpoint after bodega completes
-      game.saveChapter(2, this.getTrailStateSnapshot());
       this.gameState.bodegaDone = true;
+      game.saveChapter(2, this.getTrailStateSnapshot());
       game.showScreen('trail-screen');
       this.start();
     });

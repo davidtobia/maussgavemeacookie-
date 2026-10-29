@@ -2566,17 +2566,6 @@ button.menu-option.cannon-shop-exit-btn:hover {
   min-height: 22px;
 }
 
-.jail-rhythm-btns {
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-  pointer-events: auto;
-}
-
-.jail-rhythm-btn {
-  max-width: 120px;
-}
-
 /* ---- Bench HUD (Luigi) ---- */
 
 .jail-bench-readout {
@@ -2673,7 +2662,6 @@ button.menu-option.cannon-shop-exit-btn:hover {
   .jail-yard-friend-strip { max-width: 260px; }
   .jail-yard-friend-name { min-width: 56px; font-size: 12px; }
   .jail-yard-approach { font-size: 17px; padding: 10px 20px; }
-  .jail-rhythm-btn { font-size: 19px; padding: 18px 0; }
   .jail-bench-hold-btn { font-size: 19px; padding: 18px 0; }
 }
 
