@@ -152,7 +152,7 @@ class TransplantTrail {
     // finger can't be outside the locked subtree -- everything on screen
     // during a canvas game is inside it. Restored the moment you're back
     // on a reading screen, where pinch/double-tap zoom is still wanted.
-    const CANVAS_GAME_SCREENS = new Set(['cannon-game', 'heist-game', 'bodega-game', 'jail-game', 'rush-game']);
+    const CANVAS_GAME_SCREENS = new Set(['cannon-game', 'heist-game', 'bodega-game', 'jail-game', 'rush-game', 'liberty-scene']);
     const lockZoom = CANVAS_GAME_SCREENS.has(screenId);
     document.documentElement.classList.toggle('game-zoom-lock', lockZoom);
     document.body.classList.toggle('game-zoom-lock', lockZoom);
@@ -227,7 +227,7 @@ class TransplantTrail {
   // new content while it's actively being iterated on.
   maybeDebugJump() {
     const params = new URLSearchParams(window.location.search);
-    const targets = ['apartment', 'bodega', 'rush', 'cannon', 'heist', 'jail'];
+    const targets = ['apartment', 'bodega', 'rush', 'liberty', 'cannon', 'heist', 'jail'];
     const target = targets.find(t => params.get(t) === '1') || null;
     if (!target) return false;
     // This runs synchronously inside the TransplantTrail constructor --
@@ -246,6 +246,7 @@ class TransplantTrail {
       if (target === 'apartment')     trailGame.apartmentHunt();
       else if (target === 'bodega')   trailGame.startBodegaGame();
       else if (target === 'rush')     trailGame.startRushGame();
+      else if (target === 'liberty')  trailGame.startLibertyScene(false);
       else if (target === 'cannon')   trailGame.startCannonGame();
       else if (target === 'heist')    trailGame.startHeistGame();
       else if (target === 'jail')     trailGame.startJailGame();

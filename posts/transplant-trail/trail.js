@@ -1196,11 +1196,27 @@ class TrailGame {
           this.state.currentDate.setHours(this.state.currentDate.getHours() + RUSH_WIPEOUT_HOURS);
         }
       }
+      this.startLibertyScene(!!(result && result.wipedOut));
+    });
+    rushGame.init();
+  }
+
+  // Finished or wiped out, the rush run leaves you on Liberty Island
+  // (liberty.js). Crossing back drops you at Battery Park, and the trail
+  // resumes north to Washington Square Park.
+  startLibertyScene(wipedOut) {
+    this.stop();
+    game.showScreen('liberty-scene');
+    libertyScene = new LibertyScene(this.gameState, {
+      wipedOut,
+      charge: (amount) => this.chargeExpense(amount, 'chaseSapphire'),
+    }, () => {
       game.showScreen('trail-screen');
       this.state.paused = false;
       this.start();
+      if (LIBERTY_LINES.arrive) this.showEvent(LIBERTY_LINES.arrive);
     });
-    rushGame.init();
+    libertyScene.init();
   }
 
   getTrailStateSnapshot() {

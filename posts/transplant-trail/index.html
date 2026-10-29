@@ -13,7 +13,7 @@
 
   <!-- Core Styles -->
   <link rel="stylesheet" href="../../css/base.css">
-  <link rel="stylesheet" href="../../css/posts/transplant-trail.css?v=4">
+  <link rel="stylesheet" href="../../css/posts/transplant-trail.css?v=5">
 </head>
 <body>
   <div class="game-container">
@@ -705,6 +705,15 @@
       </div>
     </div>
 
+    <!-- Liberty Island: where the rush run lands you; pick how to cross -->
+    <div id="liberty-scene" class="screen">
+      <canvas id="liberty-canvas"></canvas>
+      <div class="liberty-panel">
+        <p id="liberty-text" class="liberty-text"></p>
+        <div id="liberty-choices" class="menu-options"></div>
+      </div>
+    </div>
+
     <!-- Apartment Hunt -->
     <div id="apartment-hunt" class="screen">
       <div class="border-decoration top"></div>
@@ -727,15 +736,16 @@
   <script src="characters.js?v=2"></script>
   <script src="store.js?v=2"></script>
   <script src="trail-data.js?v=5"></script>
-  <script src="trail.js?v=26"></script>
+  <script src="trail.js?v=27"></script>
   <script src="bodega.js?v=9"></script>
-  <script src="rush.js?v=8"></script>
+  <script src="rush.js?v=9"></script>
+  <script src="liberty.js?v=2"></script>
   <script src="cannon.js?v=23"></script>
   <script src="heist.js?v=33"></script>
   <script src="jail-data.js?v=1"></script>
   <script src="jail-minigames.js?v=4"></script>
   <script src="jail.js?v=3"></script>
-  <script src="game.js?v=26"></script>
+  <script src="game.js?v=27"></script>
 
   <!-- GoatCounter Analytics -->
   <script data-goatcounter="https://maussgavemeacookie.goatcounter.com/count"

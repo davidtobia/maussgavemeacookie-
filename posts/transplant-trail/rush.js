@@ -1598,65 +1598,12 @@ class RushGame {
   }
 
   // The flagpole: the Statue of Liberty, smoking, with bug eyes that
-  // follow you in.
+  // follow you in. (Shared drawing -- see rushDrawStatue below.)
   _drawStatue(x, gy, s) {
-    const ctx = this.ctx, t = this.t, p = this.p;
-    const U = (v) => v * s;
-    // pedestal
-    ctx.fillStyle = '#9a9283'; ctx.fillRect(x - U(44), gy - U(150), U(88), U(150));
-    ctx.fillStyle = '#7d766a';
-    for (let k = 1; k < 5; k++) ctx.fillRect(x - U(44), gy - U(k * 30), U(88), U(3));
-    ctx.fillStyle = '#b3ab9a'; ctx.fillRect(x - U(52), gy - U(158), U(104), U(10));
-    // robe
-    const green = '#5fae94', dark = '#3f8a72';
-    ctx.fillStyle = green;
-    ctx.beginPath(); ctx.moveTo(x - U(40), gy - U(150)); ctx.lineTo(x + U(40), gy - U(150)); ctx.lineTo(x + U(28), gy - U(355)); ctx.lineTo(x - U(28), gy - U(355)); ctx.fill();
-    ctx.strokeStyle = dark; ctx.lineWidth = U(3);
-    for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.moveTo(x + U(k * 12), gy - U(155)); ctx.lineTo(x + U(k * 8), gy - U(340)); ctx.stroke(); }
-    // tablet arm
-    ctx.fillStyle = dark; ctx.fillRect(x + U(14), gy - U(320), U(26), U(40));
-    // raised torch arm
-    ctx.strokeStyle = green; ctx.lineWidth = U(14); ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(x - U(20), gy - U(340)); ctx.lineTo(x - U(34), gy - U(462)); ctx.stroke();
-    ctx.lineCap = 'butt';
-    ctx.fillStyle = '#c9a24a'; ctx.fillRect(x - U(44), gy - U(480), U(20), U(16));
-    const fl = Math.sin(t * 14) * U(3);
-    ctx.fillStyle = '#ff9a2a';
-    ctx.beginPath(); ctx.moveTo(x - U(46), gy - U(480)); ctx.quadraticCurveTo(x - U(34) + fl, gy - U(515), x - U(22), gy - U(480)); ctx.fill();
-    ctx.fillStyle = '#ffe46b';
-    ctx.beginPath(); ctx.moveTo(x - U(40), gy - U(480)); ctx.quadraticCurveTo(x - U(34) - fl, gy - U(500), x - U(28), gy - U(480)); ctx.fill();
-    // head + crown
-    const hx = x, hy = gy - U(380);
-    ctx.fillStyle = green; ctx.beginPath(); ctx.arc(hx, hy, U(24), 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = green;
-    for (let k = 0; k < 7; k++) {
-      const a = -Math.PI * 0.85 + (k / 6) * Math.PI * 0.7;
-      const bx = hx + Math.cos(a) * U(20), by = hy - U(10) + Math.sin(a) * U(16);
-      ctx.beginPath(); ctx.moveTo(bx - U(4), by); ctx.lineTo(bx + Math.cos(a) * U(20), by + Math.sin(a) * U(20)); ctx.lineTo(bx + U(4), by); ctx.fill();
-    }
-    ctx.fillStyle = dark; ctx.fillRect(hx - U(22), hy - U(14), U(44), U(6));
-    // big bug eyes, pupils tracking the runner
-    const prx = (p.x - this.camX) * s, pry = gy - (p.y + 20) * s;
-    [[-11, 0], [11, 0]].forEach(([ex, ey]) => {
-      const cx = hx + U(ex), cy = hy + U(ey);
-      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, cy, U(12), 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = '#222'; ctx.lineWidth = U(2); ctx.stroke();
-      const dx = prx - cx, dy = pry - cy, d = Math.hypot(dx, dy) || 1;
-      const wob = Math.sin(t * 9 + ex) * U(0.8);
-      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(cx + (dx / d) * U(5) + wob, cy + (dy / d) * U(5), U(5.5), 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx + (dx / d) * U(5) - U(2), cy + (dy / d) * U(5) - U(2), U(1.6), 0, Math.PI * 2); ctx.fill();
-    });
-    // cigarette, glowing tip, smoke
-    const mx = hx - U(6), my = hy + U(14);
-    ctx.fillStyle = '#f2efe6'; ctx.fillRect(mx - U(34), my - U(3), U(30), U(6));
-    ctx.fillStyle = '#d98a4a'; ctx.fillRect(mx - U(8), my - U(3), U(6), U(6));
-    ctx.fillStyle = `rgba(255,${90 + 60 * Math.sin(t * 6)},40,1)`; ctx.fillRect(mx - U(38), my - U(3), U(5), U(6));
-    for (let k = 0; k < 6; k++) {
-      const ph = (t * 0.5 + k / 6) % 1;
-      ctx.fillStyle = `rgba(220,220,225,${0.45 * (1 - ph)})`;
-      ctx.beginPath(); ctx.arc(mx - U(40) - ph * U(30) + Math.sin(ph * 8 + k) * U(8), my - ph * U(120), U(5 + ph * 14), 0, Math.PI * 2); ctx.fill();
-    }
+    const p = this.p;
+    rushDrawStatue(this.ctx, x, gy, s, this.t, (p.x - this.camX) * s, gy - (p.y + 20) * s);
   }
+
 
   // Slams in oversized, shudders, cycles color, then fades -- sized to
   // fill the width, wrapping onto more lines only when it has to.
@@ -1840,6 +1787,68 @@ class RushGame {
       ctx.fillStyle = '#fff'; ctx.fillText(name, W / 2 - slide, H * 0.2);
       ctx.globalAlpha = 1;
     }
+  }
+}
+
+// The Statue of Liberty -- smoking, bug-eyed, pupils fixed on (lookX,
+// lookY) in screen px. x/gy: screen position of her base; s: px per world
+// unit (she is ~515 units tall). Used by the rush finale and the Liberty
+// Island scene (liberty.js).
+function rushDrawStatue(ctx, x, gy, s, t, lookX, lookY) {
+  const U = (v) => v * s;
+  // pedestal
+  ctx.fillStyle = '#9a9283'; ctx.fillRect(x - U(44), gy - U(150), U(88), U(150));
+  ctx.fillStyle = '#7d766a';
+  for (let k = 1; k < 5; k++) ctx.fillRect(x - U(44), gy - U(k * 30), U(88), U(3));
+  ctx.fillStyle = '#b3ab9a'; ctx.fillRect(x - U(52), gy - U(158), U(104), U(10));
+  // robe
+  const green = '#5fae94', dark = '#3f8a72';
+  ctx.fillStyle = green;
+  ctx.beginPath(); ctx.moveTo(x - U(40), gy - U(150)); ctx.lineTo(x + U(40), gy - U(150)); ctx.lineTo(x + U(28), gy - U(355)); ctx.lineTo(x - U(28), gy - U(355)); ctx.fill();
+  ctx.strokeStyle = dark; ctx.lineWidth = U(3);
+  for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.moveTo(x + U(k * 12), gy - U(155)); ctx.lineTo(x + U(k * 8), gy - U(340)); ctx.stroke(); }
+  // tablet arm
+  ctx.fillStyle = dark; ctx.fillRect(x + U(14), gy - U(320), U(26), U(40));
+  // raised torch arm
+  ctx.strokeStyle = green; ctx.lineWidth = U(14); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x - U(20), gy - U(340)); ctx.lineTo(x - U(34), gy - U(462)); ctx.stroke();
+  ctx.lineCap = 'butt';
+  ctx.fillStyle = '#c9a24a'; ctx.fillRect(x - U(44), gy - U(480), U(20), U(16));
+  const fl = Math.sin(t * 14) * U(3);
+  ctx.fillStyle = '#ff9a2a';
+  ctx.beginPath(); ctx.moveTo(x - U(46), gy - U(480)); ctx.quadraticCurveTo(x - U(34) + fl, gy - U(515), x - U(22), gy - U(480)); ctx.fill();
+  ctx.fillStyle = '#ffe46b';
+  ctx.beginPath(); ctx.moveTo(x - U(40), gy - U(480)); ctx.quadraticCurveTo(x - U(34) - fl, gy - U(500), x - U(28), gy - U(480)); ctx.fill();
+  // head + crown
+  const hx = x, hy = gy - U(380);
+  ctx.fillStyle = green; ctx.beginPath(); ctx.arc(hx, hy, U(24), 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = green;
+  for (let k = 0; k < 7; k++) {
+    const a = -Math.PI * 0.85 + (k / 6) * Math.PI * 0.7;
+    const bx = hx + Math.cos(a) * U(20), by = hy - U(10) + Math.sin(a) * U(16);
+    ctx.beginPath(); ctx.moveTo(bx - U(4), by); ctx.lineTo(bx + Math.cos(a) * U(20), by + Math.sin(a) * U(20)); ctx.lineTo(bx + U(4), by); ctx.fill();
+  }
+  ctx.fillStyle = dark; ctx.fillRect(hx - U(22), hy - U(14), U(44), U(6));
+  // big bug eyes, pupils tracking the runner
+  const prx = lookX, pry = lookY;
+  [[-11, 0], [11, 0]].forEach(([ex, ey]) => {
+    const cx = hx + U(ex), cy = hy + U(ey);
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, cy, U(12), 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#222'; ctx.lineWidth = U(2); ctx.stroke();
+    const dx = prx - cx, dy = pry - cy, d = Math.hypot(dx, dy) || 1;
+    const wob = Math.sin(t * 9 + ex) * U(0.8);
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(cx + (dx / d) * U(5) + wob, cy + (dy / d) * U(5), U(5.5), 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx + (dx / d) * U(5) - U(2), cy + (dy / d) * U(5) - U(2), U(1.6), 0, Math.PI * 2); ctx.fill();
+  });
+  // cigarette, glowing tip, smoke
+  const mx = hx - U(6), my = hy + U(14);
+  ctx.fillStyle = '#f2efe6'; ctx.fillRect(mx - U(34), my - U(3), U(30), U(6));
+  ctx.fillStyle = '#d98a4a'; ctx.fillRect(mx - U(8), my - U(3), U(6), U(6));
+  ctx.fillStyle = `rgba(255,${90 + 60 * Math.sin(t * 6)},40,1)`; ctx.fillRect(mx - U(38), my - U(3), U(5), U(6));
+  for (let k = 0; k < 6; k++) {
+    const ph = (t * 0.5 + k / 6) % 1;
+    ctx.fillStyle = `rgba(220,220,225,${0.45 * (1 - ph)})`;
+    ctx.beginPath(); ctx.arc(mx - U(40) - ph * U(30) + Math.sin(ph * 8 + k) * U(8), my - ph * U(120), U(5 + ph * 14), 0, Math.PI * 2); ctx.fill();
   }
 }
 
