@@ -44,7 +44,26 @@ const RUSH_TUNING = {
   springV: 960,
   stompV: 640, carBounceV: 900,
   viewW: 560, viewH: 470, // minimum world units visible each way
+  swingR: 46,          // bar-to-body radius while swinging
+  swingGrab: 46,       // how close your body has to pass to a bar to catch it
+  swingIdeal: 1.15,    // release angle (radians past straight-down) that launches highest
+  loopR: 115,
+  launchVX: 700,
+  launchVY: 1080, launchVYPace: 380, // kicker launch: more pace = higher hit on the statue
 };
+
+// ------------------------------------------------------------------
+// HEADLINES -- giant text that slams onto the screen during the run.
+// The first one fires the moment you start; the rest are spread evenly
+// across the course in this order, however many there are. Add, cut or
+// reorder freely.
+// ------------------------------------------------------------------
+const RUSH_HEADLINES = [
+  'AHHHHHHHHHHHHH',
+  'AHHHHH I WANNA KISS THE MOON',
+  'I AM NEW YORK',
+  'I LOVE LINES',
+];
 
 const RUSH_ZONES = [
   { name: 'TIMES SQUARE' },
@@ -179,8 +198,15 @@ class RushGame {
     this.p = {
       x: 200, y: 0, vx: 0, vy: 0, grounded: true, airJumps: 1,
       coyote: 0, buffer: 0, held: false, canCut: false,
-      squash: 0, spin: 0, runPhase: 0,
+      squash: 0, spin: 0, runPhase: 0, swing: null,
     };
+    this.loopRun = null;
+    this.loopDone = false;
+    this.launched = false;
+    this.poleHit = false;
+    this.focusX = this.p.x;
+    this.camY = 0;
+    this.headline = null;
     this._buildLevel();
   }
 
@@ -219,7 +245,7 @@ class RushGame {
   // arc traces the jump that clears whatever is under it.
 
   _buildLevel() {
-    const L = this.level = { pits: [], plats: [], obs: [], picks: [], pads: [], zones: [], finishX: 0 };
+    const L = this.level = { pits: [], plats: [], obs: [], picks: [], pads: [], bars: [], triggers: [], zones: [], finishX: 0 };
     const ob = (type, x, y = 0) => {
       const d = RUSH_OB[type];
       L.obs.push({ type, x, y, w: d.w, h: d.h, vx: d.vx || 0, solid: !!d.solid, bounce: RUSH_TUNING[d.bounce], alive: true, scored: false });
@@ -293,6 +319,22 @@ class RushGame {
       ob('tall', x + 1120); arc(x + 1135, 270, 120, 4);
       return x + 1120 + 260;
     };
+    // Hanging bars, each one placed where the previous one's average
+    // release lands you. Coins trace the swing-and-launch arcs; the street
+    // underneath stays clear apart from a few low hazards, so a missed
+    // bar only costs you the high route, never a heart.
+    const bars = (x, n, y0 = 150, rise = 75) => {
+      let bx = x + 320;
+      arc(bx - 140, 260, 90, 4);
+      for (let i = 0; i < n; i++) {
+        const by = y0 + i * rise;
+        L.bars.push({ x: bx, y: by, cool: 0 });
+        for (let k = 0; k < 6; k++) pick(bx + 110 + k * 72, by + 120 + Math.sin((k / 5) * Math.PI) * 170 - k * 18);
+        if (i < n - 1) ob('low', bx + 240);
+        bx += 570;
+      }
+      return bx + 120;
+    };
     const gap = (x, n = 200) => x + n;
     const zone = (x, i) => { L.zones.push({ x0: x, name: RUSH_ZONES[i].name }); return coins(x + 240, 8) + 120; };
 
@@ -302,6 +344,7 @@ class RushGame {
     x = gap(low(x, 1));
     x = gap(pit(x, 110));
     x = gap(car(x, 1));
+    x = gap(bars(x, 1));
     x = gap(scaffold(x, 'magnet'));
     x = gap(birds(x, 2));
     x = gap(boostRun(x, 190));
@@ -311,9 +354,9 @@ class RushGame {
     x = gap(rats(x, 2));
     x = gap(pit(x, 150));
     x = gap(stairs(x, 'heart'));
-    x = gap(low(x, 2), 160);
+    x = gap(bars(x, 3), 160);
     x = gap(car(x, 2), 160);
-    x = gap(birds(x, 3), 160);
+    x = gap(birds(x, 2), 160);
     x = gap(gauntlet(x), 160);
     x = gap(scaffold(x, 'rush'), 120);
 
@@ -322,13 +365,27 @@ class RushGame {
     x = gap(pit(x, 150), 60);
     x = gap(pit(x, 170), 140);
     x = gap(birds(x, 4), 140);
+    x = gap(bars(x, 3, 160, 70), 140);
     x = gap(stairs(x, 'magnet'), 140);
     x = gap(jam(x), 140);
-    x = gap(car(x, 2), 120);
     x = gap(gauntlet(x), 120);
-    x = coins(x + 100, 14);
-    L.finishX = x + 260;
-    L.endX = L.finishX + 1400;
+    // FINALE: boost pad -> 360 loop -> kicker ramp -> the statue, which
+    // is the flagpole. How high you hit her is the bonus.
+    x = coins(x + 100, 10);
+    L.pads.push({ x: x + 40, w: 70, kind: 'boost' });
+    L.loopX = x + 420;
+    for (let k = 0; k < 10; k++) {
+      const a = (k / 10) * Math.PI * 2;
+      pick(L.loopX + Math.sin(a) * (RUSH_TUNING.loopR - 40), RUSH_TUNING.loopR - Math.cos(a) * (RUSH_TUNING.loopR - 40));
+    }
+    L.kickerX = L.loopX + RUSH_TUNING.loopR + 280;
+    L.statueX = L.kickerX + 760;
+    L.finishX = L.statueX - 58; // just off her left side -- she is the "pole"
+    L.endX = L.statueX + 900;
+    // Headlines: #0 on the first tap, the rest evenly spaced up to the loop.
+    for (let i = 1; i < RUSH_HEADLINES.length; i++) {
+      L.triggers.push({ x: 600 + (L.loopX - 900) * (i / RUSH_HEADLINES.length), idx: i, fired: false });
+    }
 
     L.pits.sort((a, b) => a.x0 - b.x0);
     L.obs.sort((a, b) => a.x - b.x);
@@ -360,11 +417,14 @@ class RushGame {
       this.state = 'run';
       this.zoneCardT = 2.4;
       this._startMusic();
+      this._headline(0);
       return;
     }
     if (this.state !== 'run') return;
     const p = this.p;
     p.held = true;
+    if (this.loopRun) return;
+    if (p.swing) { this._releaseSwing(); return; }
     if (p.grounded || p.coyote > 0) { this._jump(RUSH_TUNING.jumpV, false); return; }
     if (p.airJumps > 0) { p.airJumps--; this._jump(RUSH_TUNING.doubleJumpV, true); return; }
     p.buffer = RUSH_TUNING.buffer;
@@ -400,6 +460,20 @@ class RushGame {
     if (this.freeze > 0) { this.freeze -= dt; return; }
     const p = this.p, T = RUSH_TUNING, L = this.level;
 
+    this._updateCamera(dt);
+    if (this.state === 'finish' && this.poleHit) {
+      // Mario flagpole: slide down her side, then celebrate.
+      this.endT += dt;
+      p.x = L.finishX;
+      p.vx = 0;
+      p.y = Math.max(0, p.y - 300 * dt);
+      p.grounded = true; // drawn as the clinging figure, not the ball
+      if (Math.random() < dt * 40) {
+        this._burst(L.statueX + (Math.random() - 0.5) * 600, 300 + Math.random() * 200, `hsl(${Math.random() * 360},90%,65%)`, 1, { speed: 120, life: 1.2, g: 500 });
+      }
+      if (this.endT > Math.max(2.4, this.poleY / 300 + 1.2)) this._showResults();
+      return;
+    }
     if (this.state === 'finish' || this.state === 'wipe') {
       this.endT += dt;
       p.vx *= Math.pow(this.state === 'finish' ? 0.25 : 0.05, dt);
@@ -423,13 +497,22 @@ class RushGame {
     this.coinPitchT -= dt;
     if (this.coinPitchT <= 0) this.coinPitch = 0;
     this.pace = Math.min(1, this.pace + dt / T.paceSeconds);
+    for (let i = 0; i < L.triggers.length; i++) {
+      const tr = L.triggers[i];
+      if (!tr.fired && p.x >= tr.x) { tr.fired = true; this._headline(tr.idx); }
+    }
+
+    if (p.swing) { this._stepSwing(dt); this._collectPickups(dt); return; }
+    if (this.loopRun) { this._stepLoop(dt); this._collectPickups(dt); return; }
 
     // --- horizontal speed ---
-    let target = T.baseSpeed + T.paceSpeed * this.pace;
-    if (this.boostT > 0) target += T.boostSpeed;
-    if (this.rushT > 0) target = Math.max(target, T.rushSpeed);
-    const accel = p.vx < target ? 520 : 260;
-    p.vx += Math.sign(target - p.vx) * Math.min(Math.abs(target - p.vx), accel * dt);
+    if (!this.launched) {
+      let target = T.baseSpeed + T.paceSpeed * this.pace;
+      if (this.boostT > 0) target += T.boostSpeed;
+      if (this.rushT > 0) target = Math.max(target, T.rushSpeed);
+      const accel = p.vx < target ? 520 : 260;
+      p.vx += Math.sign(target - p.vx) * Math.min(Math.abs(target - p.vx), accel * dt);
+    }
     p.x += p.vx * dt;
     p.runPhase += p.vx * dt * 0.045;
 
@@ -494,6 +577,45 @@ class RushGame {
 
     if (p.buffer > 0 && p.grounded) this._jump(T.jumpV, false);
 
+    // --- hanging bars: catch one by passing close to it in the air ---
+    if (!p.grounded) {
+      for (let i = 0; i < L.bars.length; i++) {
+        const b = L.bars[i];
+        if (b.cool > 0) { b.cool -= dt; continue; }
+        const dx = p.x - b.x, dy = (p.y + 20) - b.y;
+        if (Math.abs(dx) > 34 || Math.abs(dy) > T.swingGrab) continue;
+        p.swing = { bar: b, th: Math.atan2(dx, -dy), w: Math.max(7, p.vx / T.swingR), revs: 0 };
+        p.vy = 0;
+        p.canCut = false;
+        this.stompChain = 0;
+        this._burst(b.x, b.y, '#ffe46b', 8, { speed: 160, life: 0.3 });
+        this._sfx('grab');
+        break;
+      }
+      if (p.swing) { this._stepSwing(0); return; }
+    }
+
+    // --- finale: loop, then kicker ---
+    if (L.loopX && !this.loopDone && !this.loopRun && p.x >= L.loopX) {
+      this.loopRun = { phi: 0 };
+      p.grounded = false;
+      p.canCut = false;
+      this._sfx('spring');
+      return;
+    }
+    if (L.kickerX && !this.launched && p.x >= L.kickerX && p.y < 30) {
+      this.launched = true;
+      p.vx = T.launchVX;
+      p.vy = T.launchVY + T.launchVYPace * this.pace;
+      p.grounded = false;
+      p.airJumps = 1;
+      p.canCut = false;
+      this.shake = 10;
+      this.flash = 1;
+      this._burst(p.x, 10, '#ffffff', 24, { speed: 380, up: 200, life: 0.6 });
+      this._sfx('boost');
+    }
+
     this._collideObstacles(dt, prevY);
     this._collectPickups(dt);
 
@@ -504,6 +626,13 @@ class RushGame {
       this.state = 'finish';
       this.endT = 0;
       this.finishedOnce = true;
+      this.poleHit = true;
+      this.poleY = Math.max(0, p.y);
+      // Flagpole tiers by how high up her you hit.
+      const h = this.poleY;
+      const bonus = h >= 400 ? 5000 : h >= 300 ? 2000 : h >= 200 ? 1000 : h >= 100 ? 400 : 100;
+      this.poleBonus = bonus;
+      this._addScore(bonus, p.x - 40, p.y + 60);
       this._addScore(this.hearts * 500, p.x, p.y + 90);
       this.flash = 1;
       this.shake = 10;
@@ -522,6 +651,87 @@ class RushGame {
     p.canCut = false;
     p.spin = 0;
     this.stompChain = 0;
+  }
+
+  // Pendulum around the bar: spins faster the longer you hang on. Tap to
+  // let go -- launch height depends on how close to the ideal angle (low
+  // on the front side, swinging up) you release. Never punishing: even
+  // a bad release throws you up and forward.
+  _stepSwing(dt) {
+    const p = this.p, T = RUSH_TUNING, sw = p.swing;
+    sw.w = Math.min(15, sw.w + 7 * dt);
+    sw.th += sw.w * dt;
+    sw.revs += (sw.w * dt) / (Math.PI * 2);
+    p.x = sw.bar.x + Math.sin(sw.th) * T.swingR;
+    p.y = sw.bar.y - Math.cos(sw.th) * T.swingR - 20;
+    p.spin = sw.th;
+    if (sw.revs > 2.3) this._releaseSwing(true);
+  }
+
+  _releaseSwing(auto) {
+    const p = this.p, T = RUSH_TUNING, sw = p.swing;
+    if (!sw) return;
+    let a = sw.th % (Math.PI * 2);
+    if (a < 0) a += Math.PI * 2;
+    let off = Math.abs(a - T.swingIdeal);
+    off = Math.min(off, Math.PI * 2 - off);
+    const q = auto ? 0.55 : Math.max(0.55, 1 - off / Math.PI);
+    p.swing = null;
+    sw.bar.cool = 0.5;
+    p.vy = 650 + 650 * q;
+    p.vx = Math.max(p.vx, 420 + 220 * q);
+    p.grounded = false;
+    p.airJumps = 1;
+    p.canCut = false;
+    p.y = Math.max(p.y, sw.bar.y - T.swingR - 20);
+    const perfect = q > 0.86;
+    this._addScore(Math.round(150 * q) * (perfect ? 2 : 1), p.x, p.y + 60, perfect ? 'PERFECT' : '');
+    this._burst(p.x, p.y + 20, perfect ? '#ffd84a' : '#e8f6ff', perfect ? 20 : 10, { speed: 260, life: 0.45 });
+    if (perfect) { this.flash = 0.6; this.shake = Math.max(this.shake, 6); }
+    this._sfx(perfect ? 'power' : 'djump');
+  }
+
+  // Scripted ride around the inside of the loop, then out the bottom
+  // faster than you went in.
+  _stepLoop(dt) {
+    const p = this.p, T = RUSH_TUNING, L = this.level, lr = this.loopRun;
+    const speed = Math.max(p.vx, 600);
+    const r = T.loopR - 22;
+    lr.phi += (speed / r) * dt;
+    if (lr.phi >= Math.PI * 2) {
+      this.loopRun = null;
+      this.loopDone = true;
+      p.x = L.loopX + 1;
+      p.y = 0;
+      p.vx = Math.max(p.vx, 660);
+      this._land();
+      this.shake = 6;
+      return;
+    }
+    p.x = L.loopX + Math.sin(lr.phi) * r;
+    p.y = T.loopR - Math.cos(lr.phi) * r - 20;
+    p.spin = lr.phi * 2;
+    if (Math.random() < dt * 30) this._burst(p.x, p.y + 20, `hsl(${(this.t * 500) % 360},100%,65%)`, 1, { speed: 60, life: 0.4, g: 0 });
+  }
+
+  // Camera eases after the runner instead of being bolted to it, so the
+  // swing/loop motion reads as motion instead of the world shaking, and
+  // rises when you go high (bars, the launch).
+  _updateCamera(dt) {
+    const p = this.p, L = this.level;
+    let fx = p.x;
+    if (p.swing) fx = p.swing.bar.x + 30;
+    if (this.loopRun) fx = L.loopX + 40;
+    this.focusX += (fx - this.focusX) * Math.min(1, dt * 16);
+    const ty = Math.max(0, p.y - 190);
+    this.camY += (ty - this.camY) * Math.min(1, dt * 6);
+  }
+
+  _headline(i) {
+    const text = RUSH_HEADLINES[i];
+    if (!text) return;
+    this.headline = { text, life: 1.9, max: 1.9, hue: Math.random() * 360 };
+    this.shake = Math.max(this.shake, 8);
   }
 
   _pitFall() {
@@ -615,6 +825,10 @@ class RushGame {
         continue;
       }
       if (this.invuln > 0) continue;
+      // Damage box is smaller than the drawn sprite (birds/rats much
+      // smaller) -- clipping a wingtip on the way down shouldn't cost a heart.
+      const ins = (o.type === 'bird' || o.type === 'rat') ? o.w * 0.28 : 5;
+      if (p.x + half < o.x + ins || p.x - half > o.x + o.w - ins || p.y >= top - ins * 0.6) continue;
       this._hurt(false);
       if (this.state !== 'run') return;
     }
@@ -687,6 +901,7 @@ class RushGame {
     for (let i = 0; i < this.popups.length; i++) { this.popups[i].y += 60 * dt; this.popups[i].life -= dt; }
     if (this.popups.length) this.popups = this.popups.filter(q => q.life > 0);
     this.shake = Math.max(0, this.shake - dt * 40);
+    if (this.headline) { this.headline.life -= dt; if (this.headline.life <= 0) this.headline = null; }
     this.flash -= Math.sign(this.flash) * Math.min(Math.abs(this.flash), dt * 3.5);
     const p = this.p;
     p.squash += (0 - p.squash) * Math.min(1, dt * 14);
@@ -707,7 +922,7 @@ class RushGame {
       ['Bagels', this.coins],
       ['Best stomp chain', `${this.bestChain}x`],
     ];
-    if (!wiped) rows.push(['Hearts left', this.hearts]);
+    if (!wiped) rows.push(['Statue bonus', this.poleBonus || 0], ['Hearts left', this.hearts]);
     if (!this.finishedOnce) rows.push(['Recovery', `${RUSH_WIPEOUT_HOURS} hours lost`]);
     document.getElementById('rush-results-stats').innerHTML =
       rows.map(([k, v]) => `<p class="cannon-stat">${k}: <span>${v}</span></p>`).join('');
@@ -755,6 +970,7 @@ class RushGame {
       case 'hurt':   this._tone('sawtooth', 400, 60, 0.35, 0.2); break;
       case 'wipe':   this._tone('sawtooth', 300, 40, 0.9, 0.2); break;
       case 'zone':   this._tone('triangle', 440, 880, 0.3, 0.1); break;
+      case 'grab':   this._tone('square', 330, 440, 0.08, 0.08); break;
       case 'power':  [523, 659, 784, 1047].forEach((f, i) => this._tone('square', f, f, 0.1, 0.07, this.audio.currentTime + i * 0.06)); break;
       case 'finish': [523, 659, 784, 1047, 1319].forEach((f, i) => this._tone('triangle', f, f, 0.22, 0.12, this.audio.currentTime + i * 0.1)); break;
     }
@@ -795,8 +1011,9 @@ class RushGame {
     if (!ctx || !W) return;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     const s = this.s = Math.min(W / T.viewW, H / T.viewH);
-    const gy = this.gy = Math.round(H * 0.74);
-    const camX = this.camX = p.x - (W / s) * 0.2;
+    // gy = screen y of street level; it slides down as the camera rises.
+    const gy = this.gy = Math.round(H * 0.74 + this.camY * s);
+    const camX = this.camX = this.focusX - (W / s) * 0.2;
     const X = (wx) => (wx - camX) * s;
     const Y = (wy) => gy - wy * s;
     const fast = Math.max(0, (p.vx - T.baseSpeed) / (T.rushSpeed - T.baseSpeed));
@@ -820,13 +1037,35 @@ class RushGame {
     const x0 = camX - 40, x1 = camX + W / s + 40;
     this._drawGround(x0, x1, X, Y, hue);
 
-    // --- finish gate ---
-    if (L.finishX < x1 + 100) {
-      const fx = X(L.finishX), sz = 14 * s;
-      for (let r = 0; r < 22; r++) for (let c = 0; c < 2; c++) {
-        ctx.fillStyle = (r + c) % 2 ? '#111' : '#fff';
-        ctx.fillRect(fx + c * sz, gy - (r + 1) * sz, sz, sz);
+    // --- finale set pieces ---
+    const R = T.loopR;
+    if (L.loopX && L.loopX - R < x1 && L.loopX + R > x0) this._drawLoop(X(L.loopX), Y(R), R * s);
+    if (L.kickerX && L.kickerX - 100 < x1 && L.kickerX > x0) {
+      const kx = X(L.kickerX), kw = 100 * s, kh = 34 * s;
+      ctx.fillStyle = '#ffd84a';
+      ctx.beginPath(); ctx.moveTo(kx - kw, gy); ctx.lineTo(kx, gy - kh); ctx.lineTo(kx, gy); ctx.fill();
+      ctx.fillStyle = '#111';
+      for (let k = 1; k < 5; k++) {
+        const fx = kx - kw + (k / 5) * kw;
+        ctx.beginPath(); ctx.moveTo(fx, gy); ctx.lineTo(fx + 8 * s, gy - (k / 5) * kh - 3 * s); ctx.lineTo(fx + 14 * s, gy - (k / 5) * kh - 3 * s); ctx.lineTo(fx + 6 * s, gy); ctx.fill();
       }
+    }
+    if (L.statueX && L.statueX - 120 < x1 && L.statueX + 160 > x0) this._drawStatue(X(L.statueX), gy, s);
+
+    // --- hanging bars ---
+    for (let i = 0; i < L.bars.length; i++) {
+      const b = L.bars[i];
+      if (b.x < x0 - 60 || b.x > x1 + 60) continue;
+      const bx = X(b.x), by = Y(b.y), hw = 30 * s;
+      const zi = this._zoneAt(b.x);
+      ctx.strokeStyle = zi === 2 ? '#6b5a48' : '#9aa3ae'; ctx.lineWidth = 2 * s;
+      ctx.beginPath(); ctx.moveTo(bx - hw, by); ctx.lineTo(bx - hw * 0.6, 0); ctx.moveTo(bx + hw, by); ctx.lineTo(bx + hw * 0.6, 0); ctx.stroke();
+      const glow = 0.4 + 0.3 * Math.sin(this.t * 6 + i);
+      ctx.strokeStyle = `rgba(255,228,107,${glow})`; ctx.lineWidth = 12 * s; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(bx - hw, by); ctx.lineTo(bx + hw, by); ctx.stroke();
+      ctx.strokeStyle = zi === 1 ? '#e6c229' : '#d8dde4'; ctx.lineWidth = 6 * s;
+      ctx.beginPath(); ctx.moveTo(bx - hw, by); ctx.lineTo(bx + hw, by); ctx.stroke();
+      ctx.lineCap = 'butt';
     }
 
     // --- pads ---
@@ -931,6 +1170,7 @@ class RushGame {
       ctx.fillStyle = this.flash > 0 ? `rgba(255,255,255,${this.flash * 0.35})` : `rgba(255,40,40,${-this.flash * 0.4})`;
       ctx.fillRect(0, 0, W, H);
     }
+    if (this.headline && this.state !== 'ready') this._drawHeadline();
     this._drawHud();
   }
 
@@ -1233,6 +1473,132 @@ class RushGame {
     ctx.restore();
   }
 
+  // The 360 loop: a thick track ring on two legs, ridden on its inside.
+  _drawLoop(cx, cy, r) {
+    const ctx = this.ctx, gy = this.gy, s = this.s;
+    ctx.fillStyle = '#4a4f5a';
+    ctx.fillRect(cx - r * 0.75, cy, 10 * s, gy - cy);
+    ctx.fillRect(cx + r * 0.75 - 10 * s, cy, 10 * s, gy - cy);
+    ctx.lineWidth = 18 * s;
+    ctx.strokeStyle = '#2a2e38';
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 4 * s;
+    ctx.strokeStyle = `hsl(${(this.t * 120) % 360},90%,62%)`;
+    ctx.beginPath(); ctx.arc(cx, cy, r - 8 * s, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.setLineDash([10 * s, 14 * s]);
+    ctx.lineDashOffset = -this.t * 120;
+    ctx.beginPath(); ctx.arc(cx, cy, r + 8 * s, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // The flagpole: the Statue of Liberty, smoking, with bug eyes that
+  // follow you in.
+  _drawStatue(x, gy, s) {
+    const ctx = this.ctx, t = this.t, p = this.p;
+    const U = (v) => v * s;
+    // pedestal
+    ctx.fillStyle = '#9a9283'; ctx.fillRect(x - U(44), gy - U(150), U(88), U(150));
+    ctx.fillStyle = '#7d766a';
+    for (let k = 1; k < 5; k++) ctx.fillRect(x - U(44), gy - U(k * 30), U(88), U(3));
+    ctx.fillStyle = '#b3ab9a'; ctx.fillRect(x - U(52), gy - U(158), U(104), U(10));
+    // robe
+    const green = '#5fae94', dark = '#3f8a72';
+    ctx.fillStyle = green;
+    ctx.beginPath(); ctx.moveTo(x - U(40), gy - U(150)); ctx.lineTo(x + U(40), gy - U(150)); ctx.lineTo(x + U(28), gy - U(355)); ctx.lineTo(x - U(28), gy - U(355)); ctx.fill();
+    ctx.strokeStyle = dark; ctx.lineWidth = U(3);
+    for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.moveTo(x + U(k * 12), gy - U(155)); ctx.lineTo(x + U(k * 8), gy - U(340)); ctx.stroke(); }
+    // tablet arm
+    ctx.fillStyle = dark; ctx.fillRect(x + U(14), gy - U(320), U(26), U(40));
+    // raised torch arm
+    ctx.strokeStyle = green; ctx.lineWidth = U(14); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x - U(20), gy - U(340)); ctx.lineTo(x - U(34), gy - U(462)); ctx.stroke();
+    ctx.lineCap = 'butt';
+    ctx.fillStyle = '#c9a24a'; ctx.fillRect(x - U(44), gy - U(480), U(20), U(16));
+    const fl = Math.sin(t * 14) * U(3);
+    ctx.fillStyle = '#ff9a2a';
+    ctx.beginPath(); ctx.moveTo(x - U(46), gy - U(480)); ctx.quadraticCurveTo(x - U(34) + fl, gy - U(515), x - U(22), gy - U(480)); ctx.fill();
+    ctx.fillStyle = '#ffe46b';
+    ctx.beginPath(); ctx.moveTo(x - U(40), gy - U(480)); ctx.quadraticCurveTo(x - U(34) - fl, gy - U(500), x - U(28), gy - U(480)); ctx.fill();
+    // head + crown
+    const hx = x, hy = gy - U(380);
+    ctx.fillStyle = green; ctx.beginPath(); ctx.arc(hx, hy, U(24), 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = green;
+    for (let k = 0; k < 7; k++) {
+      const a = -Math.PI * 0.85 + (k / 6) * Math.PI * 0.7;
+      const bx = hx + Math.cos(a) * U(20), by = hy - U(10) + Math.sin(a) * U(16);
+      ctx.beginPath(); ctx.moveTo(bx - U(4), by); ctx.lineTo(bx + Math.cos(a) * U(20), by + Math.sin(a) * U(20)); ctx.lineTo(bx + U(4), by); ctx.fill();
+    }
+    ctx.fillStyle = dark; ctx.fillRect(hx - U(22), hy - U(14), U(44), U(6));
+    // big bug eyes, pupils tracking the runner
+    const prx = (p.x - this.camX) * s, pry = gy - (p.y + 20) * s;
+    [[-11, 0], [11, 0]].forEach(([ex, ey]) => {
+      const cx = hx + U(ex), cy = hy + U(ey);
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, cy, U(12), 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#222'; ctx.lineWidth = U(2); ctx.stroke();
+      const dx = prx - cx, dy = pry - cy, d = Math.hypot(dx, dy) || 1;
+      const wob = Math.sin(t * 9 + ex) * U(0.8);
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(cx + (dx / d) * U(5) + wob, cy + (dy / d) * U(5), U(5.5), 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx + (dx / d) * U(5) - U(2), cy + (dy / d) * U(5) - U(2), U(1.6), 0, Math.PI * 2); ctx.fill();
+    });
+    // cigarette, glowing tip, smoke
+    const mx = hx - U(6), my = hy + U(14);
+    ctx.fillStyle = '#f2efe6'; ctx.fillRect(mx - U(34), my - U(3), U(30), U(6));
+    ctx.fillStyle = '#d98a4a'; ctx.fillRect(mx - U(8), my - U(3), U(6), U(6));
+    ctx.fillStyle = `rgba(255,${90 + 60 * Math.sin(t * 6)},40,1)`; ctx.fillRect(mx - U(38), my - U(3), U(5), U(6));
+    for (let k = 0; k < 6; k++) {
+      const ph = (t * 0.5 + k / 6) % 1;
+      ctx.fillStyle = `rgba(220,220,225,${0.45 * (1 - ph)})`;
+      ctx.beginPath(); ctx.arc(mx - U(40) - ph * U(30) + Math.sin(ph * 8 + k) * U(8), my - ph * U(120), U(5 + ph * 14), 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  // Slams in oversized, shudders, cycles color, then fades -- sized to
+  // fill the width, wrapping onto more lines only when it has to.
+  _drawHeadline() {
+    const ctx = this.ctx, h = this.headline, W = this.W, H = this.H;
+    const age = h.max - h.life;
+    const slam = age < 0.14 ? 1 + (1 - age / 0.14) * 1.4 : 1;
+    const a = Math.min(1, h.life / 0.35);
+    const words = h.text.split(' ');
+    let fs = Math.min(110, W * 0.2), lines;
+    for (;;) {
+      ctx.font = `bold ${Math.round(fs)}px VT323, monospace`;
+      lines = [];
+      let cur = '';
+      words.forEach(w => {
+        const t = cur ? cur + ' ' + w : w;
+        if (ctx.measureText(t).width > W * 0.9 && cur) { lines.push(cur); cur = w; } else cur = t;
+      });
+      if (cur) lines.push(cur);
+      const widest = Math.max(...lines.map(l => ctx.measureText(l).width));
+      if ((widest <= W * 0.9 && lines.length <= 3) || fs < 26) break;
+      fs *= 0.9;
+    }
+    const lh = fs * 0.92;
+    const cy = H * 0.42 - ((lines.length - 1) * lh) / 2;
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    lines.forEach((l, i) => {
+      const jx = (Math.random() - 0.5) * fs * 0.06, jy = (Math.random() - 0.5) * fs * 0.06;
+      ctx.save();
+      ctx.translate(W / 2 + jx, cy + i * lh + jy);
+      ctx.rotate(Math.sin(this.t * 13 + i) * 0.035);
+      ctx.scale(slam, slam);
+      ctx.lineWidth = Math.max(4, fs * 0.12);
+      ctx.strokeStyle = '#000';
+      ctx.strokeText(l, 0, 0);
+      ctx.fillStyle = `hsl(${(h.hue + this.t * 420 + i * 40) % 360},100%,62%)`;
+      ctx.fillText(l, 0, 0);
+      ctx.restore();
+    });
+    ctx.restore();
+    ctx.textBaseline = 'alphabetic';
+  }
+
   _drawPlayer(X, Y, s, fast, rush) {
     const ctx = this.ctx, p = this.p, t = this.t;
     const px = X(p.x), py = Y(p.y);
@@ -1262,7 +1628,21 @@ class RushGame {
     ctx.translate(px, py);
     ctx.scale(1 + sq * 0.6, 1 - sq * 0.6);
     if (this.state === 'wipe') { ctx.translate(0, -20 * s); ctx.rotate(this.endT * 9); ctx.translate(0, 20 * s); }
-    if (!p.grounded && this.state !== 'wipe') {
+    if (p.swing) {
+      // hanging by the hands, body pointing away from the bar
+      ctx.restore();
+      ctx.save();
+      const bx = X(p.swing.bar.x), by = Y(p.swing.bar.y);
+      ctx.translate(bx, by);
+      ctx.rotate(-p.swing.th);
+      ctx.strokeStyle = dark; ctx.lineWidth = 5 * s; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-5 * s, 0); ctx.lineTo(-4 * s, 16 * s); ctx.moveTo(5 * s, 0); ctx.lineTo(4 * s, 16 * s); ctx.stroke();
+      ctx.fillStyle = '#f0c8a0'; ctx.beginPath(); ctx.arc(0, 22 * s, 7.5 * s, 0, 6.3); ctx.fill();
+      ctx.fillStyle = body; ctx.fillRect(-8 * s, 28 * s, 16 * s, 18 * s);
+      ctx.strokeStyle = '#2b2b3a'; ctx.lineWidth = 6 * s;
+      ctx.beginPath(); ctx.moveTo(-4 * s, 45 * s); ctx.lineTo(-6 * s, 62 * s); ctx.moveTo(4 * s, 45 * s); ctx.lineTo(8 * s, 60 * s); ctx.stroke();
+      ctx.lineCap = 'butt';
+    } else if (!p.grounded && this.state !== 'wipe') {
       // curled into a spinning ball
       ctx.translate(0, -20 * s);
       ctx.rotate(p.spin);
