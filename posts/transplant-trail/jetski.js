@@ -41,14 +41,16 @@ const JS = {
   wallH: 700,         // height of the trough walls at the rim
   bank: 0.7,          // how much curves tilt the trough (outside of a turn rides higher)
   // speed
-  slopeAccel: 16000,  // downhill pull per unit of grade
+  slopeAccel: 6500,   // downhill pull per unit of grade
   drag: 5.7e-5,       // with slopeAccel, sets the top speed for each grade
-  minSpeed: 5000,
-  baseSpeed: 11000,   // reference speed (helicopter = 3x this)
+  minSpeed: 3500,
+  baseSpeed: 7500,    // reference speed (helicopter = 3x this)
+  speedRef: 8500,     // a typical cruising speed, for scaling effects
   pump: 4.2,          // speed gained per unit dropped off a wall
   pumpLoss: 2.2,      // speed lost per unit climbed -- carving nets speed
   // air
-  gravity: 16000,
+  gravity: 8000,
+  airSlowmo: 0.55,    // hang time: the world runs at this speed while you're in the air
   stick: 1.7,         // how sharply the water has to fall away (x gravity) to launch you
   // steering
   steerAccel: 6,
@@ -67,7 +69,7 @@ const JS = {
   hitSpecial: 0.26,
   // tricks
   trickTime: 0.65,     // how long a trick's animation takes in the air
-  trickMinHeight: 90,  // how high above the water before the wheel shows
+  trickMinHeight: 25,  // how high above the water before the wheel shows
   trickBoost: 0.25,
   trickSpecial: 0.2,
   // boost
@@ -343,7 +345,6 @@ class JetskiGame {
     kicker(900, 14);
     run(130, 4.5, 0.55);
     run(130, -4.5, 0.55);
-    run(130, 4, 0.6);
     drop(18, 2.4);
     run(180, 3, 0.75, 36);
     kicker();
@@ -352,16 +353,7 @@ class JetskiGame {
     run(120, 0, 0.8);
     kicker(1000, 14);
     run(80, -2, 0.6);
-    // the last third: long sweeping turns, two more kickers, one big drop
-    run(180, 5.5, 0.55, 33);
-    run(160, -5, 0.6);
-    kicker(820, 12);
-    run(170, 4, 0.5);
-    run(140, -3.5, 0.7, 36);
-    drop(18, 2.3);
-    run(200, 5, 0.55);
-    run(160, -5.5, 0.5, 30);
-    kicker(1050, 15);
+    kicker(1050, 15);   // the big one, right before the harbor
     run(90, 0, 0.6);
     this.finishSeg = segs.length + 10;
     run(90, 0, 0.12);      // runout onto the harbor
@@ -388,7 +380,7 @@ class JetskiGame {
   _steerInput() {
     if (this._keyDir) return this._keyDir;
     if (this._drag && this._drag.cur != null) {
-      return Math.max(-1, Math.min(1, (this._drag.cur - this._drag.x0) / (this.W * 0.22)));
+      return Math.max(-1, Math.min(1, (this._drag.cur - this._drag.x0) / (this.W * 0.3)));
     }
     return 0;
   }
@@ -403,6 +395,8 @@ class JetskiGame {
       if (this.skill.done) this._resolveSkill();
       else dt *= JS.skillSlowmo;
     }
+    // hang time: jumps play in slow motion so there's time to pick a trick
+    if (this.state === 'race' && !this.grounded && !this.heli) dt *= JS.airSlowmo;
     this.t += dt;
     this._updateFx(dt);
     if (this.state === 'intro') {
@@ -446,7 +440,7 @@ class JetskiGame {
         const dh = (jsWall(this.playerX + 0.01, cn) - jsWall(this.playerX - 0.01, cn)) / 0.02;
         ax -= (dh / JS.wallH) * JS.wallPush;
       }
-      ax -= cn * Math.pow(this.speed / 13000, 2) * JS.centrifugal;
+      ax -= cn * Math.pow(this.speed / JS.speedRef, 2) * JS.centrifugal;
       this.vx += ax * dt;
       this.vx *= Math.exp(-JS.latDamp * dt);
       this.playerX += this.vx * dt;
@@ -469,7 +463,7 @@ class JetskiGame {
     }
 
     this.pos = Math.min(this.pos + this.speed * dt, this.trackLen - JS.playerZ - JS.seg * 2);
-    this.skyOffset += seg.curve * (this.speed / 13000) * dt * 0.02;
+    this.skyOffset += seg.curve * (this.speed / JS.speedRef) * dt * 0.02;
     this.camDrop = Math.max(0, this.camDrop - dt * 0.9);
 
     // --- vertical: ride the water, or fly off it ---
@@ -504,7 +498,7 @@ class JetskiGame {
     }
     if (this.trick && this.trick.phase !== 'skill') this.trick.t += dt;
     this.wheel = this.state === 'race' && !this.grounded && !this.trick && !this.heli && !this.skill &&
-      this.riderY - surf > JS.trickMinHeight;
+      this.airT > 0.04 && this.riderY - surf > JS.trickMinHeight;
 
     if (this.state === 'race') {
       this._updateRivals(dt, pz2);
@@ -819,7 +813,7 @@ class JetskiGame {
     }
     // rooster tail, bigger the faster you go (only on the water)
     if (this.grounded) {
-      const spd = Math.min(1.6, this.speed / 13000);
+      const spd = Math.min(1.6, this.speed / JS.speedRef);
       ctx.fillStyle = 'rgba(255,255,255,0.55)';
       for (let i = 0; i < 6; i++) {
         const a = (this.t * 4 + i / 6) % 1;
@@ -1015,7 +1009,7 @@ class JetskiGame {
   // Lines streaming out of the vanishing point while boosting or flying.
   _renderSpeedLines() {
     const fly = this.heli && this.heli.phase === 'fly';
-    if (!(this.boostT > 0 || fly || this.speed > 15000)) return;
+    if (!(this.boostT > 0 || fly || this.speed > 10000)) return;
     const ctx = this.ctx, W = this.W, H = this.H;
     const cx = W / 2, cy = this.horizon + H * 0.18;
     ctx.save();
@@ -1141,9 +1135,9 @@ class JetskiGame {
       // speed, so you can feel the mountain working
       ctx.textAlign = 'center';
       ctx.font = `bold ${Math.round(22 * u)}px VT323, monospace`;
-      const mph = Math.round(this.speed / 180);
+      const mph = Math.round(this.speed / 120);
       ctx.strokeText(`${mph} MPH`, W / 2, 48 * u);
-      ctx.fillStyle = this.speed > 15000 ? '#ffd84a' : '#fff'; ctx.fillText(`${mph} MPH`, W / 2, 48 * u);
+      ctx.fillStyle = this.speed > 10000 ? '#ffd84a' : '#fff'; ctx.fillText(`${mph} MPH`, W / 2, 48 * u);
       // progress down the run
       const prog = Math.min(1, (this.pos + JS.playerZ) / (this.finishSeg * JS.seg));
       ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(16, 74 * u, W - 32, 7);
