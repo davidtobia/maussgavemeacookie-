@@ -81,16 +81,8 @@ const RUSH_HEADLINES = {
   anytime: [
     'I LOVE BLANK STREET COFFEE',
     'VIA CAROTA',
-    'I LOVE SWEETGREEN',
-    "JACK'S WIFE FREDA",
-    "L'INDUSTRIE",
-    'THAI DINER',
-    'LILIA',
-    "SADELLE'S",
-    'DANTE',
     "I LOVE JOE'S PIZZA",
-    'LEVAIN',
-    'BALTHAZAR',
+    'LIL SWEET TREAT',
   ],
 };
 const RUSH_HEADLINE_COOLDOWN = 3.5; // seconds
