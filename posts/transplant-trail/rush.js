@@ -50,7 +50,9 @@ const RUSH_TUNING = {
   loopR: 115,
   loopLaps: 3,
   launchVX: 700,
-  launchVY: 900, launchVYPace: 260, // kicker launch: more pace = higher hit on the statue
+  launchVY: 1100, launchVYPace: 60, // always reaches her mid-height; pace adds a little
+  launchBoost: 520,    // each tap in the air ADDS this much lift (never takes any away)
+  launchTaps: 2,
   launchGravity: 1200, // floatier than normal -- a long, dramatic arc
   launchSlowmo: 0.6,   // the whole flight plays at 60% speed
   launchGap: 1100,     // ramp-to-statue distance
@@ -72,8 +74,24 @@ const RUSH_HEADLINES = {
   stompChain: [],                                // 3+ stomps without landing
   doubleJump: [],                                // double jump (only sometimes)
   loop:       [],                                // entering the loop
-  launch:     [],                                // fired off the ramp
+  launch:     ['KNICKS IN 5!!!!!'],              // fired off the ramp at the statue
   statue:     [],                                // hit the statue
+  // Grab bag: any action with an empty list above pulls from here (and
+  // from everything else), so this is where most of the variety lives.
+  anytime: [
+    'I LOVE BLANK STREET COFFEE',
+    'VIA CAROTA',
+    'I LOVE SWEETGREEN',
+    "JACK'S WIFE FREDA",
+    "L'INDUSTRIE",
+    'THAI DINER',
+    'LILIA',
+    "SADELLE'S",
+    'DANTE',
+    "I LOVE JOE'S PIZZA",
+    'LEVAIN',
+    'BALTHAZAR',
+  ],
 };
 const RUSH_HEADLINE_COOLDOWN = 3.5; // seconds
 
@@ -220,7 +238,7 @@ class RushGame {
     this.camY = 0;
     this.headline = null;
     this.headlineCool = 0;
-    this.lastHeadline = null;
+    this.recentHeadlines = [];
     this.bigScore = null;
     this._buildLevel();
   }
@@ -437,6 +455,18 @@ class RushGame {
     if (this.loopRun) return;
     if (p.swing) { this._releaseSwing(); return; }
     if (p.grounded || p.coyote > 0) { this._jump(RUSH_TUNING.jumpV, false); return; }
+    // Statue flight: a tap only ever adds lift on top of the current arc --
+    // was a normal double jump, which *replaced* upward speed with a
+    // smaller one (and a quick tap then cut it further), so tapping mid-
+    // flight made you drop short of her.
+    if (this.launched && p.airJumps > 0) {
+      p.airJumps--;
+      p.vy = Math.max(p.vy, 0) + RUSH_TUNING.launchBoost;
+      p.canCut = false;
+      this._burst(p.x, p.y + 14, '#9be7ff', 14, { speed: 180, life: 0.35 });
+      this._sfx('djump');
+      return;
+    }
     if (p.airJumps > 0) {
       p.airJumps--;
       this._jump(RUSH_TUNING.doubleJumpV, true);
@@ -626,12 +656,14 @@ class RushGame {
       this._sfx('spring');
       return;
     }
-    if (L.kickerX && !this.launched && p.x >= L.kickerX && p.y < 30) {
+    // Fires whether you're on the ramp or jumped over it.
+    if (L.kickerX && !this.launched && p.x >= L.kickerX) {
       this.launched = true;
       p.vx = T.launchVX;
       p.vy = T.launchVY + T.launchVYPace * this.pace;
+      p.y = Math.max(0, Math.min(p.y, 60));
       p.grounded = false;
-      p.airJumps = 1;
+      p.airJumps = T.launchTaps;
       p.canCut = false;
       this.shake = 10;
       this.flash = 1;
@@ -761,10 +793,12 @@ class RushGame {
     if (!force && this.headlineCool > 0) return;
     let pool = RUSH_HEADLINES[key] || [];
     if (!pool.length) pool = Object.values(RUSH_HEADLINES).flat();
-    if (pool.length > 1) pool = pool.filter(t => t !== this.lastHeadline);
+    const fresh = pool.filter(t => !this.recentHeadlines.includes(t));
+    if (fresh.length) pool = fresh;
     const text = pool[Math.floor(Math.random() * pool.length)];
     if (!text) return;
-    this.lastHeadline = text;
+    this.recentHeadlines.push(text);
+    if (this.recentHeadlines.length > 4) this.recentHeadlines.shift();
     this.headline = { text, life: 1.9, max: 1.9, hue: Math.random() * 360 };
     this.headlineCool = RUSH_HEADLINE_COOLDOWN;
     this.shake = Math.max(this.shake, 8);
