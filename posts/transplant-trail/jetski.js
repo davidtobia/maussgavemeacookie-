@@ -1,62 +1,115 @@
 /**
- * THE TRANSPLANT TRAIL - JET SKI (phase 1: the ride)
- * ==================================================
- * Chosen at Liberty Island ("Steal a jet ski", liberty.js). SSX-style:
- * a whale's blowhole fires you into the sky, you drop onto a downhill
- * slope made of water, and race cops and pirates on jet skis to a
- * splashdown at Battery Park. Camera behind you.
+ * THE TRANSPLANT TRAIL - JET SKI
+ * ==============================
+ * Chosen at Liberty Island ("Steal a jet ski", liberty.js). A whale's
+ * blowhole fires you into the sky and you drop onto a mountain made of
+ * water: a curved halfpipe channel you carve down, SSX-style. Camera
+ * behind you.
  *
- * Drag anywhere to steer. Get near a rival and a faint red circle appears
- * on them: tap it and a one-second skill game runs (race in slow motion
- * underneath -- see JETSKI_SKILLS at the bottom). Land it and you knock
- * them back and fill two meters: BOOST (tap for a burst of speed) and
- * SPECIAL (when full: breakdance on the handlebars, the jet ski turns
- * into a helicopter, fly at 3x for 5 seconds over everything).
- * Not built yet: jumps with a trick wheel.
+ * It's a carving game, not a racing-around-junk game:
+ *  - Drag to steer (joystick-style: how far your thumb is from where it
+ *    went down = how hard you carve). The channel is a trough -- carve
+ *    up a wall and drop back down and you GAIN speed. Turns are banked;
+ *    curves push you up the outside wall.
+ *  - Speed comes from the terrain: steep pitches pull you faster, flatter
+ *    runouts slow you, rollers can be pumped.
+ *  - Jumps: kicker ramps, drop-offs, and crests you hit fast enough throw
+ *    you in the air. In the air a trick wheel pops up -- easy tricks just
+ *    happen, harder ones run a quick skill game first. Land it for score
+ *    and meter; still mid-trick when you hit the water = bail.
+ *  - Rivals (cops, pirates): get near one and a red circle appears on
+ *    them; tap it for a skill game, land it to knock them back.
+ *  - Hits and landed tricks fill BOOST (tap for a burst) and SPECIAL
+ *    (breakdance on the handlebars -> the jet ski becomes a helicopter,
+ *    3x speed for 5 seconds).
  *
- * You can't get caught or fail -- placing only changes your score.
+ * You can't get caught or fail -- place and tricks only change your score.
  *
- * Rendering is the classic pseudo-3D segment road: the track is a list of
- * short segments, each with a curve and a height, projected near-to-far
- * with the nearer segment clipping the farther ones. A steady downhill
- * just lowers the vanishing line -- which is exactly the "looking down a
- * steep run" view SSX has.
+ * Rendering: pseudo-3D. The track is short segments, each with a grade,
+ * a curve and a height; every segment is drawn as a strip of quads across
+ * the trough's curved cross-section, far to near (painter's order), so
+ * walls, banks and crests occlude correctly.
  */
 
 const JS = {
   seg: 200,           // segment length, world units
-  road: 2200,         // half-width of the water channel
-  camHeight: 900,
+  road: 2000,         // half-width of the trough (x = -1..1 is water)
+  camHeight: 1050,
   fov: 100,
-  draw: 220,          // segments drawn ahead
-  baseSpeed: 9200,    // world units / s
-  slopeAccel: 9000,   // extra target speed per unit of slope
-  maxSpeed: 13500,
-  steep: 1.3,         // visual steepness: how hard the run drops away (doesn't change speed)
-  hitSlow: 0.55,
-  rivals: [           // who's racing you (kind sets the paint job)
-    'cop', 'pirate', 'cop', 'pirate', 'cop', 'pirate', 'cop',
-  ],
-  finishBonus: [6000, 4000, 3000, 2000, 1500, 1200, 1000, 800],
+  draw: 150,          // segments drawn ahead
+  steep: 1.3,         // how hard the mountain visibly drops away
+  wallH: 700,         // height of the trough walls at the rim
+  bank: 0.7,          // how much curves tilt the trough (outside of a turn rides higher)
+  // speed
+  slopeAccel: 16000,  // downhill pull per unit of grade
+  drag: 5.7e-5,       // with slopeAccel, sets the top speed for each grade
+  minSpeed: 5000,
+  baseSpeed: 11000,   // reference speed (helicopter = 3x this)
+  pump: 4.2,          // speed gained per unit dropped off a wall
+  pumpLoss: 2.2,      // speed lost per unit climbed -- carving nets speed
+  // air
+  gravity: 16000,
+  stick: 1.7,         // how sharply the water has to fall away (x gravity) to launch you
+  // steering
+  steerAccel: 6,
+  latDamp: 2.2,
+  wallPush: 2.3,
+  centrifugal: 2.6,
+  rivals: ['cop', 'pirate', 'cop', 'pirate', 'cop'],
+  finishBonus: [6000, 4000, 3000, 2000, 1500, 1000],
   passBonus: 100,
   // attacks
-  promptRange: 2600,  // how far ahead (world units) a rival can be to get a red circle
-  promptCooldown: 4,  // seconds before the same rival can be targeted again
-  skillSlowmo: 0.3,   // the race runs at this speed while a skill game is up
+  promptRange: 2600,
+  promptCooldown: 4,
+  skillSlowmo: 0.3,
   hitScore: 300,
-  hitBoost: 0.34,     // boost meter gained per landed hit (meter is 0..1)
-  hitSpecial: 0.26,   // special meter gained per landed hit
+  hitBoost: 0.34,
+  hitSpecial: 0.26,
+  // tricks
+  trickTime: 0.65,     // how long a trick's animation takes in the air
+  trickMinHeight: 90,  // how high above the water before the wheel shows
+  trickBoost: 0.25,
+  trickSpecial: 0.2,
   // boost
   boostCost: 0.25,
   boostTime: 1.6,
-  boostSpeed: 1.4,    // x max speed while boosting
+  boostAccel: 14000,
   // special: breakdance -> helicopter
   danceTime: 0.9,
   flyTime: 5,
-  flySpeed: 3,        // x base speed
+  flySpeed: 3,
 };
 JS.depth = 1 / Math.tan((JS.fov / 2) * Math.PI / 180);
 JS.playerZ = JS.camHeight * JS.depth; // how far ahead of the camera you sit
+
+// The trick wheel. skill: null = it just happens; otherwise the name of a
+// JETSKI_SKILLS game you have to land first. Rename/add freely.
+const JETSKI_TRICKS = [
+  { name: '360',       skill: null,     score: 300,  anim: 'spin' },
+  { name: 'BACKFLIP',  skill: null,     score: 450,  anim: 'flip' },
+  { name: 'SUPERMAN',  skill: 'ring',   score: 900,  anim: 'superman' },
+  { name: 'HANDSTAND', skill: 'needle', score: 1000, anim: 'handstand' },
+];
+
+// Lateral sample points across the trough cross-section, -1..1 is water.
+const JS_XS = [-1.75, -1.12, -1.0, -0.8, -0.6, -0.35, 0, 0.35, 0.6, 0.8, 1.0, 1.12, 1.75];
+
+// Height of the water surface across the trough at lateral x, for a
+// segment curving by cn (-1..1): flat floor, walls curving up to the rim,
+// the whole thing tilted on turns.
+function jsWall(x, cn) {
+  const ax = Math.abs(x);
+  let h;
+  if (ax <= 0.35) h = 0;
+  else if (ax <= 1) h = Math.pow((ax - 0.35) / 0.65, 2) * JS.wallH;
+  else if (ax <= 1.12) h = JS.wallH + (ax - 1) * 600;
+  else h = JS.wallH + 72 + (ax - 1.12) * JS.wallH * 1.6;
+  return h - cn * x * JS.wallH * JS.bank * 0.5;
+}
+
+function jsMix(a, b, t) {
+  return `rgb(${Math.round(a[0] + (b[0] - a[0]) * t)},${Math.round(a[1] + (b[1] - a[1]) * t)},${Math.round(a[2] + (b[2] - a[2]) * t)})`;
+}
 
 class JetskiGame {
   constructor(gameState, onComplete) {
@@ -84,8 +137,8 @@ class JetskiGame {
       this._ro.observe(this.canvas);
     }
 
-    // Drag to steer: the jet ski follows how far your thumb has moved
-    // since it went down, wherever on the screen that is. Every touch is
+    // Drag to steer, joystick-style: how far your thumb is from where it
+    // went down sets how hard you carve (see _steerInput). Every touch is
     // tracked by id, so one thumb can steer while the other taps a red
     // circle or the boost button. A touch that lands on a circle/button
     // is a tap, not a steer. Touch goes through touch events (reliable
@@ -101,11 +154,11 @@ class JetskiGame {
       if (this.skill) { this.skill.down(); this._skillId = id; return; }
       const ui = this.state === 'race' ? this._hitUI(x, y) : null;
       if (ui) { this._useUI(ui); return; }
-      if (this._dragId === null) { this._dragId = id; this._drag = { x0: x, t0: this.steerTarget }; }
+      if (this._dragId === null) { this._dragId = id; this._drag = { x0: x, cur: x }; }
     };
     const move = (x, id) => {
       if (id !== this._dragId || !this._drag) return;
-      this.steerTarget = Math.max(-1.15, Math.min(1.15, this._drag.t0 + ((x - this._drag.x0) / (this.W * 0.42)) * 1.6));
+      this._drag.cur = x;
     };
     const release = (id) => {
       if (this.skill && id === this._skillId) { this.skill.up(); this._skillId = null; }
@@ -198,109 +251,122 @@ class JetskiGame {
     this.t = 0;
     this.introT = 0;
     this.pos = 0;              // camera z
-    this.playerX = 0;          // -1..1 across the channel
-    this.steerTarget = 0;
+    this.playerX = 0;          // -1..1 across the trough
+    this.vx = 0;               // lateral velocity
+    this._steer = 0;
     this._keyDir = 0;
     this.speed = 0;
+    this.riderY = 0;
+    this.vy = 0;
+    this.grounded = true;
+    this.airT = 0;
     this.lean = 0;
     this.wobble = 0;
     this.shake = 0;
     this.flash = 0;
     this.skyOffset = 0;
-    this.camDrop = 1;          // 1 = still way up from the whale launch, eases to 0
+    this.camDrop = 1;
+    this.camLift = 0;
     this.score = 0;
     this.passes = 0;
     this.place = JS.rivals.length + 1;
     this.endT = 0;
     this.particles = [];
     this.popups = [];
-    this.boost = 0;            // 0..1 meter, filled by landing hits
-    this.special = 0;          // 0..1 meter, filled by landing hits
+    this.boost = 0;
+    this.special = 0;
     this.boostT = 0;
-    this.skill = null;         // active skill game
-    this.prompt = null;        // { racer, x, y, r } -- the red circle on screen
-    this.heli = null;          // { phase: 'dance'|'fly'|'land', t }
+    this.skill = null;
+    this.prompt = null;
+    this.heli = null;
+    this.trick = null;         // { def, phase: 'skill'|'anim'|'bail', t, perfect }
+    this.wheel = false;
     this.hits = 0;
+    this.tricksLanded = 0;
     this._ui = {};
-    // Everyone gets launched together and lands in a loose pack.
     this.racers = JS.rivals.map((kind, i) => ({
       kind,
-      z: JS.playerZ + 1400 + i * 650,
-      x: ((i % 4) / 3) * 1.4 - 0.7 + (Math.floor(i / 4) ? 0.25 : 0),
-      tx: 0,
+      z: JS.playerZ + 1600 + i * 750,
+      x: [-0.5, 0.4, -0.1, 0.6, -0.6][i % 5],
+      vx: 0,
       speed: JS.baseSpeed * 0.8,
-      skill: 0.88 + (i / JS.rivals.length) * 0.12,
+      skill: 0.9 + (i / JS.rivals.length) * 0.1,
+      tx: 0,
       retarget: Math.random() * 2,
       bob: Math.random() * 6,
-      bump: 0,
-      cool: 0,
-      knock: 0,
+      bump: 0, cool: 0, knock: 0,
       ahead: true,
     }));
+    this.riderY = this._surf(JS.playerZ, 0);
   }
 
+  // The mountain, section by section: (length in segments, curve, grade,
+  // roller size), plus kicker ramps and drop-offs between sections. Grade
+  // and curve ease from one section into the next so the run flows.
   _buildTrack() {
     const segs = this.segs = [];
-    let y = 0;
-    const add = (n, curve, slope, bump = 0) => {
+    let y = 0, g = 0.35, c = 0, rollAmp = 0, lastRoll = 0;
+    const push = (grade, curve, dy, extra) => {
+      const y0 = y;
+      y += dy;
+      segs.push(Object.assign({ i: segs.length, z: segs.length * JS.seg, y0, y1: y, grade, curve }, extra || {}));
+    };
+    const run = (n, curve, grade, roll = 0) => {
       for (let i = 0; i < n; i++) {
-        const y0 = y;
-        // Smooth in/out of each section so curves and grades don't snap.
-        const ease = Math.sin((i / n) * Math.PI);
-        y -= slope * JS.steep * JS.seg;
-        if (bump) y += Math.sin((i / n) * Math.PI * 2) * bump;
-        segs.push({ i: segs.length, z: segs.length * JS.seg, y0, y1: y, grade: slope, curve: curve * ease, sprites: [], clip: 0 });
+        g += (grade - g) * 0.04;
+        c += (curve - c) * 0.035;
+        rollAmp += (roll - rollAmp) * 0.05;
+        const r = Math.sin((segs.length / 20) * Math.PI * 2) * rollAmp;
+        push(g, c, -g * JS.steep * JS.seg + (r - lastRoll));
+        lastRoll = r;
       }
     };
-    add(60, 0, 0.3);
-    add(90, 2.5, 0.35);
-    add(60, 0, 0.5, 30);
-    add(110, -4, 0.4);
-    add(70, 0, 0.65);
-    add(90, 5, 0.3);
-    add(80, -2, 0.45, 40);
-    add(100, -5, 0.55);
-    add(60, 0, 0.25);
-    add(120, 3.5, 0.6);
-    add(90, -3, 0.35, 35);
-    add(110, 4.5, 0.5);
-    add(70, 0, 0.7);
-    add(100, -4, 0.4);
-    add(80, 2, 0.3, 30);
-    add(110, -2.5, 0.55);
-    add(90, 0, 0.35);
-    // second half: tighter, steeper
-    add(100, 5.5, 0.5);
-    add(70, -5.5, 0.55, 30);
-    add(120, 0, 0.75);
-    add(90, 4, 0.4, 45);
-    add(110, -6, 0.6);
-    add(60, 0, 0.3);
-    add(100, 6, 0.55);
-    add(80, -3, 0.7, 35);
-    add(120, 2.5, 0.5);
-    add(90, -4.5, 0.45);
-    add(110, 0, 0.8);
-    add(90, 3, 0.4, 40);
-    add(100, -5, 0.5);
-    add(80, 0, 0.35);
-    add(100, 4, 0.6, 30);
-    add(90, -3.5, 0.5);
-    this.finishSeg = segs.length + 10;
-    add(80, 0, 0.12);     // runout onto the harbor
-    add(60, 0, 0);
-    this.trackLen = segs.length * JS.seg;
+    const kicker = (rise = 760, n = 12) => {
+      for (let i = 0; i < n; i++) push(-(rise / n) / JS.seg / JS.steep, c, rise / n, { kick: i / n });
+    };
+    const drop = (n = 16, grade = 2.2) => {
+      for (let i = 0; i < n; i++) push(grade, c, -grade * JS.steep * JS.seg, { drop: true });
+      g = grade; // eases back out over the next section
+    };
 
-    // Floating junk to steer around, plus scenery on the cloud banks.
-    let k = 0;
-    for (let i = 70; i < this.finishSeg - 10; i += 14 + Math.floor(rushHash(i) * 12)) {
-      const kinds = ['buoy', 'buoy', 'trash', 'duck'];
-      segs[i].sprites.push({ kind: kinds[k++ % kinds.length], x: (rushHash(i * 3) - 0.5) * 1.6, hit: false });
-    }
-    for (let i = 10; i < segs.length; i += 9) {
-      segs[i].sprites.push({ kind: 'cloud', x: (rushHash(i) < 0.5 ? -1 : 1) * (1.6 + rushHash(i + 7) * 2.5), deco: true });
-    }
-    for (let i = 0; i < 4; i++) segs[this.finishSeg + i * 2].sprites.push({ kind: 'finish', x: 0, deco: true });
+    run(50, 0, 0.35);
+    run(150, 3, 0.55);
+    kicker();
+    run(170, -4, 0.5, 36);
+    run(120, 0, 0.9);
+    run(200, 5, 0.45);
+    kicker();
+    run(150, -3, 0.6);
+    drop();
+    run(200, -5.5, 0.5, 33);
+    run(150, 4, 0.7);
+    kicker(900, 14);
+    run(130, 4.5, 0.55);
+    run(130, -4.5, 0.55);
+    run(130, 4, 0.6);
+    drop(18, 2.4);
+    run(180, 3, 0.75, 36);
+    kicker();
+    run(200, -4.5, 0.6);
+    run(150, 5, 0.45, 30);
+    run(120, 0, 0.8);
+    kicker(1000, 14);
+    run(80, -2, 0.6);
+    // the last third: long sweeping turns, two more kickers, one big drop
+    run(180, 5.5, 0.55, 33);
+    run(160, -5, 0.6);
+    kicker(820, 12);
+    run(170, 4, 0.5);
+    run(140, -3.5, 0.7, 36);
+    drop(18, 2.3);
+    run(200, 5, 0.55);
+    run(160, -5.5, 0.5, 30);
+    kicker(1050, 15);
+    run(90, 0, 0.6);
+    this.finishSeg = segs.length + 10;
+    run(90, 0, 0.12);      // runout onto the harbor
+    run(70, 0, 0);
+    this.trackLen = segs.length * JS.seg;
   }
 
   _segAt(z) {
@@ -309,17 +375,22 @@ class JetskiGame {
 
   _yAt(z) {
     const s = this._segAt(z);
-    const p = (z % JS.seg) / JS.seg;
+    const p = Math.max(0, Math.min(1, (z - s.z) / JS.seg));
     return s.y0 + (s.y1 - s.y0) * p;
   }
 
-  // ------------------------------------------------------------------
-  // INPUT
-  // ------------------------------------------------------------------
+  // Water surface height at (z, lateral x).
+  _surf(z, x) {
+    return this._yAt(z) + jsWall(x, this._segAt(z).curve / 6);
+  }
 
-  _tap() {
-    // Tapping skips the whale intro once you've seen the launch.
-    if (this.state === 'intro' && this.introT > 0.8) this.introT = Math.max(this.introT, 2.6);
+  // Joystick-style steering from a drag, or the arrow keys.
+  _steerInput() {
+    if (this._keyDir) return this._keyDir;
+    if (this._drag && this._drag.cur != null) {
+      return Math.max(-1, Math.min(1, (this._drag.cur - this._drag.x0) / (this.W * 0.22)));
+    }
+    return 0;
   }
 
   // ------------------------------------------------------------------
@@ -327,7 +398,6 @@ class JetskiGame {
   // ------------------------------------------------------------------
 
   step(dt) {
-    // A skill game runs in real time while the race crawls in slow motion.
     if (this.skill) {
       this.skill.update(dt);
       if (this.skill.done) this._resolveSkill();
@@ -337,28 +407,29 @@ class JetskiGame {
     this._updateFx(dt);
     if (this.state === 'intro') {
       this.introT += dt;
-      if (this.introT > 3.2) { this.state = 'race'; this.speed = JS.baseSpeed * 0.8; this.flash = 1; }
+      if (this.introT > 3.2) { this.state = 'race'; this.speed = JS.baseSpeed * 0.85; this.flash = 1; }
       return;
     }
     if (this.state === 'results') return;
 
     const playerZ = this.pos + JS.playerZ;
     const seg = this._segAt(playerZ);
-    const slope = seg.grade;
+    const cn = seg.curve / 6;
 
     if (this.state === 'race') {
-      // speed: downhill pulls you faster; boost lifts the cap; the
-      // helicopter ignores all of it
       this.boostT = Math.max(0, this.boostT - dt);
-      let target = Math.min(JS.maxSpeed, JS.baseSpeed + slope * JS.slopeAccel);
-      if (this.boostT > 0) target = JS.maxSpeed * JS.boostSpeed;
+
+      // --- forward speed: the mountain does the work ---
+      let acc = this.grounded ? JS.slopeAccel * seg.grade : 0;
+      acc -= JS.drag * this.speed * this.speed * (this.grounded ? 1 : 0.5);
+      if (this.boostT > 0) acc += JS.boostAccel;
+      this.speed = Math.max(JS.minSpeed, this.speed + acc * dt);
       if (this.heli) {
         this.heli.t += dt;
         if (this.heli.phase === 'dance') {
-          target = this.speed;
           if (this.heli.t > JS.danceTime) { this.heli = { phase: 'fly', t: 0 }; this.flash = 0.8; this.shake = 10; }
         } else if (this.heli.phase === 'fly') {
-          target = JS.baseSpeed * JS.flySpeed;
+          this.speed += (JS.baseSpeed * JS.flySpeed - this.speed) * Math.min(1, dt * 3);
           if (this.heli.t > JS.flyTime) this.heli = { phase: 'land', t: 0 };
         } else if (this.heli.t > 0.6) {
           this.heli = null;
@@ -366,66 +437,171 @@ class JetskiGame {
           this.shake = 8;
         }
       }
-      this.speed += (target - this.speed) * Math.min(1, dt * (this.heli || this.boostT > 0 ? 3 : 0.9));
 
-      // steering: ease toward where your thumb says
-      if (this._keyDir) this.steerTarget = Math.max(-1.15, Math.min(1.15, this.steerTarget + this._keyDir * dt * 2.2));
-      const prevX = this.playerX;
-      this.playerX += (this.steerTarget - this.playerX) * Math.min(1, dt * 9);
-      // curves push you to the outside; your thumb's target slides too, so
-      // holding still drifts you wide and you steer against it
-      const push = seg.curve * (this.speed / JS.maxSpeed) * dt * 0.09;
-      this.playerX -= push;
-      this.steerTarget -= push;
-      this.lean += (((this.playerX - prevX) / dt) * 0.35 - this.lean) * Math.min(1, dt * 8);
-
-      // foam walls: bounce back in, lose a little speed
-      if (Math.abs(this.playerX) > 1.05) {
-        this.playerX = Math.sign(this.playerX) * 1.05;
-        this.steerTarget = Math.sign(this.playerX) * 0.9;
-        this.speed *= 0.985;
-        if (Math.random() < 0.5) this._splash(0, 0.6, '#ffffff', 2);
+      // --- carving: steer, walls push back, turns push you wide ---
+      const steer = this._steerInput();
+      const hOld = jsWall(this.playerX, cn);
+      let ax = steer * JS.steerAccel * (this.grounded ? 1 : 0.5);
+      if (this.grounded) {
+        const dh = (jsWall(this.playerX + 0.01, cn) - jsWall(this.playerX - 0.01, cn)) / 0.02;
+        ax -= (dh / JS.wallH) * JS.wallPush;
+      }
+      ax -= cn * Math.pow(this.speed / 13000, 2) * JS.centrifugal;
+      this.vx += ax * dt;
+      this.vx *= Math.exp(-JS.latDamp * dt);
+      this.playerX += this.vx * dt;
+      if (Math.abs(this.playerX) > 1.1) {
+        this.playerX = Math.sign(this.playerX) * 1.1;
+        this.vx *= -0.3;
+        if (Math.random() < 0.4) this._splash(0, 0.6, '#ffffff', 2);
+      }
+      this.lean += (this.vx * 0.22 - this.lean) * Math.min(1, dt * 8);
+      // Dropping off a wall gains speed, climbing one costs a bit less --
+      // so carving side to side down the trough is how you go fast.
+      if (this.grounded) {
+        const dh = jsWall(this.playerX, cn) - hOld;
+        this.speed += -dh * (dh < 0 ? JS.pump : JS.pumpLoss);
       }
     } else {
-      // splashdown: coast to a stop
       this.speed *= Math.pow(0.35, dt);
       this.endT += dt;
       if (this.endT > 2.4) this._showResults();
     }
 
     this.pos = Math.min(this.pos + this.speed * dt, this.trackLen - JS.playerZ - JS.seg * 2);
-    this.skyOffset += seg.curve * (this.speed / JS.maxSpeed) * dt * 0.02;
+    this.skyOffset += seg.curve * (this.speed / 13000) * dt * 0.02;
     this.camDrop = Math.max(0, this.camDrop - dt * 0.9);
 
+    // --- vertical: ride the water, or fly off it ---
+    const pz2 = this.pos + JS.playerZ;
+    const surf = this._surf(pz2, this.playerX);
+    if (this.heli && this.heli.phase !== 'dance') {
+      this.riderY = surf; this.vy = 0; this.grounded = true;
+    } else if (this.grounded) {
+      // Look a moment ahead along the water. If it falls away faster than
+      // you could fall in that time, you leave it -- off a ramp lip, a
+      // drop, or a crest taken fast. (Judged over a short window, not one
+      // step, so the joins between segments don't count as bumps.)
+      // Forward slope only -- carving up and down the walls never launches you.
+      const look = 0.06;
+      const vNow = (surf - this.riderY) / dt;
+      const vHere = (surf - this._surf(pz2 - this.speed * look, this.playerX)) / look;
+      const vAhead = (this._surf(pz2 + this.speed * look, this.playerX) - surf) / look;
+      if (this.state === 'race' && vAhead < vHere - JS.gravity * look * JS.stick) {
+        this.grounded = false;
+        this.airT = 0;
+        this.vy = vNow;
+        this.riderY = surf;
+      } else {
+        this.vy = vNow;
+        this.riderY = surf;
+      }
+    } else {
+      this.airT += dt;
+      this.vy -= JS.gravity * dt;
+      this.riderY += this.vy * dt;
+      if (this.riderY <= surf) { this.riderY = surf; this._land(); }
+    }
+    if (this.trick && this.trick.phase !== 'skill') this.trick.t += dt;
+    this.wheel = this.state === 'race' && !this.grounded && !this.trick && !this.heli && !this.skill &&
+      this.riderY - surf > JS.trickMinHeight;
+
     if (this.state === 'race') {
-      if (!this.heli) this._collideJunk(playerZ);
-      this._updateRivals(dt, playerZ);
-      if (!this.skill) this._pickPrompt(playerZ);
-      if (playerZ >= this.finishSeg * JS.seg) this._finish();
+      this._updateRivals(dt, pz2);
+      if (!this.skill) this._pickPrompt(pz2);
+      if (pz2 >= this.finishSeg * JS.seg) this._finish();
     }
   }
 
-  // ------------------------------------------------------------------
-  // ATTACKS, BOOST, SPECIAL
-  // ------------------------------------------------------------------
-
-  // The red circle goes on the nearest rival you're close enough to hit.
-  _pickPrompt(playerZ) {
-    let best = null;
-    if (!this.heli) {
-      for (const r of this.racers) {
-        if (r.cool > 0 || r.knock > 0) continue;
-        const dz = r.z - playerZ;
-        if (dz < -150 || dz > JS.promptRange || Math.abs(r.x - this.playerX) > 0.9) continue;
-        if (!best || dz < best.z - playerZ) best = r;
+  _land() {
+    const hard = this.vy < -9000;
+    const wasAir = this.airT;
+    this.grounded = true;
+    this.vy = 0;
+    if (this.trick) {
+      const tr = this.trick;
+      this.trick = null;
+      if (tr.phase === 'anim' && tr.t >= JS.trickTime) {
+        this.tricksLanded++;
+        const pts = Math.round(tr.def.score * (tr.perfect ? 1.5 : 1));
+        this._addScore(pts, tr.def.name);
+        this.boost = Math.min(1, this.boost + JS.trickBoost);
+        this.special = Math.min(1, this.special + JS.trickSpecial);
+        this.flash = 0.35;
+        this.shake = 8;
+        this._splash(0, 0.5, '#ffd84a', 16);
+        return;
       }
+      this.speed *= 0.6;
+      this.wobble = 1;
+      this.shake = 14;
+      this.popups.push({ text: 'BAIL', life: 1, max: 1, bad: true });
+      this._splash(0, 0.4, '#ffffff', 24);
+      return;
     }
-    if (!best) { this.prompt = null; return; }
-    if (!this.prompt || this.prompt.racer !== best) this.prompt = { racer: best, born: this.t };
+    if (wasAir > 0.25) {
+      this.shake = Math.max(this.shake, hard ? 9 : 4);
+      this._splash(0, 0.5, '#ffffff', hard ? 18 : 8);
+    }
+  }
+
+  _startTrick(i) {
+    const def = JETSKI_TRICKS[i];
+    if (!def || this.trick || !this.wheel) return;
+    if (def.skill && JETSKI_SKILLS[def.skill]) {
+      this.trick = { def, phase: 'skill', t: 0 };
+      this.skill = JETSKI_SKILLS[def.skill]({ trick: def });
+    } else {
+      this.trick = { def, phase: 'anim', t: 0 };
+    }
+    this.wheel = false;
+  }
+
+  _updateRivals(dt, playerZ) {
+    let ahead = 0;
+    for (const r of this.racers) {
+      const seg = this._segAt(r.z);
+      // rivals ride the mountain at its natural speed for that pitch
+      const terminal = Math.sqrt(Math.max(0.05, seg.grade) * JS.slopeAccel / JS.drag);
+      let target = Math.max(JS.minSpeed, terminal) * r.skill;
+      const gap = r.z - playerZ;
+      if (gap > 3000) target *= 0.9;
+      else if (gap < -4000) target *= 1.08;
+      if (r.cool > 0) r.cool -= dt;
+      if (r.knock > 0) { r.knock -= dt; target *= 0.6; }
+      if (r.bump > 0) { r.bump -= dt; target *= 0.9; }
+      r.speed += (target - r.speed) * Math.min(1, dt * 0.8);
+      r.z += r.speed * dt;
+
+      // carve lazily across the trough
+      r.retarget -= dt;
+      if (r.retarget <= 0) { r.tx = (Math.random() - 0.5) * 1.5; r.retarget = 1.2 + Math.random() * 2; }
+      r.x += (r.tx - r.x) * Math.min(1, dt * 1.2);
+      r.x = Math.max(-0.95, Math.min(0.95, r.x));
+
+      if (!this.heli && this.grounded && Math.abs(r.z - playerZ) < 280 && Math.abs(r.x - this.playerX) < 0.25) {
+        const dir = Math.sign(this.playerX - r.x) || 1;
+        this.vx += dir * 1.2;
+        r.x -= dir * 0.1;
+        r.tx = r.x;
+        r.bump = 0.4;
+        this.speed *= 0.98;
+        this.shake = Math.max(this.shake, 5);
+      }
+
+      const isAhead = r.z > playerZ;
+      if (r.ahead && !isAhead) { this.passes++; this._addScore(JS.passBonus); }
+      r.ahead = isAhead;
+      if (isAhead) ahead++;
+    }
+    this.place = ahead + 1;
   }
 
   _hitUI(x, y) {
     const near = (o, pad) => o && Math.hypot(x - o.x, y - o.y) < o.r * pad;
+    if (this.wheel && this._ui.tricks) {
+      for (const b of this._ui.tricks) if (near(b, 1.15)) return 'trick' + b.i;
+    }
     if (this.special >= 1 && !this.heli && near(this._ui.special, 1.2)) return 'special';
     if (this.boost >= JS.boostCost && near(this._ui.boost, 1.2)) return 'boost';
     if (this.prompt && this.prompt.sx != null && near({ x: this.prompt.sx, y: this.prompt.sy, r: this.prompt.r }, 1.5)) return 'prompt';
@@ -434,6 +610,7 @@ class JetskiGame {
 
   _useUI(kind) {
     if (this.state !== 'race') return;
+    if (kind.startsWith('trick')) { this._startTrick(+kind.slice(5)); return; }
     if (kind === 'prompt' && this.prompt && !this.skill) {
       this.skill = jetskiSkillGame(this.prompt.racer);
       this.prompt.racer.cool = JS.promptCooldown;
@@ -446,12 +623,20 @@ class JetskiGame {
     } else if (kind === 'special' && this.special >= 1 && !this.heli) {
       this.special = 0;
       this.heli = { phase: 'dance', t: 0 };
+      this.trick = null;
     }
   }
 
   _resolveSkill() {
     const sk = this.skill, r = sk.target;
     this.skill = null;
+    if (r && r.trick) {
+      // a trick's skill game: land it and the trick plays out
+      if (!this.trick) return;
+      if (sk.success) { this.trick.phase = 'anim'; this.trick.t = 0; this.trick.perfect = sk.perfect; }
+      else this.trick.phase = 'bail';
+      return;
+    }
     if (sk.success) {
       this.hits++;
       r.knock = 1.2;
@@ -470,73 +655,297 @@ class JetskiGame {
     }
   }
 
-  _collideJunk(playerZ) {
-    for (let n = 0; n < 2; n++) {
-      const seg = this.segs[Math.floor(playerZ / JS.seg) + n];
-      if (!seg) continue;
-      for (const sp of seg.sprites) {
-        if (sp.deco || sp.hit) continue;
-        if (Math.abs(sp.x - this.playerX) < 0.2 && Math.abs(seg.z - playerZ) < JS.seg) {
-          sp.hit = true;
-          this.speed *= JS.hitSlow;
-          this.wobble = 1;
-          this.shake = 10;
-          this._splash(0, 0.4, '#ffffff', 14);
-        }
-      }
+  // ------------------------------------------------------------------
+  // RENDER
+  // ------------------------------------------------------------------
+
+  _proj(wx, wy, wz, camX, camY) {
+    const W = this.W, H = this.H;
+    const cz = wz - this.pos;
+    const sc = JS.depth / Math.max(1, cz);
+    return {
+      x: W / 2 + sc * (wx - camX) * W / 2,
+      y: this.horizon - sc * (wy - camY) * H / 2,
+      sc, cz,
+    };
+  }
+
+  render() {
+    const ctx = this.ctx, W = this.W, H = this.H;
+    if (!ctx || !W) return;
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    if (this.state === 'intro') { this._renderIntro(); return; }
+
+    ctx.save();
+    if (this.shake > 0.3) ctx.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
+    this.horizon = H * 0.2;
+    this._renderSky();
+
+    const base = Math.floor(this.pos / JS.seg);
+    const frac = (this.pos % JS.seg) / JS.seg;
+    const playerZ = this.pos + JS.playerZ;
+    // camera: above the water under itself, rising a little to follow jumps
+    // Whichever is higher: riding the water under the camera, or following
+    // you (eased) -- so a ramp or a big jump lifts the camera with you
+    // instead of leaving it staring into the ramp.
+    const follow = this.riderY + JS.camHeight * 0.9;
+    if (this.camLift === 0 || this.state !== 'race') this.camLift = follow;
+    this.camLift += (follow - this.camLift) * 0.2;
+    const camY = Math.max(Math.max(this._yAt(this.pos), this._yAt(playerZ)) + JS.camHeight, this.camLift) + this.camDrop * this.camDrop * 9000;
+    const camX = this.playerX * JS.road * 0.8;
+
+    // Boundary points between segments, near to far, with the classic
+    // curve accumulation so the run bends away from you.
+    const pts = [];
+    let xo = 0, dx = -((this.segs[base] ? this.segs[base].curve : 0) * frac);
+    const nB = Math.min(JS.draw, this.segs.length - base - 1);
+    for (let j = 0; j <= nB; j++) {
+      const s = this.segs[base + j];
+      const z = s.z, yc = s.y0, cn = s.curve / 6;
+      const row = [];
+      for (const xl of JS_XS) row.push(this._proj(xo + xl * JS.road, yc + jsWall(xl, cn), z, camX, camY));
+      row.xo = xo;
+      pts.push(row);
+      xo += dx; dx += s.curve;
+    }
+
+    // which segment the player and each rival sit in, for draw order
+    const playerSeg = Math.floor(playerZ / JS.seg) - base;
+    const rivalsBySeg = {};
+    for (const r of this.racers) {
+      const k = Math.floor(r.z / JS.seg) - base;
+      if (k >= 0 && k < nB) (rivalsBySeg[k] = rivalsBySeg[k] || []).push(r);
+    }
+
+    // far to near: each nearer strip paints over what it hides
+    const fogCol = [255, 214, 190];
+    for (let n = nB - 1; n >= 0; n--) {
+      const a = pts[n], b = pts[n + 1];
+      if (a[0].cz > JS.depth) this._drawStrip(this.segs[base + n], a, b, n / JS.draw, fogCol);
+      if (base + n === this.finishSeg) this._drawFinish(a);
+      for (const r of rivalsBySeg[n] || []) this._drawRival(r, pts, n, base, camX, camY);
+      if (n === playerSeg) this._renderPlayer(pts, n, base, camX, camY);
+    }
+    if (playerSeg < 0 || playerSeg >= nB) this._renderPlayer(pts, 0, base, camX, camY);
+
+    if (this.prompt && this.prompt.sx != null && !this.skill) this._drawPrompt();
+    for (const q of this.particles) {
+      ctx.globalAlpha = Math.max(0, q.life / q.max);
+      ctx.fillStyle = q.color;
+      ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    this._renderSpeedLines();
+    if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${this.flash * 0.7})`; ctx.fillRect(0, 0, W, H); }
+    this._renderHud();
+    if (this.state === 'race') { this._renderButtons(); if (this.wheel) this._renderWheel(); }
+    if (this.skill) this.skill.draw(ctx, W, H, this.t);
+  }
+
+  // One segment of the trough: a row of quads across the cross-section,
+  // colored floor -> walls -> foam rim -> outer bank, banded for speed,
+  // fading into the haze with distance.
+  _drawStrip(seg, a, b, far, fog) {
+    const ctx = this.ctx;
+    const band = Math.floor(seg.i / 3) % 2;
+    const fogT = Math.pow(far, 1.6) * 0.85;
+    const floor = band ? [36, 150, 214] : [30, 138, 204];
+    const wall = band ? [92, 204, 240] : [80, 192, 234];
+    const rim = band ? [255, 255, 255] : [222, 246, 255];
+    const bank = band ? [170, 222, 250] : [150, 210, 245];
+    for (let k = 0; k < JS_XS.length - 1; k++) {
+      const ax = Math.abs((JS_XS[k] + JS_XS[k + 1]) / 2);
+      let col = ax < 0.47 ? floor : ax < 1 ? wall : ax < 1.12 ? rim : bank;
+      if (seg.kick != null && ax < 1) col = band ? [255, 220, 90] : [255, 196, 60];
+      if (seg.drop && ax < 1) col = band ? [20, 110, 190] : [16, 98, 176];
+      ctx.fillStyle = jsMix(col, fog, fogT);
+      ctx.beginPath();
+      ctx.moveTo(a[k].x, a[k].y); ctx.lineTo(a[k + 1].x, a[k + 1].y);
+      ctx.lineTo(b[k + 1].x, b[k + 1].y); ctx.lineTo(b[k].x, b[k].y);
+      ctx.closePath(); ctx.fill();
+    }
+    // chevrons up the kicker so you can read a ramp coming
+    if (seg.kick != null && band) {
+      ctx.fillStyle = jsMix([255, 255, 255], fog, fogT);
+      const m = 6, mid = (a[m].x + b[m].x) / 2, w = Math.abs(a[8].x - a[4].x) * 0.25;
+      ctx.beginPath();
+      ctx.moveTo(mid - w, a[m].y); ctx.lineTo(mid, b[m].y); ctx.lineTo(mid + w, a[m].y);
+      ctx.lineTo(mid + w * 0.6, a[m].y); ctx.lineTo(mid, (a[m].y + b[m].y) / 2); ctx.lineTo(mid - w * 0.6, a[m].y);
+      ctx.fill();
     }
   }
 
-  _updateRivals(dt, playerZ) {
-    let ahead = 0;
-    for (const r of this.racers) {
-      const seg = this._segAt(r.z);
-      const slope = seg.grade;
-      let target = Math.min(JS.maxSpeed, JS.baseSpeed + slope * JS.slopeAccel) * r.skill;
-      // Keep the race close: the pack eases off when it's way ahead of you
-      // and pushes when it's fallen far behind.
-      const gap = r.z - playerZ;
-      if (gap > 3000) target *= 0.9;
-      else if (gap < -4000) target *= 1.08;
-      r.speed += (target - r.speed) * Math.min(1, dt * 0.8);
-      if (r.bump > 0) { r.bump -= dt; r.speed *= Math.pow(0.6, dt); }
-      if (r.cool > 0) r.cool -= dt;
-      if (r.knock > 0) { r.knock -= dt; target *= 0.6; }
-      r.z += r.speed * dt;
+  _drawFinish(row) {
+    const ctx = this.ctx, l = row[2], r = row[10];
+    const h = (r.x - l.x) * 0.45;
+    ctx.fillStyle = '#c8402c';
+    ctx.fillRect(l.x - 6, l.y - h, 12, h); ctx.fillRect(r.x - 6, r.y - h, 12, h);
+    const top = Math.min(l.y, r.y) - h;
+    ctx.fillStyle = '#fff'; ctx.fillRect(l.x, top, r.x - l.x, h * 0.18);
+    ctx.fillStyle = '#111';
+    for (let i = 0; i < 16; i++) ctx.fillRect(l.x + (i / 16) * (r.x - l.x), top + (i % 2) * h * 0.09, (r.x - l.x) / 16, h * 0.09);
+  }
 
-      // pick a new line now and then, and steer around junk ahead
-      r.retarget -= dt;
-      if (r.retarget <= 0) { r.tx = (Math.random() - 0.5) * 1.6; r.retarget = 1 + Math.random() * 2; }
-      for (let n = 1; n < 12; n++) {
-        const s2 = this.segs[Math.floor(r.z / JS.seg) + n];
-        if (!s2) break;
-        for (const sp of s2.sprites) {
-          if (!sp.deco && !sp.hit && Math.abs(sp.x - r.tx) < 0.3) r.tx = sp.x + (sp.x > 0 ? -0.5 : 0.5);
-        }
-      }
-      r.x += (r.tx - r.x) * Math.min(1, dt * 1.6);
-      r.x -= seg.curve * (r.speed / JS.maxSpeed) * dt * 0.05;
-      r.x = Math.max(-0.95, Math.min(0.95, r.x));
+  // Interpolated screen position of world point (z, lateral x, height y).
+  _place(pts, n, base, z, xl, y, camX, camY) {
+    const f = (z - (base + n) * JS.seg) / JS.seg;
+    const a = pts[Math.max(0, n)], b = pts[Math.min(pts.length - 1, n + 1)];
+    const xo = a.xo + (b.xo - a.xo) * f;
+    return this._proj(xo + xl * JS.road, y, z, camX, camY);
+  }
 
-      // bumping into you shoves you both apart (not while you're flying)
-      if (!this.heli && Math.abs(r.z - playerZ) < 280 && Math.abs(r.x - this.playerX) < 0.3) {
-        const dir = Math.sign(this.playerX - r.x) || 1;
-        this.playerX += dir * 0.08;
-        this.steerTarget += dir * 0.08;
-        r.x -= dir * 0.12;
-        r.tx = r.x;
-        this.speed *= 0.97;
-        this.shake = Math.max(this.shake, 5);
-        if (Math.random() < 0.3) this._splash(0, 0.5, '#d8f1ff', 3);
-      }
+  _drawRival(r, pts, n, base, camX, camY) {
+    const p = this._place(pts, n, base, r.z, r.x, this._surf(r.z, r.x), camX, camY);
+    if (p.cz <= JS.depth) return;
+    const w = p.sc * this.W / 2 * 520;
+    const bob = Math.sin(this.t * 6 + r.bob) * 2;
+    this._drawJetski(p.x, p.y + bob, w, r.kind, r.knock > 0 ? Math.sin(r.knock * 18) * 0.6 : 0);
+    if (this.prompt && this.prompt.racer === r) { this.prompt.sx = p.x; this.prompt.sy = p.y - w * 0.35; this.prompt.r = Math.max(30, Math.min(w * 0.6, Math.min(this.W, this.H) * 0.12)); }
+  }
 
-      // overtakes are worth points
-      const isAhead = r.z > playerZ;
-      if (r.ahead && !isAhead) { this.passes++; this._addScore(JS.passBonus); }
-      r.ahead = isAhead;
-      if (isAhead) ahead++;
+  _renderPlayer(pts, n, base, camX, camY) {
+    const ctx = this.ctx, W = this.W, H = this.H;
+    const playerZ = this.pos + JS.playerZ;
+    const p = this._place(pts, n, base, playerZ, this.playerX, this.riderY, camX, camY);
+    const w = Math.min(p.sc * W / 2 * 520, H * 0.24);
+    const surf = this._surf(playerZ, this.playerX);
+    // shadow on the water when you're up in the air
+    if (this.riderY - surf > 20) {
+      const sp = this._place(pts, n, base, playerZ, this.playerX, surf, camX, camY);
+      ctx.fillStyle = 'rgba(0,40,80,0.25)';
+      ctx.beginPath(); ctx.ellipse(sp.x, sp.y, w * 0.4, w * 0.07, 0, 0, Math.PI * 2); ctx.fill();
     }
-    this.place = ahead + 1;
+    // rooster tail, bigger the faster you go (only on the water)
+    if (this.grounded) {
+      const spd = Math.min(1.6, this.speed / 13000);
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      for (let i = 0; i < 6; i++) {
+        const a = (this.t * 4 + i / 6) % 1;
+        ctx.beginPath(); ctx.arc(p.x + Math.sin(i * 2.3) * w * 0.2, p.y + a * H * 0.1, w * (0.05 + a * 0.12) * (0.4 + spd * 0.6), 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    let lean = Math.max(-0.4, Math.min(0.4, this.lean)) + Math.sin(this.t * 25) * this.wobble * 0.15;
+    const opts = {};
+    const bob = this.grounded ? Math.sin(this.t * 9) * 2 : 0;
+    let lift = 0;
+    if (this.heli) {
+      const h = this.heli;
+      if (h.phase === 'dance') opts.spin = h.t * 22;
+      else if (h.phase === 'fly') { opts.rotor = true; lift = Math.min(1, h.t / 0.5) * H * 0.16 + Math.sin(this.t * 3) * 6; }
+      else { opts.rotor = true; lift = (1 - h.t / 0.6) * H * 0.16; }
+    }
+    if (this.trick) {
+      const tr = this.trick, k = Math.min(1, tr.t / JS.trickTime);
+      if (tr.phase === 'bail') lean = this.t * 14;
+      else if (tr.phase === 'anim') {
+        if (tr.def.anim === 'spin') lean += k * Math.PI * 2;
+        else if (tr.def.anim === 'flip') opts.flip = k * Math.PI * 2;
+        else if (tr.def.anim === 'superman') opts.spin = -Math.sin(k * Math.PI) * 1.4;
+        else if (tr.def.anim === 'handstand') opts.spin = Math.sin(k * Math.PI) * Math.PI;
+      }
+    }
+    if (opts.flip != null) {
+      ctx.save(); ctx.translate(p.x, p.y - lift); ctx.scale(1, Math.cos(opts.flip)); ctx.translate(-p.x, -(p.y - lift));
+      this._drawJetski(p.x, p.y + bob - lift, w, 'player', lean, opts);
+      ctx.restore();
+    } else {
+      this._drawJetski(p.x, p.y + bob - lift, w, 'player', lean, opts);
+    }
+    this._playerScreen = { x: p.x, y: p.y - lift, w };
+  }
+
+  // The trick wheel: an arc of buttons over your rider while you're in the
+  // air. Harder tricks (the ones with a skill game) have a red dot.
+  _renderWheel() {
+    const ctx = this.ctx, W = this.W, H = this.H;
+    const r = Math.max(30, Math.min(W, H) * 0.085);
+    const cx = W / 2, cy = H * 0.86, R = Math.max(r * 2.8, Math.min(W * 0.36, H * 0.22));
+    const n = JETSKI_TRICKS.length;
+    this._ui.tricks = [];
+    ctx.save();
+    for (let i = 0; i < n; i++) {
+      const ang = Math.PI * (1.15 + (0.7 * i) / Math.max(1, n - 1));
+      const bx = cx + Math.cos(ang) * R, by = cy + Math.sin(ang) * R;
+      this._ui.tricks.push({ x: bx, y: by, r, i });
+      const pop = 1 + 0.06 * Math.sin(this.t * 12 + i);
+      ctx.fillStyle = 'rgba(10,20,40,0.72)';
+      ctx.beginPath(); ctx.arc(bx, by, r * pop, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#ffd84a'; ctx.lineWidth = 3; ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = `bold ${Math.round(r * (JETSKI_TRICKS[i].name.length > 6 ? 0.34 : 0.48))}px VT323, monospace`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(JETSKI_TRICKS[i].name, bx, by);
+      if (JETSKI_TRICKS[i].skill) {
+        ctx.fillStyle = '#ff3b3b';
+        ctx.beginPath(); ctx.arc(bx + r * 0.62, by - r * 0.62, r * 0.16, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.restore();
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  // Sunset over a range of water mountains, foam on the peaks, a rainbow.
+  _renderSky() {
+    const ctx = this.ctx, W = this.W, H = this.H;
+    const g = ctx.createLinearGradient(0, 0, 0, H * 0.75);
+    g.addColorStop(0, '#6f8cff'); g.addColorStop(0.45, '#ffb3c8'); g.addColorStop(1, '#ffd6be');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const off = this.skyOffset * W;
+    // rainbow
+    ctx.save();
+    ctx.globalAlpha = 0.28;
+    ['#ff5a5a', '#ffb347', '#ffe66b', '#7be37b', '#6bb8ff', '#a77bff'].forEach((c, i) => {
+      ctx.strokeStyle = c; ctx.lineWidth = Math.max(4, W * 0.012);
+      ctx.beginPath(); ctx.arc(W * 0.3 - off * 0.1, H * 0.55, W * (0.55 - i * 0.014), Math.PI * 1.08, Math.PI * 1.92); ctx.stroke();
+    });
+    ctx.restore();
+    // two layers of water mountains with foam caps
+    const layer = (par, baseY, hgt, col, foam, seed) => {
+      const span = W * 1.8, o = ((off * par) % span + span) % span;
+      ctx.fillStyle = col;
+      ctx.beginPath(); ctx.moveTo(-10, H);
+      for (let i = -1; i < 9; i++) {
+        const x0 = i * (span / 6) - o;
+        const ph = rushHash(i + seed + Math.floor((off * par) / span) * 9);
+        ctx.lineTo(x0, baseY);
+        ctx.lineTo(x0 + span / 12, baseY - hgt * (0.55 + ph * 0.45));
+      }
+      ctx.lineTo(W + 10, baseY); ctx.lineTo(W + 10, H); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = foam;
+      for (let i = -1; i < 9; i++) {
+        const x0 = i * (span / 6) - o;
+        const ph = rushHash(i + seed + Math.floor((off * par) / span) * 9);
+        const px = x0 + span / 12, py = baseY - hgt * (0.55 + ph * 0.45);
+        ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px - hgt * 0.16, py + hgt * 0.18); ctx.lineTo(px + hgt * 0.16, py + hgt * 0.18); ctx.fill();
+      }
+    };
+    layer(0.15, H * 0.42, H * 0.2, 'rgba(110,150,230,0.75)', 'rgba(255,255,255,0.8)', 3);
+    layer(0.3, H * 0.47, H * 0.14, 'rgba(70,140,215,0.85)', 'rgba(255,255,255,0.85)', 11);
+    // cloud sea below everything
+    ctx.fillStyle = 'rgba(255,240,235,0.9)';
+    ctx.fillRect(0, H * 0.47, W, H);
+  }
+
+  _tap() {
+    // Tapping skips the whale intro once you've seen the launch.
+    if (this.state === 'intro' && this.introT > 0.8) this.introT = Math.max(this.introT, 2.6);
+  }
+
+  // The red circle goes on the nearest rival you're close enough to hit.
+  _pickPrompt(playerZ) {
+    let best = null;
+    if (!this.heli) {
+      for (const r of this.racers) {
+        if (r.cool > 0 || r.knock > 0) continue;
+        const dz = r.z - playerZ;
+        if (dz < -150 || dz > JS.promptRange || Math.abs(r.x - this.playerX) > 0.9) continue;
+        if (!best || dz < best.z - playerZ) best = r;
+      }
+    }
+    if (!best) { this.prompt = null; return; }
+    if (!this.prompt || this.prompt.racer !== best) this.prompt = { racer: best, born: this.t };
   }
 
   _finish() {
@@ -585,100 +994,9 @@ class JetskiGame {
     document.getElementById('jetski-results-stats').innerHTML = [
       ['Score', this.score],
       ['Racers passed', this.passes],
+      ['Tricks landed', this.tricksLanded],
     ].map(([k, v]) => `<p class="cannon-stat">${k}: <span>${v}</span></p>`).join('');
     document.getElementById('jetski-results').classList.remove('hidden');
-  }
-
-  // ------------------------------------------------------------------
-  // RENDER
-  // ------------------------------------------------------------------
-
-  _project(p, camX, camY, camZ) {
-    const W = this.W, H = this.H;
-    const cz = p.z - camZ;
-    p.scale = JS.depth / cz;
-    p.sx = Math.round(W / 2 + p.scale * (p.x - camX) * W / 2);
-    p.sy = Math.round(this.horizon - p.scale * (p.y - camY) * H / 2);
-    p.sw = Math.round(p.scale * JS.road * W / 2);
-    p.cz = cz;
-  }
-
-  render() {
-    const ctx = this.ctx, W = this.W, H = this.H;
-    if (!ctx || !W) return;
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    if (this.state === 'intro') { this._renderIntro(); return; }
-
-    ctx.save();
-    if (this.shake > 0.3) ctx.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
-    this.horizon = H * 0.18;
-    this._renderSky();
-
-    const base = Math.floor(this.pos / JS.seg);
-    const playerZ = this.pos + JS.playerZ;
-    // Camera rides above the water under ITSELF (it's uphill of you), so
-    // the slope between it and you never rises above it.
-    const camY = this._yAt(this.pos) + JS.camHeight + this.camDrop * this.camDrop * 9000;
-    this._playerSY = Math.min(H * 0.84, this.horizon + (JS.depth / JS.playerZ) * (camY - this._yAt(playerZ)) * H / 2);
-    const segOff = (this.pos % JS.seg) / JS.seg;
-    let x = 0, dx = -(this.segs[base] ? this.segs[base].curve : 0) * segOff;
-    let maxy = H;
-    const camX = this.playerX * JS.road;
-
-    for (let n = 0; n < JS.draw; n++) {
-      const seg = this.segs[base + n];
-      if (!seg) break;
-      const p1 = { x: 0, y: seg.y0, z: seg.z }, p2 = { x: 0, y: seg.y1, z: seg.z + JS.seg };
-      this._project(p1, camX - x, camY, this.pos);
-      this._project(p2, camX - x - dx, camY, this.pos);
-      x += dx; dx += seg.curve;
-      seg.p1 = p1; seg.clip = maxy;
-      if (p1.cz <= JS.depth || p2.sy >= p1.sy || p2.sy >= maxy) continue;
-      this._renderSegment(seg, p1, p2, maxy);
-      maxy = p1.sy;
-    }
-
-    // sprites and racers, far to near, each clipped by the water in front of it
-    const rivalsBySeg = {};
-    for (const r of this.racers) {
-      const si = Math.floor(r.z / JS.seg);
-      (rivalsBySeg[si] = rivalsBySeg[si] || []).push(r);
-    }
-    for (let n = JS.draw - 1; n > 0; n--) {
-      const seg = this.segs[base + n];
-      if (!seg || !seg.p1 || seg.p1.cz <= JS.depth) continue;
-      const p = seg.p1;
-      ctx.save();
-      ctx.beginPath(); ctx.rect(0, 0, W, seg.clip); ctx.clip();
-      for (const sp of seg.sprites) {
-        if (sp.hit) continue;
-        this._drawSprite(sp.kind, p.sx + p.scale * sp.x * JS.road * W / 2, p.sy, p.scale * W / 2, sp);
-      }
-      for (const r of rivalsBySeg[base + n] || []) {
-        const bob = Math.sin(this.t * 6 + r.bob) * 2;
-        const rx = p.sx + p.scale * r.x * JS.road * W / 2, rw = p.scale * W / 2 * 520;
-        this._drawJetski(rx, p.sy + bob, rw, r.kind, r.knock > 0 ? Math.sin(r.knock * 18) * 0.6 : 0);
-        if (this.prompt && this.prompt.racer === r) { this.prompt.sx = rx; this.prompt.sy = p.sy - rw * 0.35; this.prompt.r = Math.max(30, rw * 0.6); }
-      }
-      ctx.restore();
-    }
-
-    if (this.prompt && this.prompt.sx != null && !this.skill) this._drawPrompt();
-    this._renderPlayer();
-
-    for (const q of this.particles) {
-      ctx.globalAlpha = Math.max(0, q.life / q.max);
-      ctx.fillStyle = q.color;
-      ctx.beginPath(); ctx.arc(q.x, q.y, q.r, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-
-    this._renderSpeedLines();
-    if (this.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${this.flash * 0.7})`; ctx.fillRect(0, 0, W, H); }
-    this._renderHud();
-    if (this.state === 'race') this._renderButtons();
-    if (this.skill) this.skill.draw(ctx, W, H, this.t);
   }
 
   // Faint red circle on the rival you can hit -- tap it to attack.
@@ -697,7 +1015,7 @@ class JetskiGame {
   // Lines streaming out of the vanishing point while boosting or flying.
   _renderSpeedLines() {
     const fly = this.heli && this.heli.phase === 'fly';
-    if (!(this.boostT > 0 || fly)) return;
+    if (!(this.boostT > 0 || fly || this.speed > 15000)) return;
     const ctx = this.ctx, W = this.W, H = this.H;
     const cx = W / 2, cy = this.horizon + H * 0.18;
     ctx.save();
@@ -745,96 +1063,6 @@ class JetskiGame {
     button(this._ui.special, this.heli ? 0 : this.special, full, col, 'SPECIAL');
     if (full) ctx.restore();
     ctx.textBaseline = 'alphabetic';
-  }
-
-  _renderSky() {
-    const ctx = this.ctx, W = this.W, H = this.H;
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, '#5aa8ff'); g.addColorStop(0.45, '#bfe2ff'); g.addColorStop(1, '#fff3e0');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    // sun
-    ctx.fillStyle = 'rgba(255,240,180,0.9)';
-    ctx.beginPath(); ctx.arc(W * 0.78, H * 0.12, Math.min(W, H) * 0.06, 0, Math.PI * 2); ctx.fill();
-    // the city, tiny and far below the slope
-    const off = (this.skyOffset * W) % W;
-    ctx.fillStyle = 'rgba(90,110,150,0.55)';
-    for (let i = -2; i < 34; i++) {
-      const bw = W / 30, bh = (6 + rushHash(i + 40) * 34) * (H / 900);
-      const bx = ((i * bw - off * 0.4) % (W + bw * 4) + W + bw * 4) % (W + bw * 4) - bw * 2;
-      ctx.fillRect(bx, H * 0.52 - bh, bw - 1, bh);
-    }
-    // cloud deck
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
-    for (let i = 0; i < 10; i++) {
-      const cx = ((rushHash(i) * W * 1.6 - off) % (W * 1.6) + W * 1.6) % (W * 1.6) - W * 0.3;
-      ctx.beginPath(); ctx.ellipse(cx, H * (0.2 + rushHash(i + 3) * 0.12), W * 0.12, H * 0.025, 0, 0, Math.PI * 2); ctx.fill();
-    }
-  }
-
-  _renderSegment(seg, p1, p2, maxy) {
-    const ctx = this.ctx, W = this.W;
-    const band = Math.floor(seg.i / 3) % 2;
-    const quad = (x1, y1, w1, x2, y2, w2, color) => {
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.moveTo(x1 - w1, y1); ctx.lineTo(x2 - w2, y2); ctx.lineTo(x2 + w2, y2); ctx.lineTo(x1 + w1, y1);
-      ctx.closePath(); ctx.fill();
-    };
-    // cloud banks either side
-    ctx.fillStyle = band ? '#f4f1ff' : '#e6e0fb';
-    ctx.fillRect(0, p2.sy, W, p1.sy - p2.sy + 1);
-    // foam edges
-    quad(p1.sx, p1.sy, p1.sw * 1.12, p2.sx, p2.sy, p2.sw * 1.12, band ? '#ffffff' : '#d9f3ff');
-    // the water
-    quad(p1.sx, p1.sy, p1.sw, p2.sx, p2.sy, p2.sw, band ? '#2f9bd6' : '#2a8ec8');
-    // wake lines down the channel for a sense of speed
-    if (band) {
-      for (const k of [-0.5, 0, 0.5]) {
-        quad(p1.sx + p1.sw * k, p1.sy, p1.sw * 0.015, p2.sx + p2.sw * k, p2.sy, p2.sw * 0.015, 'rgba(255,255,255,0.35)');
-      }
-    }
-  }
-
-  _drawSprite(kind, x, y, k, sp) {
-    const ctx = this.ctx;
-    if (kind === 'cloud') {
-      const r = 700 * k;
-      ctx.fillStyle = 'rgba(255,255,255,0.95)';
-      ctx.beginPath();
-      ctx.arc(x, y - r * 0.4, r * 0.6, 0, Math.PI * 2);
-      ctx.arc(x - r * 0.55, y - r * 0.2, r * 0.42, 0, Math.PI * 2);
-      ctx.arc(x + r * 0.55, y - r * 0.25, r * 0.48, 0, Math.PI * 2);
-      ctx.fill();
-      return;
-    }
-    if (kind === 'finish') {
-      const w = JS.road * 1.1 * k, h = 900 * k;
-      ctx.fillStyle = '#c8402c';
-      ctx.fillRect(x - w, y - h, 40 * k, h); ctx.fillRect(x + w - 40 * k, y - h, 40 * k, h);
-      ctx.fillStyle = '#fff'; ctx.fillRect(x - w, y - h, w * 2, 160 * k);
-      ctx.fillStyle = '#111';
-      for (let i = 0; i < 16; i++) if (i % 2) ctx.fillRect(x - w + (i / 16) * w * 2, y - h, w / 8, 80 * k);
-      for (let i = 0; i < 16; i++) if (!(i % 2)) ctx.fillRect(x - w + (i / 16) * w * 2, y - h + 80 * k, w / 8, 80 * k);
-      return;
-    }
-    const s = 260 * k;
-    if (kind === 'buoy') {
-      ctx.fillStyle = '#ff6a1a';
-      ctx.beginPath(); ctx.moveTo(x - s * 0.5, y); ctx.lineTo(x - s * 0.25, y - s * 1.2); ctx.lineTo(x + s * 0.25, y - s * 1.2); ctx.lineTo(x + s * 0.5, y); ctx.fill();
-      ctx.fillStyle = '#fff'; ctx.fillRect(x - s * 0.36, y - s * 0.75, s * 0.72, s * 0.2);
-    } else if (kind === 'trash') {
-      ctx.fillStyle = '#2b2b2b';
-      ctx.beginPath(); ctx.ellipse(x, y - s * 0.35, s * 0.6, s * 0.45, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#555'; ctx.fillRect(x - s * 0.1, y - s * 0.95, s * 0.2, s * 0.25);
-    } else if (kind === 'duck') {
-      ctx.fillStyle = '#ffd84a';
-      ctx.beginPath(); ctx.ellipse(x, y - s * 0.3, s * 0.6, s * 0.35, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(x + s * 0.3, y - s * 0.8, s * 0.3, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ff8a1a'; ctx.fillRect(x + s * 0.55, y - s * 0.82, s * 0.25, s * 0.1);
-    }
-    // a little wake ring around anything floating
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = Math.max(1, s * 0.06);
-    ctx.beginPath(); ctx.ellipse(x, y, s * 0.75, s * 0.15, 0, 0, Math.PI * 2); ctx.stroke();
   }
 
   // A jet ski seen from behind: hull, rider, rooster tail. kind paints it.
@@ -890,35 +1118,6 @@ class JetskiGame {
     ctx.restore();
   }
 
-  _renderPlayer() {
-    const W = this.W, H = this.H;
-    // same size a rival would be drawn at this distance
-    const w = Math.min((JS.depth / JS.playerZ) * (W / 2) * 520, H * 0.26);
-    const bob = Math.sin(this.t * 9) * 2 + (this.state === 'race' ? Math.sin(this.t * 31) * this.wobble * 6 : 0);
-    const lean = Math.max(-0.35, Math.min(0.35, this.lean)) + Math.sin(this.t * 25) * this.wobble * 0.15;
-    // rooster tail behind the player, bigger the faster you go
-    const ctx = this.ctx;
-    const sp = this.speed / JS.maxSpeed;
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    for (let i = 0; i < 6; i++) {
-      const a = (this.t * 4 + i / 6) % 1;
-      ctx.beginPath(); ctx.arc(W / 2 + Math.sin(i * 2.3) * w * 0.2, this._playerSY + a * H * 0.12, w * (0.06 + a * 0.12) * (0.5 + sp), 0, Math.PI * 2); ctx.fill();
-    }
-    // helicopter: dance on the water, lift off, fly high, drop back in
-    let lift = 0, spin = 0, rotor = false;
-    if (this.heli) {
-      const h = this.heli;
-      if (h.phase === 'dance') spin = h.t * 22;
-      else if (h.phase === 'fly') { rotor = true; lift = Math.min(1, h.t / 0.5) * H * 0.16 + Math.sin(this.t * 3) * 6; }
-      else { rotor = true; lift = (1 - h.t / 0.6) * H * 0.16; }
-      if (lift > 0) {
-        ctx.fillStyle = 'rgba(0,0,0,0.2)';
-        ctx.beginPath(); ctx.ellipse(W / 2, this._playerSY + 6, w * 0.45, w * 0.08, 0, 0, Math.PI * 2); ctx.fill();
-      }
-    }
-    this._drawJetski(W / 2, this._playerSY + bob - lift, w, 'player', lean, { spin, rotor });
-  }
-
   _renderHud() {
     const ctx = this.ctx, W = this.W, H = this.H;
     const u = Math.max(0.85, Math.min(1.4, W / 480));
@@ -939,6 +1138,12 @@ class JetskiGame {
       ctx.font = `bold ${Math.round(30 * u)}px VT323, monospace`;
       ctx.strokeText(String(this.score), W - 16, 48 * u);
       ctx.fillStyle = '#fff'; ctx.fillText(String(this.score), W - 16, 48 * u);
+      // speed, so you can feel the mountain working
+      ctx.textAlign = 'center';
+      ctx.font = `bold ${Math.round(22 * u)}px VT323, monospace`;
+      const mph = Math.round(this.speed / 180);
+      ctx.strokeText(`${mph} MPH`, W / 2, 48 * u);
+      ctx.fillStyle = this.speed > 15000 ? '#ffd84a' : '#fff'; ctx.fillText(`${mph} MPH`, W / 2, 48 * u);
       // progress down the run
       const prog = Math.min(1, (this.pos + JS.playerZ) / (this.finishSeg * JS.seg));
       ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(16, 74 * u, W - 32, 7);
@@ -956,8 +1161,8 @@ class JetskiGame {
         ctx.textAlign = 'center';
         ctx.font = `${Math.round(24 * u)}px VT323, monospace`;
         ctx.globalAlpha = Math.min(1, 6 - this.t);
-        ctx.strokeText('Drag to steer', W / 2, H * 0.62);
-        ctx.fillStyle = '#fff'; ctx.fillText('Drag to steer', W / 2, H * 0.62);
+        ctx.strokeText('Drag to carve', W / 2, H * 0.4);
+        ctx.fillStyle = '#fff'; ctx.fillText('Drag to carve', W / 2, H * 0.4);
         ctx.globalAlpha = 1;
       }
     }
