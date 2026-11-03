@@ -11,7 +11,7 @@
 const MINIGAME_GRADES = {
   bodega: {
     // minimum score for each grade; anything lower is an F
-    cutoffs: { 'A+': 2800, 'A': 2100, 'B': 1300, 'C': 800, 'D': 400 },
+    cutoffs: { 'A+': 3500, 'A': 2400, 'B': 1300, 'C': 800, 'D': 400 },
     // what each grade earns (a vehicle id), if anything
     rewards: { 'A+': 'showtime-express', 'A': 'showtime-express', 'B': 'pogo-stick', 'C': 'pogo-stick' },
   },
