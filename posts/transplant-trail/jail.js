@@ -3,8 +3,7 @@
  * ======================================================
  *
  * Second pass. The single-ally recruitment arc + weapon beat + Big Steve
- * fight (first pass) was shelved and later deleted — see
- * that file's header for why and what reviving it needs.
+ * fight (first pass) was shelved and later deleted (it's in git history).
  *
  * This file is orchestration only: infra (resize/overlay plumbing), the
  * one authored intake panel, the yard (explorable hub, camera-follow,
