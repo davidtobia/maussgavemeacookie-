@@ -140,7 +140,7 @@ const JAIL_CHARACTERS = [
     name: '[PLACEHOLDER NAME — SBF]',
     tag: '[PLACEHOLDER ONE-LINE SUBTITLE]',
     color: '#6ab0d8',
-    minigame: 'trip',
+    minigame: 'trolley',
     yard: { x: 30, y: 100, entourage: 2, turfR: 12 },
     discoverToast: '[PLACEHOLDER: line shown the first time you get close enough to make him out]',
   },

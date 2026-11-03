@@ -229,7 +229,7 @@ class TransplantTrail {
   // new content while it's actively being iterated on.
   maybeDebugJump() {
     const params = new URLSearchParams(window.location.search);
-    const targets = ['apartment', 'bodega', 'rush', 'liberty', 'jetski', 'cannon', 'heist', 'jail', 'junkyard'];
+    const targets = ['apartment', 'bodega', 'rush', 'liberty', 'jetski', 'cannon', 'heist', 'jail', 'junkyard', 'trolley'];
     const target = targets.find(t => params.get(t) === '1') || null;
     if (!target) return false;
     // This runs synchronously inside the TransplantTrail constructor --
@@ -254,6 +254,7 @@ class TransplantTrail {
       else if (target === 'heist')    trailGame.startHeistGame();
       else if (target === 'jail')     trailGame.startJailGame();
       else if (target === 'junkyard') { window.JAIL_DEBUG = { startAt: 'junkyard' }; trailGame.startJailGame(); }
+      else if (target === 'trolley')  { window.JAIL_DEBUG = { startAt: 'trolley' }; trailGame.startJailGame(); }
     }, 0);
     return true;
   }
