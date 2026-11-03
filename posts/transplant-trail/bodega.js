@@ -19,10 +19,10 @@ const BODEGA_ITEMS = [
 // elapsed time so a 120Hz phone doesn't play at double speed.
 const BODEGA_ROUND_SECONDS = 40;
 const BODEGA_TUNING = {
-  fallStart: 5.2, fallEnd: 12,
-  spawnStart: 30, spawnEnd: 11,   // frames between spawns
-  frenzyEvery: 10, frenzyLength: 2.4, frenzySpawnMult: 0.45,
-  tossChance: 0.3,                // thrown in from a side instead of dropped
+  fallStart: 4.2, fallEnd: 9,
+  spawnStart: 34, spawnEnd: 16,   // frames between spawns
+  frenzyEvery: 10, frenzyLength: 2.2, frenzySpawnMult: 0.6,
+  tossChance: 0.18,               // thrown in from a side instead of dropped
   goldenChance: 0.22, goldenPoints: 50, // share of chopped cheeses that come down golden
   comboStep: 3, comboMaxMult: 5,
 };
@@ -229,7 +229,7 @@ class BodegaGame {
     const W = this.canvas.width, H = this.canvas.height;
     const p = this.progress();
     const speed = this.getFallSpeed() * (0.85 + Math.random() * 0.4) * (item.golden ? 1.3 : 1);
-    const spin = (Math.random() - 0.5) * (0.04 + p * 0.14);
+    const spin = (Math.random() - 0.5) * (0.03 + p * 0.08);
     if (Math.random() < T.tossChance) {
       // Thrown in from a side on an arc, not dropped straight down.
       const fromLeft = Math.random() < 0.5;
@@ -247,7 +247,7 @@ class BodegaGame {
         ...item, w, h: 42, rot: 0, spin,
         x: margin + Math.random() * (W - margin * 2),
         y: -54,
-        vx: (Math.random() - 0.5) * (1 + p * 6),
+        vx: (Math.random() - 0.5) * (0.6 + p * 3),
         vy: speed,
         gravity: 0,
         speed,
@@ -706,31 +706,40 @@ class BodegaGame {
       ctx.rotate(item.rot);
       ctx.translate(-item.x, -(item.y + item.h / 2));
 
-      // Drop shadow
-      ctx.fillStyle = 'rgba(0,0,0,0.45)';
-      ctx.fillRect(item.x - item.w / 2 + 4, item.y + 4, item.w, item.h);
+      // Catch-or-avoid at a glance: a green glow behind anything you want,
+      // a red one behind anything you don't.
+      const cy = item.y + item.h / 2;
+      const glow = ctx.createRadialGradient(item.x, cy, 4, item.x, cy, item.w * 0.75);
+      glow.addColorStop(0, item.good ? 'rgba(60,230,110,0.55)' : 'rgba(255,50,50,0.55)');
+      glow.addColorStop(1, item.good ? 'rgba(60,230,110,0)' : 'rgba(255,50,50,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(item.x, cy, item.w * 0.75, 0, Math.PI * 2); ctx.fill();
 
       if (item.golden) { ctx.shadowColor = '#ffd84a'; ctx.shadowBlur = 22; }
       this.drawItemShape(ctx, item);
       ctx.shadowBlur = 0;
 
-      // Colored border: gold for good, red for bad
-      if (item.good) {
-        ctx.strokeStyle = 'rgba(212,165,116,0.85)';
-        ctx.lineWidth = 2;
-      } else {
-        ctx.strokeStyle = 'rgba(231,76,60,0.7)';
-        ctx.lineWidth = 1.5;
-      }
-      if (item.golden) { ctx.strokeStyle = '#ffd84a'; ctx.lineWidth = 3; }
-      ctx.strokeRect(item.x - item.w / 2, item.y, item.w, item.h);
       ctx.restore();
 
-      // Small label below item
+      // Badge: green check = catch it, red X = avoid it. Drawn upright
+      // (not spinning with the item) so it reads instantly.
+      const bx = item.x + item.w * 0.42, by = item.y - 2, br = 11;
+      ctx.fillStyle = item.good ? '#1fbf55' : '#e02424';
+      ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+      ctx.beginPath();
+      if (item.good) { ctx.moveTo(bx - 5, by); ctx.lineTo(bx - 1, by + 4); ctx.lineTo(bx + 6, by - 4); }
+      else { ctx.moveTo(bx - 4, by - 4); ctx.lineTo(bx + 4, by + 4); ctx.moveTo(bx + 4, by - 4); ctx.lineTo(bx - 4, by + 4); }
+      ctx.stroke();
+      ctx.lineCap = 'butt';
+
+      // Label below the item, same color code
       ctx.textAlign = 'center';
-      ctx.font = '14px VT323';
-      ctx.fillStyle = item.good ? '#d4a574' : '#e74c3c';
-      ctx.fillText(item.label, item.x, item.y + item.h + 14);
+      ctx.font = 'bold 16px VT323';
+      ctx.lineWidth = 3; ctx.strokeStyle = '#000';
+      ctx.strokeText(item.label, item.x, item.y + item.h + 16);
+      ctx.fillStyle = item.golden ? '#ffd84a' : item.good ? '#5dff8f' : '#ff5a5a';
+      ctx.fillText(item.label, item.x, item.y + item.h + 16);
     });
 
     // Shopping bag -- was two goalpost bars with a rail between them,

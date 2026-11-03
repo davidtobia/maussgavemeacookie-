@@ -871,8 +871,8 @@ html.game-zoom-lock button {
   flex-shrink: 0;
 }
 
-.bodega-good { color: #d4a574; }
-.bodega-bad  { color: #c0392b; }
+.bodega-good { color: #5dff8f; }
+.bodega-bad  { color: #ff5a5a; }
 
 /* Overlays sit on top of the canvas */
 .bodega-overlay {
