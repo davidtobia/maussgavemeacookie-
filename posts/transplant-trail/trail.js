@@ -1475,14 +1475,25 @@ class TrailGame {
     const weather = this.state.vibeWeather;
     const availableModes = getAvailableTransport(characterId, weather, this.gameState.unlockedVehicles || []);
 
-    // Populate options
+    // Populate options. Modes that need something from Eric's store
+    // (the Bank Bike pass, a Metrocard) only work if you bought it --
+    // otherwise they show, greyed out, saying what you'd need.
     const container = document.getElementById('transport-options');
     container.innerHTML = '';
+    const inv = this.gameState.inventory || {};
 
     availableModes.forEach((mode, index) => {
       const btn = document.createElement('button');
       btn.className = 'menu-option';
       btn.dataset.transport = mode.id;
+      const needs = mode.requiresItem && !(inv[mode.requiresItem] > 0) ? getStoreItem(mode.requiresItem) : null;
+      if (needs) {
+        btn.innerHTML = `${index + 1}. ${mode.name} — needs a ${needs.name}`;
+        btn.classList.add('chapter-locked');
+        btn.disabled = true;
+        container.appendChild(btn);
+        return;
+      }
       btn.innerHTML = `${index + 1}. ${mode.name} — ${mode.description}`;
 
       btn.onclick = () => {
