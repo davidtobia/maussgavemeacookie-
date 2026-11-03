@@ -13,7 +13,7 @@
 
   <!-- Core Styles -->
   <link rel="stylesheet" href="../../css/base.css">
-  <link rel="stylesheet" href="../../css/posts/transplant-trail.css?v=7">
+  <link rel="stylesheet" href="../../css/posts/transplant-trail.css?v=8">
 </head>
 <body>
   <div class="game-container">
@@ -320,6 +320,7 @@
       <!-- Gamble overlay (shown after timer ends) -->
       <div id="bodega-gamble" class="bodega-overlay hidden">
         <div class="bodega-splash">
+          <div id="bodega-grade" class="report-card hidden"></div>
           <p id="bodega-gamble-text" class="bodega-splash-text"></p>
           <!-- Only filled in and shown if checking just went negative --
                a reassurance line that credit is fine, before the player
@@ -750,9 +751,10 @@
   <!-- Game Logic -->
   <script src="characters.js?v=2"></script>
   <script src="store.js?v=2"></script>
-  <script src="trail-data.js?v=5"></script>
-  <script src="trail.js?v=28"></script>
-  <script src="bodega.js?v=11"></script>
+  <script src="trail-data.js?v=6"></script>
+  <script src="rewards.js?v=1"></script>
+  <script src="trail.js?v=29"></script>
+  <script src="bodega.js?v=12"></script>
   <script src="rush.js?v=9"></script>
   <script src="liberty.js?v=3"></script>
   <script src="jetski.js?v=6"></script>
@@ -761,7 +763,7 @@
   <script src="jail-data.js?v=1"></script>
   <script src="jail-minigames.js?v=4"></script>
   <script src="jail.js?v=3"></script>
-  <script src="game.js?v=28"></script>
+  <script src="game.js?v=29"></script>
 
   <!-- GoatCounter Analytics -->
   <script data-goatcounter="https://maussgavemeacookie.goatcounter.com/count"

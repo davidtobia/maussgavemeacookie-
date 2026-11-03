@@ -1040,13 +1040,25 @@ class BodegaGame {
       ericLine.classList.add('hidden');
     }
 
+    // Report card: the score's grade, and the vehicle it earns (rewards.js)
+    const card = reportCard(this.gameState, 'bodega', earned);
+    const cardEl = document.getElementById('bodega-grade');
+    const r = card.reward;
+    cardEl.innerHTML = `
+      <div class="report-card-head">Report Card</div>
+      <div class="report-card-grade" style="color:${GRADE_COLORS[card.grade]}">${card.grade}</div>
+      <div class="report-card-score">Score: ${earned}</div>
+      ${r ? `<div class="report-card-reward">${card.isNew ? 'Unlocked' : 'Earned'}: <b>${r.name}</b></div>
+             <div class="report-card-note">You're riding it now. Switch rides any time under "Change transportation."</div>` : ''}`;
+    cardEl.classList.remove('hidden');
+
     const choices = document.getElementById('bodega-gamble-choices');
     choices.innerHTML = '';
     const btn = document.createElement('button');
     btn.className = 'menu-option';
     btn.style.marginTop = '20px';
     btn.textContent = 'Continue';
-    btn.onclick = () => this.onComplete(earned);
+    btn.onclick = () => this.onComplete(earned, card);
     choices.appendChild(btn);
   }
 }

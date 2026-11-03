@@ -77,6 +77,7 @@ class TransplantTrail {
       bodegaDone: false,
       rushScore: 0,
       jetskiScore: 0,
+      unlockedVehicles: [],
     };
   }
 
@@ -525,6 +526,7 @@ class TransplantTrail {
       bodegaDone: this.state.bodegaDone || false,
       rushScore: this.state.rushScore || 0,
       jetskiScore: this.state.jetskiScore || 0,
+      unlockedVehicles: [...(this.state.unlockedVehicles || [])],
       boroughBucks: this.state.boroughBucks || 0,
       cannonProgress: this.state.cannonProgress || null,
       trailState: trailStateSnapshot,
@@ -573,6 +575,7 @@ class TransplantTrail {
     this.state.bodegaDone         = save.bodegaDone || chapterNum >= 2;
     this.state.rushScore          = save.rushScore || 0;
     this.state.jetskiScore        = save.jetskiScore || 0;
+    this.state.unlockedVehicles   = [...(save.unlockedVehicles || [])];
     this.state.boroughBucks       = save.boroughBucks || 0;
     this.state.cannonProgress     = save.cannonProgress || null;
 

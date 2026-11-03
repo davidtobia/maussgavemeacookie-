@@ -900,6 +900,26 @@ html.game-zoom-lock button {
   text-transform: uppercase;
 }
 
+/* Report card on a minigame's results screen (rewards.js) */
+.report-card {
+  background: #f4ecd8;
+  color: #2a2420;
+  border: 3px solid #2a2420;
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.45);
+  transform: rotate(-1.5deg);
+  padding: 14px 18px 16px;
+  margin: 0 auto 18px;
+  max-width: 320px;
+  font-family: 'VT323', monospace;
+  text-align: center;
+}
+.report-card.hidden { display: none; }
+.report-card-head { font-size: 22px; letter-spacing: 3px; text-transform: uppercase; border-bottom: 2px solid #2a2420; padding-bottom: 4px; }
+.report-card-grade { font-size: 96px; line-height: 1; font-weight: bold; margin: 8px 0 2px; }
+.report-card-score { font-size: 22px; }
+.report-card-reward { font-size: 24px; margin-top: 10px; }
+.report-card-note { font-size: 17px; opacity: 0.75; margin-top: 4px; }
+
 .bodega-splash-text {
   font-size: 20px;
   line-height: 1.7;

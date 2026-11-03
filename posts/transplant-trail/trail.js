@@ -528,6 +528,12 @@ class TrailGame {
       case 'own-car':
         this.renderCar(x, y, '#7f8c8d');
         break;
+      case 'showtime-express':
+        this.renderShowtimeExpress(x, y);
+        break;
+      case 'pogo-stick':
+        this.renderPogoStick(x, y);
+        break;
       default:
         this.renderWalkingPerson(x, y);
     }
@@ -732,6 +738,74 @@ class TrailGame {
     this.ctx.lineTo(x + 28, y - 30);
     this.ctx.lineTo(x + 45, y);
     this.ctx.stroke();
+  }
+
+  // A subway car up on an elevated track, and in its shadow on the
+  // ground underneath, three breakdancers going: a headspin, a windmill,
+  // a freeze.
+  renderShowtimeExpress(x, y) {
+    const ctx = this.ctx, f = this.frameCounter;
+    const tx = x - 60, ty = y - 118;
+    // the shadow it throws on the ground
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(tx - 6, y - 8, 182, 10);
+    // el structure: deck and two pillars
+    ctx.fillStyle = '#4a4f5a';
+    ctx.fillRect(tx - 10, ty + 44, 190, 8);
+    ctx.fillRect(tx + 2, ty + 52, 8, y - ty - 52);
+    ctx.fillRect(tx + 160, ty + 52, 8, y - ty - 52);
+    // dancers, silhouetted, with a faint outline so they read on any ground
+    const sil = (fn) => {
+      ctx.save(); ctx.strokeStyle = 'rgba(255,220,160,0.55)'; ctx.lineWidth = 3;
+      ctx.fillStyle = '#0b0b0b'; fn(true); ctx.restore();
+      ctx.save(); ctx.fillStyle = '#0b0b0b'; fn(false); ctx.restore();
+    };
+    const box = (outline, x0, y0, w, h) => outline ? ctx.strokeRect(x0, y0, w, h) : ctx.fillRect(x0, y0, w, h);
+    const head = (outline, hx, hy) => { ctx.beginPath(); ctx.arc(hx, hy, 5, 0, Math.PI * 2); outline ? ctx.stroke() : ctx.fill(); };
+    const d1 = tx + 40, d2 = tx + 85, d3 = tx + 130;
+    // headspin: upside down, legs scissoring round
+    sil((o) => { head(o, d1, y - 5); ctx.translate(d1, y - 10); ctx.rotate(f * 0.35); box(o, -3, -18, 6, 18); box(o, -14, -21, 28, 4); });
+    // windmill: body rolling, legs sweeping
+    sil((o) => { ctx.translate(d2, y - 8); ctx.rotate(Math.sin(f * 0.2) * 1.2); box(o, -14, -4, 28, 7); box(o, 10, -18 + Math.sin(f * 0.4) * 6, 5, 14); head(o, -16, 0); });
+    // freeze: one-hand stand, legs kicked out, popping between two poses
+    const pose = Math.floor(f / 24) % 2;
+    sil((o) => { box(o, d3 - 2, y - 18, 5, 18); box(o, d3 - (pose ? 18 : 2), y - 28, 20, 6); head(o, d3 + (pose ? -6 : 10), y - 22); });
+    // the car
+    ctx.fillStyle = '#c9ced6'; ctx.fillRect(tx, ty, 170, 44);
+    ctx.fillStyle = '#9aa1ab'; ctx.fillRect(tx, ty + 38, 170, 6);
+    ctx.fillStyle = '#ff6319'; ctx.fillRect(tx, ty + 30, 170, 5);
+    ctx.fillStyle = '#2b3440';
+    for (let i = 0; i < 5; i++) ctx.fillRect(tx + 10 + i * 32, ty + 8, 22, 16);
+    // someone flipping past the windows, showtime-style
+    ctx.fillStyle = '#d4a574';
+    const wi = Math.floor(f / 18) % 5;
+    ctx.fillRect(tx + 16 + wi * 32, ty + 12 + (f % 18 < 9 ? 0 : 4), 10, 8);
+    ctx.fillStyle = '#ff6319';
+    ctx.beginPath(); ctx.arc(tx + 160, ty + 16, 7, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Bouncing along on a pogo stick.
+  renderPogoStick(x, y) {
+    const ctx = this.ctx;
+    const b = Math.abs(Math.sin(this.frameCounter * 0.22)) * 34;
+    const px = x + 30, base = y - b;
+    // stick and spring
+    ctx.strokeStyle = '#444'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(px, base - 70); ctx.lineTo(px, base - 18); ctx.stroke();
+    ctx.beginPath();
+    for (let i = 0; i <= 6; i++) ctx.lineTo(px + (i % 2 ? 5 : -5), base - 18 + i * (18 - b * 0.25) / 6);
+    ctx.stroke();
+    ctx.fillStyle = '#e8402c'; ctx.fillRect(px - 14, base - 72, 28, 4); // handlebar
+    ctx.fillRect(px - 12, base - 26, 24, 3);                             // foot pegs
+    // rider
+    ctx.fillStyle = '#d4a574';
+    ctx.fillRect(px - 7, base - 92, 14, 14);      // head
+    ctx.fillRect(px - 10, base - 78, 20, 32);     // body
+    ctx.fillRect(px - 9, base - 46, 6, 20);       // legs
+    ctx.fillRect(px + 3, base - 46, 6, 20);
+    // ground shadow shrinks as you go up
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.beginPath(); ctx.ellipse(px, y, 16 - b * 0.2, 4, 0, 0, Math.PI * 2); ctx.fill();
   }
 
   renderSubwayIcon(x, y) {
@@ -1044,7 +1118,9 @@ class TrailGame {
   startBodegaGame() {
     this.stop();
     game.showScreen('bodega-game');
-    bodegaGame = new BodegaGame(this.gameState, () => {
+    bodegaGame = new BodegaGame(this.gameState, (earned, card) => {
+      // a vehicle earned on the report card is your ride from here
+      if (card && card.reward) this.state.transportation = card.reward.id;
       // Save chapter 2 checkpoint after bodega completes
       this.gameState.bodegaDone = true;
       game.saveChapter(2, this.getTrailStateSnapshot());
@@ -1397,7 +1473,7 @@ class TrailGame {
     // Get available transportation modes for this character
     const characterId = this.gameState.selectedCharacter.id;
     const weather = this.state.vibeWeather;
-    const availableModes = getAvailableTransport(characterId, weather);
+    const availableModes = getAvailableTransport(characterId, weather, this.gameState.unlockedVehicles || []);
 
     // Populate options
     const container = document.getElementById('transport-options');

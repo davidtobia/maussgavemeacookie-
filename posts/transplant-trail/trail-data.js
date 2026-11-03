@@ -100,6 +100,29 @@ const TRANSPORTATION_MODES = [
     // for every player, in every game. Opened up like every other mode.
     restrictions: [],
     unavailableWeather: ['blizzard']
+  },
+  // Unlocked by report-card grades (rewards.js) -- not available until
+  // earned.
+  {
+    id: 'showtime-express',
+    name: 'Showtime Express',
+    speed: 2.6,
+    cost: 3,
+    vibeEffect: 4,
+    description: 'Fastest, cheap, +vibes',
+    restrictions: [],
+    requiresUnlock: true
+  },
+  {
+    id: 'pogo-stick',
+    name: 'Pogo Stick',
+    speed: 0.9,
+    cost: 0,
+    vibeEffect: 2,
+    description: 'Bouncy, free, +vibes',
+    restrictions: [],
+    requiresUnlock: true,
+    unavailableWeather: ['blizzard']
   }
 ];
 
@@ -217,8 +240,10 @@ function canUseTransport(characterId, transportId) {
 }
 
 // Helper to get available transportation for character
-function getAvailableTransport(characterId, weather = null) {
+function getAvailableTransport(characterId, weather = null, unlocked = []) {
   return TRANSPORTATION_MODES.filter(mode => {
+    if (mode.requiresUnlock && !unlocked.includes(mode.id)) return false;
+
     // Check character restrictions
     if (!canUseTransport(characterId, mode.id)) return false;
 
