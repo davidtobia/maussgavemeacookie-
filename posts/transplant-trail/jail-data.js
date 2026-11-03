@@ -116,6 +116,7 @@
 const JAIL_CHARACTERS = [
   {
     id: 'diddy',
+    shortName: 'Diddy',
     name: '[PLACEHOLDER NAME — DIDDY]',
     tag: '[PLACEHOLDER ONE-LINE SUBTITLE]',
     color: '#c86ab0',
@@ -125,6 +126,7 @@ const JAIL_CHARACTERS = [
   },
   {
     id: 'mangione',
+    shortName: 'Luigi',
     name: '[PLACEHOLDER NAME — LUIGI]',
     tag: '[PLACEHOLDER ONE-LINE SUBTITLE]',
     color: '#7ec89a',
@@ -134,6 +136,7 @@ const JAIL_CHARACTERS = [
   },
   {
     id: 'sbf',
+    shortName: 'SBF',
     name: '[PLACEHOLDER NAME — SBF]',
     tag: '[PLACEHOLDER ONE-LINE SUBTITLE]',
     color: '#6ab0d8',

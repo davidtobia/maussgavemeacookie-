@@ -873,13 +873,23 @@ class JailGame {
       this.friendship[charId] = jailClamp(this.friendship[charId] + (result.friendshipGain - prevBest), 0, 100);
       this.miniBestGain[charId] = result.friendshipGain;
     }
+    // Finishing a leader's game is what makes them your friend — three
+    // friends wins the jail — so lift friendship to the friend tier.
+    const newFriend = !this.minigameDone[charId];
+    if (newFriend) this.friendship[charId] = Math.max(this.friendship[charId], JAIL_TIERS[3].min);
     this.minigameDone[charId] = true;
     this.lastGrade[charId] = result.grade;
     this.lastDetail[charId] = result.detail;
 
     if (charId === 'sbf' && result.detail && result.detail.rescued) this.flags.add('sbf_rescued_caroline');
 
-    this.showResultPanel(charId, result, prevBest);
+    if (newFriend) {
+      this.phase = 'friend';
+      const count = JAIL_CHARACTERS.filter(c => this.minigameDone[c.id]).length;
+      new JailFriendScreen(this, charId, count, () => this.showResultPanel(charId, result, prevBest));
+    } else {
+      this.showResultPanel(charId, result, prevBest);
+    }
   }
 
   showResultPanel(charId, result, prevBest) {
