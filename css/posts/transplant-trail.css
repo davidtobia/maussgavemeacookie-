@@ -643,71 +643,196 @@ html.game-zoom-lock button {
   position: absolute;
   top: 0;
   left: 0;
+  right: 0;
+  margin: 0 auto;
 }
 
 #trail-screen.active {
   display: flex;
 }
 
-#trail-canvas {
-  width: 100%;
+.trail-stage {
+  position: relative;
   flex: 1;
+  min-height: 0;
+}
+
+#trail-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
   background: #000;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
 
-.trail-tap-hint {
-  position: absolute;
-  top: 12px;
-  right: 16px;
-  font-family: 'VT323', monospace;
-  font-size: 18px;
-  color: rgba(212, 165, 116, 0.75);
-  pointer-events: none;
-  animation: hintPulse 2.5s ease-in-out infinite;
-}
-
-@keyframes hintPulse {
-  0%, 100% { opacity: 0.75; }
-  50% { opacity: 0.3; }
-}
-
-.trail-status {
+.trail-top {
   background: #000;
-  border-top: 3px solid #d4a574;
-  padding: 20px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px 30px;
+  border-bottom: 3px solid #d4a574;
+  padding: 8px 12px 6px;
   flex-shrink: 0;
 }
 
-.status-row {
+.trail-top-row {
   display: flex;
+  justify-content: space-between;
+  align-items: center;
   gap: 10px;
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.trail-aura-wrap { display: inline-flex; align-items: center; gap: 6px; }
+
+.trail-aura-bar {
+  display: inline-block;
+  width: 56px;
+  height: 10px;
+  border: 2px solid #d4a574;
+}
+
+#trail-aura-fill {
+  display: block;
+  height: 100%;
+  background: #7ec89a;
+  transition: width 0.4s, background 0.4s;
+}
+
+/* Route: one dot per landmark, the trip as a line. */
+.trail-route {
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+  height: 14px;
+}
+
+.trail-route-seg {
+  flex: 1;
+  height: 3px;
+  background: rgba(212, 165, 116, 0.25);
+}
+
+.trail-route-seg.done { background: #d4a574; }
+
+.trail-route-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(212, 165, 116, 0.5);
+  background: #000;
+  flex-shrink: 0;
+}
+
+.trail-route-dot.done { background: #d4a574; border-color: #d4a574; }
+.trail-route-dot.here { width: 14px; height: 14px; background: #f4c542; border-color: #fff; }
+
+.trail-toast {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 24px);
+  max-width: 520px;
+  background: #d4a574;
+  color: #000;
+  border: 3px solid #000;
+  box-shadow: 5px 5px 0 rgba(212, 165, 116, 0.3);
+  padding: 10px 14px;
+  font-size: 20px;
+  text-align: center;
+  pointer-events: none;
+  transition: opacity 0.35s, transform 0.35s;
+  z-index: 5;
+}
+
+.trail-toast.hidden { opacity: 0; transform: translate(-50%, -12px); }
+
+.trail-panel {
+  background: #000;
+  border-top: 3px solid #d4a574;
+  padding: 8px 12px 10px;
+  flex-shrink: 0;
+}
+
+.trail-next {
+  display: flex;
+  justify-content: space-between;
   font-size: 20px;
 }
 
-.status-label {
-  opacity: 0.8;
+.trail-next b { color: #f4c542; font-weight: normal; }
+
+.trail-progress {
+  height: 8px;
+  margin: 4px 0 6px;
+  border: 2px solid #d4a574;
 }
 
-.trail-menu {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+#trail-progress-fill {
+  height: 100%;
+  width: 0;
+  background: #d4a574;
+}
+
+.trail-money {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  font-size: 16px;
+  opacity: 0.85;
+}
+
+.trail-money b { font-weight: normal; color: #fff; }
+.trail-money b.neg { color: #ff6a5a; }
+
+.trail-picker-label {
+  margin-top: 8px;
+  font-size: 15px;
+  opacity: 0.6;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.trail-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 2px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.trail-chips::-webkit-scrollbar { display: none; }
+
+.trail-chip {
+  flex-shrink: 0;
+  font-family: 'VT323', monospace;
+  font-size: 19px;
+  line-height: 1.05;
+  color: #d4a574;
   background: #000;
-  border: 3px solid #d4a574;
-  padding: 30px;
-  min-width: 600px;
-  max-width: 90%;
-  z-index: 10;
+  border: 2px solid #d4a574;
+  padding: 6px 10px;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
-.trail-menu.hidden {
-  display: none;
+.trail-chip small {
+  display: block;
+  font-size: 15px;
+  opacity: 0.75;
+}
+
+.trail-chip.active {
+  background: #d4a574;
+  color: #000;
+}
+
+.trail-chip:disabled {
+  opacity: 0.35;
+  border-style: dashed;
+  cursor: default;
 }
 
 .trail-event {
@@ -784,22 +909,6 @@ html.game-zoom-lock button {
   .border-decoration::before,
   .border-decoration::after {
     font-size: 24px;
-  }
-
-  .trail-status {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 6px 20px;
-    padding: 12px 15px;
-  }
-
-  .status-row {
-    font-size: 18px;
-  }
-
-  .trail-menu {
-    min-width: auto;
-    width: 95%;
-    padding: 20px;
   }
 
   .event-box {
@@ -2759,3 +2868,17 @@ button.menu-option.cannon-shop-exit-btn:hover {
   .jail-bench-hold-btn { font-size: 19px; padding: 18px 0; }
 }
 
+
+/* The shopkeeper's advance/Done button reads as a button, not a line of text. */
+.speech-bubble .menu-option {
+  display: inline-block;
+  border: 2px solid #d4a574;
+  padding: 8px 18px;
+  margin-right: 10px;
+}
+
+.speech-bubble .menu-option:hover {
+  padding-left: 18px;
+  background: #d4a574;
+  color: #000;
+}

@@ -13,7 +13,7 @@
 
   <!-- Core Styles -->
   <link rel="stylesheet" href="../../css/base.css">
-  <link rel="stylesheet" href="../../css/posts/transplant-trail.css?v=10">
+  <link rel="stylesheet" href="../../css/posts/transplant-trail.css?v=11">
 </head>
 <body>
   <div class="game-container">
@@ -146,85 +146,39 @@
       <div class="border-decoration bottom"></div>
     </div>
 
-    <!-- Trail Screen -->
+    <!-- Trail Screen: everything you can do is on this one screen -->
     <div id="trail-screen" class="screen">
-      <!-- Canvas for animated trail scene -->
-      <canvas id="trail-canvas"></canvas>
-      <div class="trail-tap-hint">Tap to pause</div>
-
-      <!-- Status bar -->
-      <div class="trail-status">
-        <div class="status-row">
-          <span class="status-label">Date:</span>
-          <span id="trail-date">May 1, 2026</span>
+      <div class="trail-top">
+        <div class="trail-top-row">
+          <span id="trail-date">Mar 1, 2026</span>
+          <span id="trail-weather">Rain</span>
+          <span class="trail-aura-wrap">Aura <span class="trail-aura-bar"><span id="trail-aura-fill"></span></span> <span id="trail-aura">Good</span></span>
         </div>
-        <div class="status-row">
-          <span class="status-label">Weather:</span>
-          <span id="trail-weather">Immaculate</span>
-        </div>
-        <div class="status-row">
-          <span class="status-label">Aura:</span>
-          <span id="trail-aura">Good</span>
-        </div>
-        <div class="status-row">
-          <span class="status-label">Checking:</span>
-          <span id="trail-checking">$0</span>
-        </div>
-        <div class="status-row">
-          <span class="status-label">Freedom:</span>
-          <span id="trail-freedom">$0</span>
-        </div>
-        <div class="status-row">
-          <span class="status-label">Sapphire:</span>
-          <span id="trail-sapphire">$0</span>
-        </div>
-        <div class="status-row">
-          <span class="status-label">Dad's AMEX:</span>
-          <span id="trail-dads-amex">$0</span>
-        </div>
-        <div class="status-row">
-          <span class="status-label">BILT:</span>
-          <span id="trail-bilt">$0</span>
-        </div>
-        <div class="status-row">
-          <span class="status-label">Chapter:</span>
-          <span id="trail-chapter">1 of 5</span>
-        </div>
-        <div class="status-row">
-          <span class="status-label">Next landmark:</span>
-          <span id="trail-landmark">Brooklyn Mirage</span>
-        </div>
-        <div class="status-row">
-          <span class="status-label">Miles to go:</span>
-          <span id="trail-miles">50 miles</span>
-        </div>
-        <div class="status-row">
-          <span class="status-label">Transportation:</span>
-          <span id="trail-transport">Walk</span>
-        </div>
-        <div class="status-row">
-          <span class="status-label">Spending:</span>
-          <span id="trail-spending">Trader Joe's</span>
-        </div>
+        <div id="trail-route" class="trail-route"></div>
       </div>
 
-      <!-- Trail menu (shown when stopped) -->
-      <div id="trail-menu" class="trail-menu hidden">
-        <div class="border-decoration top"></div>
-        <div class="menu-content">
-          <p class="menu-intro">You may:</p>
-          <div class="menu-options">
-            <button class="menu-option" onclick="trailGame.continueTrail()">1. Continue on trail</button>
-            <button class="menu-option" onclick="trailGame.checkSupplies()">2. Check supplies</button>
-            <button class="menu-option" onclick="trailGame.changeTransportation()">3. Change transportation</button>
-            <button class="menu-option" onclick="trailGame.changeSpending()">4. Change spending mode</button>
-            <button class="menu-option" onclick="trailGame.rest()">5. Stop to rest</button>
-            <button class="menu-option" onclick="trailGame.goOut()">6. Go out</button>
-            <button class="menu-option" onclick="trailGame.returnToChapterSelect()">7. Jump to a chapter</button>
-          </div>
-          <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
+      <div class="trail-stage">
+        <canvas id="trail-canvas"></canvas>
+        <div id="trail-toast" class="trail-toast hidden"></div>
+      </div>
+
+      <div class="trail-panel">
+        <div class="trail-next">
+          <span>Next: <b id="trail-landmark">Murray Hill</b></span>
+          <span id="trail-miles">9 miles</span>
         </div>
-        <div class="border-decoration bottom"></div>
+        <div class="trail-progress"><div id="trail-progress-fill"></div></div>
+        <div class="trail-money">
+          <span>Checking <b id="trail-checking">$0</b></span>
+          <span>Freedom <b id="trail-freedom">$0</b></span>
+          <span>Sapphire <b id="trail-sapphire">$0</b></span>
+          <span>Dad's AMEX <b id="trail-dads-amex">$0</b></span>
+          <span>BILT <b id="trail-bilt">$0</b></span>
+        </div>
+        <div class="trail-picker-label">Get around</div>
+        <div id="trail-transport-chips" class="trail-chips"></div>
+        <div class="trail-picker-label">Eat</div>
+        <div id="trail-spending-chips" class="trail-chips"></div>
       </div>
 
       <!-- Event popup -->
@@ -257,39 +211,6 @@
           </div>
         </div>
       </div>
-    </div>
-
-    <!-- Transportation Selection -->
-    <div id="transportation-select" class="screen">
-      <div class="border-decoration top"></div>
-      <div class="menu-content">
-        <h2 class="screen-title">Change transportation</h2>
-        <p class="menu-intro">You may:</p>
-        <div class="menu-options" id="transport-options">
-          <!-- Will be populated based on character restrictions -->
-        </div>
-        <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
-      </div>
-      <div class="border-decoration bottom"></div>
-    </div>
-
-    <!-- Spending Mode Selection -->
-    <div id="spending-select" class="screen">
-      <div class="border-decoration top"></div>
-      <div class="menu-content">
-        <h2 class="screen-title">Change spending mode</h2>
-        <p class="menu-intro">You may:</p>
-        <div class="menu-options">
-          <button class="menu-option" data-spending="dollar-slice">1. Dollar Slice Mode (bare bones)</button>
-          <button class="menu-option" data-spending="dumpling">2. Dumpling Maxxing (frugal)</button>
-          <button class="menu-option" data-spending="trader-joes">3. Trader Joe's Wine Mode (middle)</button>
-          <button class="menu-option" data-spending="west-village">4. West Village Resy Hop (comfortable)</button>
-          <button class="menu-option" data-spending="omakase">5. Omakase (expensive)</button>
-          <button class="menu-option" data-spending="carbone">6. Carbone (ruinous)</button>
-        </div>
-        <p class="menu-prompt">What is your choice? <span class="cursor">_</span></p>
-      </div>
-      <div class="border-decoration bottom"></div>
     </div>
 
     <!-- Bodega Mini-Game -->
@@ -715,11 +636,11 @@
   </div>
 
   <!-- Game Logic -->
-  <script src="characters.js?v=2"></script>
-  <script src="store.js?v=2"></script>
-  <script src="trail-data.js?v=6"></script>
+  <script src="characters.js?v=3"></script>
+  <script src="store.js?v=3"></script>
+  <script src="trail-data.js?v=7"></script>
   <script src="rewards.js?v=3"></script>
-  <script src="trail.js?v=30"></script>
+  <script src="trail.js?v=31"></script>
   <script src="bodega.js?v=14"></script>
   <script src="rush.js?v=9"></script>
   <script src="liberty.js?v=3"></script>
@@ -731,8 +652,8 @@
   <script src="jail-junkyard.js?v=2"></script>
   <script src="jail-friends.js?v=1"></script>
   <script src="jail-trolley.js?v=2"></script>
-  <script src="jail.js?v=6"></script>
-  <script src="game.js?v=31"></script>
+  <script src="jail.js?v=7"></script>
+  <script src="game.js?v=32"></script>
 
   <!-- GoatCounter Analytics -->
   <script data-goatcounter="https://maussgavemeacookie.goatcounter.com/count"

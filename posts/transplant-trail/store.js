@@ -36,6 +36,3 @@ function getStoreItem(id) {
   }
   return null;
 }
-
-// Keep STORE_ITEMS as flat array for compatibility
-const STORE_ITEMS = Object.values(STORE_CATEGORIES).flat();

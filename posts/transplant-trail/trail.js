@@ -99,51 +99,41 @@ class TrailGame {
     this.setupControls();
   }
 
+  // The canvas fills whatever space the HUD leaves it. Listeners are
+  // bound once for the page (a new TrailGame is made per run/resume, and
+  // each used to stack its own copies) and act on the current trailGame.
   setupCanvas() {
-    // Set canvas size to match container
-    const resizeCanvas = () => {
-      const container = this.canvas.parentElement;
-      const rect = container.getBoundingClientRect();
-      this.canvas.width = rect.width;
-      this.canvas.height = rect.height - 200; // Leave room for status bar
-    };
+    this.fitCanvas();
+    if (TrailGame._bound) return;
+    TrailGame._bound = true;
+    const fit = () => { if (trailGame) trailGame.fitCanvas(); };
+    window.addEventListener('resize', fit);
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(this.canvas);
+  }
 
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+  fitCanvas() {
+    const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
+    if (w && h && (this.canvas.width !== w || this.canvas.height !== h)) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+      this.weatherParticles = [];
+    }
   }
 
   setupControls() {
-    // Spacebar or Enter to dismiss event or toggle menu
+    if (TrailGame._controlsBound) return;
+    TrailGame._controlsBound = true;
+    // Space/Enter dismisses a story popup -- only while the trail is the
+    // screen you're on, so it never eats keys anywhere else.
     document.addEventListener('keydown', (e) => {
-      if (e.key === ' ' || e.key === 'Enter') {
-        e.preventDefault();
-
-        const eventBox = document.getElementById('trail-event');
-        if (!eventBox.classList.contains('hidden')) {
-          this.dismissEvent();
-          return;
-        }
-
-        if (this.state.running) {
-          this.toggleMenu();
-        }
-      }
+      if (!trailGame || game.state.currentScreen !== 'trail-screen') return;
+      if (e.key !== ' ' && e.key !== 'Enter') return;
+      if (document.getElementById('trail-event').classList.contains('hidden')) return;
+      e.preventDefault();
+      trailGame.dismissEvent();
     });
-
-    // Tap to dismiss event on mobile
     document.getElementById('trail-event').addEventListener('click', () => {
-      const eventBox = document.getElementById('trail-event');
-      if (!eventBox.classList.contains('hidden')) {
-        this.dismissEvent();
-      }
-    });
-
-    // Tap canvas to open menu
-    this.canvas.addEventListener('click', () => {
-      if (!this.state.running) return;
-      const eventBox = document.getElementById('trail-event');
-      if (!eventBox.classList.contains('hidden')) return;
-      this.toggleMenu();
+      if (trailGame && !document.getElementById('trail-event').classList.contains('hidden')) trailGame.dismissEvent();
     });
   }
 
@@ -159,30 +149,17 @@ class TrailGame {
   }
 
   start() {
+    const wasRunning = this.state.running;
     this.state.running = true;
     this.state.paused = false;
+    this._chipKey = null;
+    this.fitCanvas();
     this.updateStatusDisplay();
-    this.gameLoop();
+    if (!wasRunning) this.gameLoop();
   }
 
   stop() {
     this.state.running = false;
-  }
-
-  toggleMenu() {
-    const menu = document.getElementById('trail-menu');
-    this.state.paused = !this.state.paused;
-
-    if (this.state.paused) {
-      menu.classList.remove('hidden');
-    } else {
-      menu.classList.add('hidden');
-    }
-  }
-
-  closeMenu() {
-    document.getElementById('trail-menu').classList.add('hidden');
-    this.state.paused = false;
   }
 
   // ============================================
@@ -957,6 +934,13 @@ class TrailGame {
         this.state.vibeWeather = newWeather;
         const w = VIBE_WEATHER.find(x => x.id === newWeather);
         if (w) this.gameState.aura += (w.vibeMod || 0) + (w.healthMod || 0);
+        const mode = TRANSPORTATION_MODES.find(m => m.id === this.state.transportation);
+        if (mode && mode.unavailableWeather && mode.unavailableWeather.includes(newWeather)) {
+          this.state.transportation = 'walk';
+          this.toast(`Weather: ${w.name}. No ${mode.name} today -- walking.`);
+        } else if (w) {
+          this.toast(`Weather: ${w.name}`);
+        }
       }
     }
   }
@@ -971,7 +955,6 @@ class TrailGame {
     this.checkChapterSave();
 
     const landmark = this.getCurrentLandmark();
-    console.log('Reached:', landmark.name);
 
     // The heist trigger was an hour/money-based timer layered with
     // three separate flags (wisemenJoined, wiseEricsPitched,
@@ -1028,8 +1011,6 @@ class TrailGame {
       this.showEvent('You arrive at Washington Square Park. Three figures are waiting by the arch.', () => this.startCannonGame());
     } else if (landmark.type === 'fort') {
       this.state.paused = false;
-    } else if (landmark.type === 'crossing') {
-      this.lTrainCrossing();
     } else if (landmark.type === 'destination') {
       this.reachDestination();
     } else {
@@ -1211,15 +1192,20 @@ class TrailGame {
       // three dialogue trees, three mini-games), not something you want
       // to redo because you closed the tab right after finishing it.
       game.saveChapter(6, this.getTrailStateSnapshot());
-      game.showScreen('trail-screen');
-      const friendCount = result ? result.jailFriendCount : 0;
-      const outcome = JAIL_OUTCOMES.release[friendCount] || JAIL_OUTCOMES.release[0];
-      this.showEvent(
-        `${outcome} Act 4 is coming soon.`,
-        () => this.start()
-      );
+      this.showEnding(result ? result.jailFriendCount : 0);
     });
     jailGame.init();
+  }
+
+  // The end of what's built: the jail's release line, then back to the
+  // title. (Used to drop you back onto the trail, walking on into an
+  // unbuilt L-train crossing and a "coming soon" Mirage.)
+  showEnding(friendCount) {
+    this.stop();
+    game.showScreen('trail-screen');
+    if (friendCount == null) friendCount = (this.gameState.nycFriends || []).length;
+    const outcome = JAIL_OUTCOMES.release[friendCount] || JAIL_OUTCOMES.release[0];
+    this.showEvent(`${outcome} Act 4 is coming soon.`, () => game.showMainMenu());
   }
 
   showWiseEricsPitch() {
@@ -1335,11 +1321,6 @@ class TrailGame {
     }
   }
 
-  lTrainCrossing() {
-    // TODO: Build L train crossing mechanic
-    this.showEvent('You need to cross into Brooklyn via the L Train! (Crossing mechanic coming next)');
-  }
-
   reachDestination() {
     this.stop();
     // Was "Calculating your score..." with no score screen ever following
@@ -1354,11 +1335,15 @@ class TrailGame {
     const spendingMode = SPENDING_MODES.find(m => m.id === this.state.spendingMode);
     if (!spendingMode) return;
 
-    // Daily food/living costs — checking first, then Freedom
-    this.chargeExpense(spendingMode.dailyCost, 'chaseFreedom');
+    // Daily food/living: Dad's AMEX until he cancels it, then checking,
+    // then Freedom. (Nothing ever charged the AMEX before, so his
+    // cancel-the-card call could never happen.)
+    this.chargeExpense(spendingMode.dailyCost, 'chaseFreedom', true);
 
-    // Apply vibe effect from spending mode
-    this.gameState.aura += spendingMode.vibeEffect;
+    // Vibes from how you eat and how you get around (transport vibeEffect
+    // was in the data and the descriptions but never applied).
+    const transport = TRANSPORTATION_MODES.find(m => m.id === this.state.transportation);
+    this.gameState.aura += spendingMode.vibeEffect + (transport ? transport.vibeEffect || 0 : 0);
   }
 
   checkAura() {
@@ -1421,8 +1406,29 @@ class TrailGame {
     ];
 
     const event = events[Math.floor(Math.random() * events.length)];
-    this.showEvent(event.text);
+    this.toast(event.text);
     event.apply();
+  }
+
+  // Non-blocking note over the scene; queued so two never overlap.
+  toast(text) {
+    this.toastQueue = this.toastQueue || [];
+    this.toastQueue.push(text);
+    if (!this._toasting) this._nextToast();
+  }
+
+  _nextToast() {
+    const el = document.getElementById('trail-toast');
+    const text = this.toastQueue.shift();
+    if (!text) { this._toasting = false; return; }
+    this._toasting = true;
+    el.textContent = text;
+    el.classList.remove('hidden');
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => {
+      el.classList.add('hidden');
+      this._toastTimer = setTimeout(() => this._nextToast(), 400);
+    }, 3600);
   }
 
   showEvent(text, onDismiss = null) {
@@ -1448,128 +1454,76 @@ class TrailGame {
   }
 
   // ============================================
-  // MENU ACTIONS
+  // ON-SCREEN PICKERS (transportation + food)
   // ============================================
+  // There's no menu: the two things you can actually change on the trail
+  // sit on the main screen as tap-to-pick chips. Rebuilt only when what's
+  // available changes (weather, an unlock), so a tap is never lost to a
+  // re-render mid-press.
 
-  continueTrail() {
-    this.toggleMenu();
-  }
-
-  checkSupplies() {
-    this.toggleMenu();
-    const inv = this.gameState.inventory;
-    const items = Object.entries(inv)
-      .filter(([, qty]) => qty > 0)
-      .map(([id, qty]) => `${id.replace(/-/g, ' ')} x${qty}`)
-      .join(', ');
-    this.showEvent(items ? `You have: ${items}` : 'Your bags are empty.');
-  }
-
-  changeTransportation() {
-    this.closeMenu();
-    this.stop();
-    game.showScreen('transportation-select');
-
-    // Get available transportation modes for this character
-    const characterId = this.gameState.selectedCharacter.id;
-    const weather = this.state.vibeWeather;
-    const availableModes = getAvailableTransport(characterId, weather, this.gameState.unlockedVehicles || []);
-
-    // Populate options. Modes that need something from Eric's store
-    // (the Bank Bike pass, a Metrocard) only work if you bought it --
-    // otherwise they show, greyed out, saying what you'd need.
-    const container = document.getElementById('transport-options');
-    container.innerHTML = '';
+  renderPickers() {
     const inv = this.gameState.inventory || {};
+    const unlocked = this.gameState.unlockedVehicles || [];
+    const weather = this.state.vibeWeather;
+    const key = [this.state.transportation, this.state.spendingMode, weather, unlocked.join(','),
+      inv.metrocard > 0, inv['bank-bike'] > 0].join('|');
+    if (key === this._chipKey) return;
+    this._chipKey = key;
 
-    availableModes.forEach((mode, index) => {
+    const tWrap = document.getElementById('trail-transport-chips');
+    tWrap.innerHTML = '';
+    TRANSPORTATION_MODES.forEach(mode => {
+      if (mode.requiresUnlock && !unlocked.includes(mode.id)) return;
       const btn = document.createElement('button');
-      btn.className = 'menu-option';
-      btn.dataset.transport = mode.id;
+      btn.className = 'trail-chip' + (mode.id === this.state.transportation ? ' active' : '');
       const needs = mode.requiresItem && !(inv[mode.requiresItem] > 0) ? getStoreItem(mode.requiresItem) : null;
-      if (needs) {
-        btn.innerHTML = `${index + 1}. ${mode.name} — needs a ${needs.name}`;
-        btn.classList.add('chapter-locked');
-        btn.disabled = true;
-        container.appendChild(btn);
-        return;
-      }
-      btn.innerHTML = `${index + 1}. ${mode.name} — ${mode.description}`;
-
-      btn.onclick = () => {
-        this.state.transportation = mode.id;
-        // Rain's own VIBE_WEATHER entry describes "App Car surge pricing
-        // (+$20)" as one of its effects -- wasn't wired to an actual
-        // charge anywhere. One-time hit at the moment you book it during
-        // rain, same as a real surge fare.
-        if (mode.id === 'app-car' && weather === 'raining') {
-          this.chargeExpense(20, 'chaseSapphire');
-        }
-        game.showScreen('trail-screen');
-        this.start();
-      };
-
-      container.appendChild(btn);
+      const rained = mode.unavailableWeather && mode.unavailableWeather.includes(weather);
+      const speed = '▮'.repeat(Math.max(1, Math.round(mode.speed * 2))).slice(0, 5);
+      const sub = needs ? `needs ${needs.name}` : rained ? 'not in this weather' : `${speed} ${mode.cost ? '$' + mode.cost + '/day' : 'free'}`;
+      btn.innerHTML = `${mode.name}<small>${sub}</small>`;
+      btn.disabled = !!(needs || rained);
+      btn.onclick = () => this.pickTransport(mode);
+      tWrap.appendChild(btn);
     });
-  }
 
-  changeSpending() {
-    this.closeMenu();
-    this.stop();
-    game.showScreen('spending-select');
-
-    // Setup buttons
-    document.querySelectorAll('#spending-select .menu-option').forEach(btn => {
-      btn.onclick = () => {
-        this.state.spendingMode = btn.dataset.spending;
-        game.showScreen('trail-screen');
-        this.start();
-      };
+    const sWrap = document.getElementById('trail-spending-chips');
+    sWrap.innerHTML = '';
+    SPENDING_MODES.forEach(mode => {
+      const btn = document.createElement('button');
+      btn.className = 'trail-chip' + (mode.id === this.state.spendingMode ? ' active' : '');
+      btn.innerHTML = `${mode.name}<small>$${mode.dailyCost}/day</small>`;
+      btn.onclick = () => { this.state.spendingMode = mode.id; this.updateStatusDisplay(); };
+      sWrap.appendChild(btn);
     });
+    const active = tWrap.querySelector('.active');
+    if (active && active.scrollIntoView) active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
-  rest() {
-    this.toggleMenu();
-    // Used to just add aura and skip a day for free -- no daily cost, no
-    // decay, no death check -- which made it strictly better than doing
-    // nothing every single time and let you spam it to sit at max aura
-    // forever at zero risk, undercutting the entire aura-pressure system.
-    // A rest day is still a day: it still costs that day's spending-mode
-    // charge and still applies the normal -1 decay before the rest bonus
-    // lands, same as a day spent actually walking.
-    this.dailyExpenses();
-    this.checkAura();
-    if (!this.state.running) return; // died from the day's own costs -- handleDeath() already took over
-    this.gameState.aura = Math.min(100, this.gameState.aura + 20);
-    this.state.currentDay++;
-    this.showEvent('You stayed in and doom-scrolled. Aura +20. One day lost.');
-  }
-
-  // Was only reachable by fully backing out to the main menu and hitting
-  // "Choose chapter" -- no way to see or jump to a checkpoint without
-  // leaving the trail entirely. Same screen, reachable from the pause
-  // menu now. Jumping backward still means losing anything past your
-  // last save, same as "Continue" always has -- that's the save system,
-  // not new behavior.
-  returnToChapterSelect() {
-    this.closeMenu();
-    this.stop();
-    game.showChapterSelect();
-  }
-
-  goOut() {
-    this.toggleMenu();
-    this.chargeExpense(50, 'chaseFreedom');
-    this.gameState.aura += 15;
-    this.showEvent('You went out. -$50 on Freedom. Aura +15.');
+  pickTransport(mode) {
+    if (mode.id === this.state.transportation) return;
+    this.state.transportation = mode.id;
+    // Rain's surge pricing on an app car, charged once when you book it.
+    if (mode.id === 'app-car' && this.state.vibeWeather === 'raining') {
+      this.chargeExpense(20, 'chaseSapphire');
+      this.toast('Surge pricing. -$20 on Sapphire.');
+    }
+    this.updateStatusDisplay();
   }
 
   // ============================================
   // FINANCES
   // ============================================
 
-  // Drain checking first; any remainder goes on the fallback credit card
-  chargeExpense(amount, fallbackCard) {
+  // Drain checking first; any remainder goes on the fallback credit card.
+  // dadFirst: Dad's AMEX covers it first while it has allowance left.
+  chargeExpense(amount, fallbackCard, dadFirst) {
+    const b = this.gameState.balances;
+    if (dadFirst && !this.gameState.dadsAmexCancelled && b.dadsAmex > 0) {
+      const fromDad = Math.min(amount, b.dadsAmex);
+      b.dadsAmex -= fromDad;
+      amount -= fromDad;
+      if (amount <= 0) return;
+    }
     if (this.gameState.checkingAccount > 0) {
       const fromChecking = Math.min(amount, this.gameState.checkingAccount);
       this.gameState.checkingAccount -= fromChecking;
@@ -1587,57 +1541,55 @@ class TrailGame {
   // ============================================
 
   updateStatusDisplay() {
-    // Date
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const dateStr = `${months[this.state.currentDate.getMonth()]} ${this.state.currentDate.getDate()}, 2026`;
-    document.getElementById('trail-date').textContent = dateStr;
+    document.getElementById('trail-date').textContent = `${months[this.state.currentDate.getMonth()]} ${this.state.currentDate.getDate()}, 2026`;
 
-    // Vibe Weather
     const weather = VIBE_WEATHER.find(w => w.id === this.state.vibeWeather);
     document.getElementById('trail-weather').textContent = weather ? weather.name : this.state.vibeWeather;
 
-    // Aura
-    const auraText = this.gameState.aura > 75 ? 'Immaculate' :
-                     this.gameState.aura > 50 ? 'Good' :
-                     this.gameState.aura > 25 ? 'Mid' : 'Cooked';
-    document.getElementById('trail-aura').textContent = auraText;
+    const aura = jailClamp(this.gameState.aura, 0, 100);
+    document.getElementById('trail-aura').textContent = aura > 75 ? 'Immaculate' : aura > 50 ? 'Good' : aura > 25 ? 'Mid' : 'Cooked';
+    const fill = document.getElementById('trail-aura-fill');
+    fill.style.width = `${aura}%`;
+    fill.style.background = aura > 50 ? '#7ec89a' : aura > 25 ? '#f4c542' : '#e05a4a';
 
-    // Checking account and card balances
+    const money = (id, v) => {
+      const el = document.getElementById(id);
+      el.textContent = v < 0 ? `-$${Math.floor(-v)}` : `$${Math.floor(v)}`;
+      el.classList.toggle('neg', v < 0);
+    };
     const b = this.gameState.balances;
-    document.getElementById('trail-checking').textContent = `$${Math.floor(this.gameState.checkingAccount)}`;
-    document.getElementById('trail-freedom').textContent = `$${Math.floor(b.chaseFreedom)}`;
-    document.getElementById('trail-sapphire').textContent = `$${Math.floor(b.chaseSapphire)}`;
-    document.getElementById('trail-dads-amex').textContent = `$${Math.floor(b.dadsAmex)}`;
-    document.getElementById('trail-bilt').textContent = `$${Math.floor(b.bilt)}`;
+    money('trail-checking', this.gameState.checkingAccount);
+    money('trail-freedom', b.chaseFreedom);
+    money('trail-sapphire', b.chaseSapphire);
+    money('trail-dads-amex', this.gameState.dadsAmexCancelled ? 0 : b.dadsAmex);
+    money('trail-bilt', b.bilt);
 
-    // Chapter progress -- a live, always-visible readout (not another
-    // popup) of how far into the game you are, mirroring the same
-    // boundaries the save system checkpoints at (see CHAPTERS in
-    // game.js / saveChapter call sites) so "Chapter 3" here always means
-    // the same thing as chapter 3 in the chapter-select menu.
-    const chapterNum = this.gameState.jailDone ? 6
-      : this.gameState.heistDone ? 5
-      : this.state.landmarkIndex >= 7 ? 4
-      : this.state.landmarkIndex >= 3 ? 3
-      : this.state.landmarkIndex >= 1 ? 2
-      : 1;
-    document.getElementById('trail-chapter').textContent = `${chapterNum} of ${CHAPTERS.length}`;
+    document.getElementById('trail-landmark').textContent = this.getNextLandmark().name;
+    const left = Math.max(0, this.state.milesPerLandmark - this.state.milesFromLandmark);
+    document.getElementById('trail-miles').textContent = `${Math.ceil(left)} mi`;
+    document.getElementById('trail-progress-fill').style.width = `${jailClamp(this.state.milesFromLandmark / this.state.milesPerLandmark, 0, 1) * 100}%`;
+    this.renderRoute();
+    this.renderPickers();
+  }
 
-    // Next landmark
-    const nextLandmark = this.getNextLandmark();
-    document.getElementById('trail-landmark').textContent = nextLandmark.name;
-
-    // Miles to go
-    const milesToGo = Math.floor(this.state.milesPerLandmark - this.state.milesFromLandmark);
-    document.getElementById('trail-miles').textContent = `${milesToGo} miles`;
-
-    // Transportation
-    const transport = TRANSPORTATION_MODES.find(m => m.id === this.state.transportation);
-    document.getElementById('trail-transport').textContent = transport ? transport.name : 'Walk';
-
-    // Spending
-    const spending = SPENDING_MODES.find(m => m.id === this.state.spendingMode);
-    document.getElementById('trail-spending').textContent = spending ? spending.name : 'Normal';
+  renderRoute() {
+    const el = document.getElementById('trail-route');
+    const here = this.state.landmarkIndex;
+    if (el.dataset.here === String(here)) return;
+    el.dataset.here = String(here);
+    el.innerHTML = '';
+    LANDMARKS.forEach((lm, i) => {
+      if (i > 0) {
+        const seg = document.createElement('span');
+        seg.className = 'trail-route-seg' + (i <= here ? ' done' : '');
+        el.appendChild(seg);
+      }
+      const dot = document.createElement('span');
+      dot.className = 'trail-route-dot' + (i < here ? ' done' : i === here ? ' here' : '');
+      dot.title = lm.name;
+      el.appendChild(dot);
+    });
   }
 }
 

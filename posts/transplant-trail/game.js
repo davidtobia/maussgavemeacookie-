@@ -173,8 +173,12 @@ class TransplantTrail {
   setupLoadScreen() {
     const loadScreen = document.getElementById('load-screen');
 
+    // No save yet means there's nothing to choose between -- go straight
+    // to picking a character.
     const advance = () => {
-      this.showScreen('main-menu');
+      if (this.state.currentScreen !== 'load-screen') return;
+      if ((this.loadSaves().latestChapter || 0) >= 2) this.showMainMenu();
+      else this.startGame();
     };
 
     // Click to continue
@@ -326,7 +330,6 @@ class TransplantTrail {
       <div class="character-stats" style="margin: 30px 0;">
         <div class="stat-line">Checking: $${character.checkingAccount}</div>
         <div class="stat-line">Total credit: $${totalMoney}</div>
-        <div class="stat-line">Score Multiplier: ${character.difficulty}x</div>
       </div>
       <div class="character-portrait ${character.id}"></div>
     `;
@@ -419,6 +422,7 @@ class TransplantTrail {
       textEl.textContent = `You're ready to hit these streets! I've packed up all your goodies in this popular knapsack with many different locations. I love you`;
 
       const kissPrompt = document.createElement('p');
+      kissPrompt.className = 'adams-extra';
       kissPrompt.textContent = 'Do you want to kiss Eric?';
       kissPrompt.style.marginTop = '20px';
       btn.parentNode.insertBefore(kissPrompt, btn);
@@ -428,11 +432,15 @@ class TransplantTrail {
       btn.onclick = () => this.leaveStore();
 
       const noBtn = document.createElement('button');
-      noBtn.className = 'menu-option';
+      noBtn.className = 'menu-option adams-extra';
       noBtn.textContent = '2. No';
       noBtn.onclick = () => this.leaveStore();
       btn.insertAdjacentElement('afterend', noBtn);
     };
+
+    // A replay in the same tab: clear the kiss question stage5 added.
+    document.querySelectorAll('#nyc-arrival .adams-extra').forEach(el => el.remove());
+    btn.style.marginTop = '20px';
 
     // Start
     textEl.textContent = `Welcome to New Yawk! This is the ${city} of New Yawk!`;
@@ -595,7 +603,13 @@ class TransplantTrail {
     trailGame.state.hoursElapsed       = ts.hoursElapsed || 0;
     trailGame.state.milesFromLandmark  = 0;
 
-    trailGame.start();
+    // Chapter 5 is saved the moment the heist ends, right before the jail
+    // starts -- resuming it has to start the jail (it used to drop you on
+    // the trail with nothing left to trigger it). Chapter 6 is past the
+    // end of what's built.
+    if (this.state.jailDone) trailGame.showEnding();
+    else if (this.state.heistDone) trailGame.startJailGame();
+    else trailGame.start();
   }
 
   showChapterSelect() {
@@ -636,6 +650,7 @@ class TransplantTrail {
   setupKeyboardControls() {
     // Number key selection for menus
     document.addEventListener('keydown', (e) => {
+      if (e.target && e.target.tagName === 'INPUT') return; // typing a name with a digit in it
       if (e.key >= '1' && e.key <= '9') {
         const num = parseInt(e.key);
         const currentScreen = document.querySelector('.screen.active');

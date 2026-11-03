@@ -26,7 +26,6 @@ const TRANSPORTATION_MODES = [
     cost: 0,
     vibeEffect: 0,
     description: 'Very slow, free, neutral vibes',
-    restrictions: []
   },
   {
     id: 'bank-bike',
@@ -35,7 +34,6 @@ const TRANSPORTATION_MODES = [
     cost: 5,
     vibeEffect: -2,
     description: 'Slow, cheap, -vibes (sweaty)',
-    restrictions: [],
     requiresItem: 'bank-bike',
     // Blizzard's own entry in VIBE_WEATHER describes "most transportation
     // unavailable" but nothing enforced that beyond rain blocking this one
@@ -50,7 +48,6 @@ const TRANSPORTATION_MODES = [
     cost: 3,
     vibeEffect: 0,
     description: 'Medium speed, cheap, chaotic',
-    restrictions: [],
     requiresItem: 'metrocard'
     // Deliberately no unavailableWeather here -- direct correction:
     // "if it's snowing the car goes slow and the subway still works."
@@ -64,7 +61,6 @@ const TRANSPORTATION_MODES = [
     cost: 25,
     vibeEffect: 3,
     description: 'Fast, medium cost, +vibes (classic)',
-    restrictions: []
   },
   {
     id: 'app-car',
@@ -73,7 +69,6 @@ const TRANSPORTATION_MODES = [
     cost: 40,
     vibeEffect: -2,
     description: 'Fast, expensive, -vibes (judged)',
-    restrictions: []
   },
   {
     id: 'own-car',
@@ -82,7 +77,6 @@ const TRANSPORTATION_MODES = [
     cost: 60,
     vibeEffect: -5,
     description: 'Basically parked. High cost. -vibes.',
-    restrictions: []
   },
   {
     id: 'electric-bike',
@@ -91,14 +85,6 @@ const TRANSPORTATION_MODES = [
     cost: 0,
     vibeEffect: 3,
     description: 'Fast, free, +vibes',
-    // Was gated to `exclusive: true` + restrictions: ['delivery-driver'] --
-    // 'delivery-driver' only exists as an NPC id (characters.js NPCS), never
-    // as a playable CHARACTERS id, and canUseTransport()'s exclusive branch
-    // requires restrictions.includes(characterId). No selectable character
-    // could ever satisfy that, so this mode -- the fastest, free,
-    // best-vibe option in the whole list -- was permanently unreachable
-    // for every player, in every game. Opened up like every other mode.
-    restrictions: [],
     unavailableWeather: ['blizzard']
   },
   // Unlocked by report-card grades (rewards.js) -- not available until
@@ -110,7 +96,6 @@ const TRANSPORTATION_MODES = [
     cost: 3,
     vibeEffect: 4,
     description: 'Fastest, cheap, +vibes',
-    restrictions: [],
     requiresUnlock: true
   },
   {
@@ -120,7 +105,6 @@ const TRANSPORTATION_MODES = [
     cost: 0,
     vibeEffect: 2,
     description: 'Bouncy, free, +vibes',
-    restrictions: [],
     requiresUnlock: true,
     unavailableWeather: ['blizzard']
   }
@@ -133,48 +117,42 @@ const SPENDING_MODES = [
     name: 'Dollar Slice Mode',
     dailyCost: 15,
     vibeEffect: -3,
-    description: 'Bare bones',
-    events: ['food-poisoning', 'rat-encounter']
+    description: 'Bare bones'
   },
   {
     id: 'dumpling',
     name: 'Dumpling Maxxing',
     dailyCost: 30,
     vibeEffect: -1,
-    description: 'Frugal',
-    events: ['dumpling-spot-closed']
+    description: 'Frugal'
   },
   {
     id: 'trader-joes',
     name: "Trader Joe's Wine Mode",
     dailyCost: 60,
     vibeEffect: 0,
-    description: 'Middle',
-    events: ['wine-spill', 'bag-broke']
+    description: 'Middle'
   },
   {
     id: 'west-village',
     name: 'West Village Resy Hop',
     dailyCost: 120,
     vibeEffect: 2,
-    description: 'Comfortable',
-    events: ['ran-into-ex', 'influencer-spotted']
+    description: 'Comfortable'
   },
   {
     id: 'omakase',
     name: 'Omakase',
     dailyCost: 250,
     vibeEffect: 4,
-    description: 'Expensive',
-    events: ['chef-remembers-you']
+    description: 'Expensive'
   },
   {
     id: 'carbone',
     name: 'Carbone',
     dailyCost: 500,
     vibeEffect: 5,
-    description: 'Ruinous',
-    events: ['celeb-sighting', 'bankruptcy']
+    description: 'Ruinous'
   }
 ];
 
@@ -224,34 +202,3 @@ const VIBE_WEATHER = [
     effects: ['Cascading subway consequences if using subway']
   }
 ];
-
-// Helper to check if character can use transportation mode
-function canUseTransport(characterId, transportId) {
-  const mode = TRANSPORTATION_MODES.find(m => m.id === transportId);
-  if (!mode) return false;
-
-  // If exclusive mode (electric bike, helicopter)
-  if (mode.exclusive) {
-    return mode.restrictions.includes(characterId);
-  }
-
-  // Otherwise check if character is NOT in restrictions
-  return !mode.restrictions.includes(characterId);
-}
-
-// Helper to get available transportation for character
-function getAvailableTransport(characterId, weather = null, unlocked = []) {
-  return TRANSPORTATION_MODES.filter(mode => {
-    if (mode.requiresUnlock && !unlocked.includes(mode.id)) return false;
-
-    // Check character restrictions
-    if (!canUseTransport(characterId, mode.id)) return false;
-
-    // Check weather restrictions
-    if (weather && mode.unavailableWeather && mode.unavailableWeather.includes(weather)) {
-      return false;
-    }
-
-    return true;
-  });
-}

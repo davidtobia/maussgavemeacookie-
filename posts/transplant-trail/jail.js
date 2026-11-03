@@ -23,6 +23,12 @@
  * whole arc every reload.
  */
 
+// Leaders' real names are still placeholders in jail-data.js; until they're
+// written, show the short name instead of "[PLACEHOLDER NAME — ...]".
+function jailName(c) {
+  return c.shortName && /PLACEHOLDER/.test(c.name || '') ? c.shortName : c.name;
+}
+
 class JailGame {
   constructor(gameState, onComplete) {
     this.gameState = gameState;
@@ -371,7 +377,7 @@ class JailGame {
         row.id = `jail-yard-row-${c.id}`;
         row.innerHTML = `
           <div class="jail-yard-friend-dot" style="background:${c.color}"></div>
-          <div class="jail-yard-friend-name">${c.name}</div>
+          <div class="jail-yard-friend-name">${jailName(c)}</div>
           <div class="jail-yard-friend-bar"><div class="jail-yard-friend-bar-fill" id="jail-yard-bar-${c.id}"></div></div>
           <div class="jail-yard-friend-tier" id="jail-yard-tier-${c.id}"></div>
         `;
@@ -405,7 +411,7 @@ class JailGame {
     const convoId = this.nextConvoFor(charId);
     if (!convoId) {
       this.showDialogue({
-        title: char.name,
+        title: jailName(char),
         speakerColor: char.color,
         body: ['[PLACEHOLDER: nothing new to say right now]'],
         choices: [{ label: 'Back to the yard', onClick: () => this.startYard() }],
@@ -418,7 +424,7 @@ class JailGame {
   approachGate() {
     const remaining = JAIL_CHARACTERS.filter(c => !this.minigameDone[c.id]);
     const lines = remaining.length
-      ? [`[PLACEHOLDER — leaving early. Still on the table: ${remaining.map(c => c.name).join(', ')}.]`]
+      ? [`[PLACEHOLDER — leaving early. Still on the table: ${remaining.map(c => jailName(c)).join(', ')}.]`]
       : ['[PLACEHOLDER — nothing left on the table, this exit is clean.]'];
     this.stopLoop();
     this.phase = 'dialogue';
@@ -514,7 +520,7 @@ class JailGame {
     if (btn) {
       if (nearestApproach) {
         const c = JAIL_CHARACTERS.find(x => x.id === nearestApproach);
-        btn.textContent = `Talk to ${c.name}`;
+        btn.textContent = `Talk to ${jailName(c)}`;
         btn.classList.remove('hidden');
         btn.style.borderColor = c.color;
         btn.style.color = c.color;
@@ -665,7 +671,7 @@ class JailGame {
         ctx.fillStyle = '#fff';
         ctx.font = 'bold 12px VT323, monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(c.name.toUpperCase(), cx, cy - 18);
+        ctx.fillText(jailName(c).toUpperCase(), cx, cy - 18);
         ctx.fillStyle = jailAlpha(c.color, 0.95);
         ctx.font = '10px VT323, monospace';
         ctx.fillText(this.tierLabelFor(this.friendship[c.id]), cx, cy - 6);
@@ -743,7 +749,7 @@ class JailGame {
     }
 
     const speaker = node.speaker || 'narrator';
-    const title = node.title || (speaker === 'narrator' ? '' : speaker === 'player' ? (this.gameState.playerName || 'You') : char.name);
+    const title = node.title || (speaker === 'narrator' ? '' : speaker === 'player' ? (this.gameState.playerName || 'You') : jailName(char));
     const speakerColor = speaker === 'narrator' ? null : speaker === 'player' ? '#d4a574' : char.color;
     const lines = Array.isArray(node.lines) ? node.lines : (node.lines ? [node.lines] : []);
 
@@ -894,7 +900,7 @@ class JailGame {
     this.phase = 'result';
     const char = JAIL_CHARACTERS.find(c => c.id === charId);
     const bestNow = Math.max(prevBest, result.friendshipGain);
-    document.getElementById('jail-result-title').textContent = `Result — ${char.name}`;
+    document.getElementById('jail-result-title').textContent = `Result — ${jailName(char)}`;
     document.getElementById('jail-result-sub').textContent = result.friendshipGain > prevBest
       ? `New best run: +${result.friendshipGain} friendship`
       : `This run: +${result.friendshipGain} friendship (best run so far: +${bestNow} — best counts, not latest)`;
@@ -939,7 +945,7 @@ class JailGame {
       const head = document.createElement('div');
       head.className = 'jail-summary-row-head';
       head.innerHTML = `<span class="jail-summary-dot" style="background:${r.c.color}"></span>
-        <span class="jail-summary-name">${r.c.name}</span>
+        <span class="jail-summary-name">${jailName(r.c)}</span>
         <span class="jail-summary-tier" style="color:${r.c.color}">${JAIL_TIERS[r.tierIdx].label}</span>`;
       const p = document.createElement('p');
       p.className = 'heist-narration';
@@ -1042,8 +1048,7 @@ function validateJailDialogue() {
     });
   });
 
-  if (errors === 0) console.log('[jail-data] validateJailDialogue: OK, no issues found.');
-  else console.error(`[jail-data] validateJailDialogue: ${errors} issue(s) found — see above.`);
+  if (errors) console.error(`[jail-data] validateJailDialogue: ${errors} issue(s) found — see above.`);
   return errors;
 }
 window.validateJailDialogue = validateJailDialogue;

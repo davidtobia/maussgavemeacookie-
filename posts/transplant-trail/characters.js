@@ -8,8 +8,6 @@ const CHARACTERS = [
     id: 'remote-worker',
     name: 'Remote Worker',
     origin: 'Austin, Texas',
-    difficulty: 1,
-    description: '',
     checkingAccount: 1400,
     balances: {
       cash: 0,
@@ -23,8 +21,6 @@ const CHARACTERS = [
     id: 'nursing-student',
     name: 'Nursing Student',
     origin: 'Akron, Ohio',
-    difficulty: 2,
-    description: '',
     checkingAccount: 800,
     balances: {
       cash: 0,
@@ -38,8 +34,6 @@ const CHARACTERS = [
     id: 'hockey-coach',
     name: 'Youth Hockey Coach',
     origin: 'Massapequa, Long Island',
-    difficulty: 3,
-    description: '',
     checkingAccount: 500,
     balances: {
       cash: 0,
@@ -51,21 +45,8 @@ const CHARACTERS = [
   }
 ];
 
-// NPCs - appear during the trail
-const NPCS = [
-  { id: 'bartender', name: 'Bartender', origin: 'Hoboken, NJ' },
-  { id: 'investment-banker', name: 'Investment Banker', origin: 'Canary Wharf, London' },
-  { id: 'heiress', name: 'Heiress', origin: 'Shanghai' },
-  { id: 'ceramicist', name: 'Ceramicist', origin: 'Copenhagen' },
-  { id: 'delivery-driver', name: 'Delivery Driver', origin: 'Jackson Heights, Queens' }
-];
-
 function getCharacter(id) {
   return CHARACTERS.find(c => c.id === id);
-}
-
-function getAllCharacters() {
-  return CHARACTERS;
 }
 
 function getTotalMoney(character) {
