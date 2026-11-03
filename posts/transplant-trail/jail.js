@@ -3,7 +3,7 @@
  * ======================================================
  *
  * Second pass. The single-ally recruitment arc + weapon beat + Big Steve
- * fight (first pass) is shelved in jail-shelved.js, not deleted — see
+ * fight (first pass) was shelved and later deleted — see
  * that file's header for why and what reviving it needs.
  *
  * This file is orchestration only: infra (resize/overlay plumbing), the
@@ -43,7 +43,7 @@ class JailGame {
 
     // ---- Friendship model ----
     // Three simultaneous tracks, all starting at 10 (see
-    // JAIL_REDESIGN_PLAN.md §6 for the budget this is tuned against).
+    // the original redesign plan for the budget this is tuned against).
     this.friendship = {};
     this.miniBestGain = {};   // best mini-game friendshipGain so far, per char — only the best run counts
     this.minigameDone = {};
@@ -497,7 +497,7 @@ class JailGame {
   }
 
   // Three-radius discovery read, all in world units (see
-  // JAIL_REDESIGN_PLAN.md §3): >26 cluster-only, <=26 discover (name +
+  // the original redesign plan): >26 cluster-only, <=26 discover (name +
   // toast, once), <=9 approach (pulsing ring + Talk to button).
   _updateDiscoveryAndApproach() {
     const y = this.yard;
