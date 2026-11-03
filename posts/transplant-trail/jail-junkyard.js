@@ -8,13 +8,14 @@
  *
  * A Hyrox-style circuit: exercise stations alternate with fight walks.
  * Each station's score picks the weapon you carry into the next fight
- * (fists / toothbrush shank / samurai sword / gun — perfect only).
+ * (fists / toothbrush shank / samurai sword / gun). Weapon points add up
+ * across stations, so the weapon only gets better; a perfect station is the gun.
  *
  *   JUMP ROPE  double dutch, tap to jump, ropes speed up and vary
- *   FIGHT      auto-walk, tap to attack the swarm
+ *   FIGHT      run through the swarm, tap to attack, they swing back
  *   BOX JUMP   marker sweeps the power meter, swipe up to jump —
  *              too low shins the box, too high overshoots it
- *   FIGHT      bigger swarm
+ *   FIGHT      bigger swarm, chasers, brutes
  *   FINISH
  *
  * All text here is functional UI labels (station names, controls,
@@ -35,22 +36,25 @@ const JUNKYARD_TUNING = {
     perfectFrac: 0.3, points: 80, accuracyPoints: 40,
   },
   fight: [
-    { enemies: 12, length: 2800, groupEvery: 3 },
-    { enemies: 17, length: 3300, groupEvery: 2 },
+    { enemies: 22, length: 4400, groupChance: 0.4, chaseEvery: 2.4, chasePair: 0.45, brutes: 0.12 },
+    { enemies: 30, length: 5000, groupChance: 0.55, chaseEvery: 1.6, chasePair: 0.65, brutes: 0.2 },
   ],
-  walkSpeed: 175, brawlRange: 125, enemyReach: 50, windup: 0.75,
-  shovePenalty: 25, koPoints: 50,
-  tiers: { gun: 1, sword: 0.75, shank: 0.45 }, // station success fraction needed
+  runSpeed: 300, chaseSpeed: 390, enemyReach: 72, windup: 0.3, lunge: 200, bruteHP: 2, recover: 0.55,
+  playerHP: 5, invuln: 0.6, hitPenalty: 20, downPenalty: 100, downTime: 1.1,
+  koPoints: 50, comboPoints: 10, comboWindow: 1.3,
+  // Weapon points add up across stations (a station is worth up to 100);
+  // a perfect station always earns the gun.
+  tiers: { gun: 150, sword: 80, shank: 35 },
 };
 
 const JUNKYARD_WEAPONS = {
-  fists: { name: 'FISTS',            range: 82,  cooldown: 0.24, hits: 2, multi: false },
-  shank: { name: 'TOOTHBRUSH SHANK', range: 92,  cooldown: 0.2,  hits: 1, multi: false },
-  sword: { name: 'SAMURAI SWORD',    range: 175, cooldown: 0.28, hits: 1, multi: true },
-  gun:   { name: 'GUN',              range: 0,   cooldown: 0.16, hits: 1, multi: false, ranged: true },
+  fists: { name: 'FISTS',            range: 92,  cooldown: 0.11, hits: 2, multi: false },
+  shank: { name: 'TOOTHBRUSH SHANK', range: 98,  cooldown: 0.14, hits: 1, multi: false },
+  sword: { name: 'SAMURAI SWORD',    range: 180, cooldown: 0.22, hits: 1, multi: true },
+  gun:   { name: 'GUN',              range: 0,   cooldown: 0.12, hits: 1, multi: false, ranged: true },
 };
 const JUNKYARD_TIER_ORDER = ['fists', 'shank', 'sword', 'gun'];
-const JUNKYARD_TIER_LABELS = { fists: 'UNDER 45%', shank: '45%+', sword: '75%+', gun: 'PERFECT' };
+const JUNKYARD_TIER_LABELS = { fists: '0+', shank: '35+', sword: '80+', gun: '150+' };
 
 const JUNKYARD_LOOKS = {
   player: { shirt: '#f2f2f2', pants: '#4a5060', skin: '#e8b48a', hair: '#3a2a1e', headband: '#ff3d9a' },
@@ -78,6 +82,7 @@ class JailJunkyardGame {
 
     this.score = 0;
     this.weapon = 'fists';
+    this.weaponPts = 0;
     this.results = {};
     this.fightStats = [];
     this.shake = 0;
@@ -116,7 +121,7 @@ class JailJunkyardGame {
     this._touchStartH = (e) => {
       e.preventDefault();
       for (const t of e.changedTouches) {
-        this._touches[t.identifier] = { x: t.clientX, y: t.clientY, swiped: false };
+        this._touches[t.identifier] = { x: t.clientX, y: t.clientY, swiped: false, phase: this.phase };
         if (this.phase !== 'box') this._press();
       }
     };
@@ -125,7 +130,7 @@ class JailJunkyardGame {
       if (this.phase !== 'box') return;
       for (const t of e.changedTouches) {
         const s = this._touches[t.identifier];
-        if (s && !s.swiped && s.y - t.clientY > 22) { s.swiped = true; this._press(); }
+        if (s && s.phase === 'box' && !s.swiped && s.y - t.clientY > 22) { s.swiped = true; this._press(); }
       }
     };
     this._touchEndH = (e) => {
@@ -134,7 +139,7 @@ class JailJunkyardGame {
         const s = this._touches[t.identifier];
         delete this._touches[t.identifier];
         // A plain tap still works in the box jump, so nobody gets stuck.
-        if (s && !s.swiped && this.phase === 'box' && Math.hypot(t.clientX - s.x, t.clientY - s.y) < 16) this._press();
+        if (s && !s.swiped && this.phase === 'box' && s.phase === 'box' && Math.hypot(t.clientX - s.x, t.clientY - s.y) < 16) this._press();
       }
     };
     this._pointerH = (e) => { if (e.pointerType === 'touch') return; e.preventDefault(); this._press(); };
@@ -188,8 +193,13 @@ class JailJunkyardGame {
 
   _finishStation(frac, label) {
     const T = JUNKYARD_TUNING.tiers;
-    this.weapon = frac >= T.gun ? 'gun' : frac >= T.sword ? 'sword' : frac >= T.shank ? 'shank' : 'fists';
-    this.results[this.station] = { frac, label, weapon: this.weapon };
+    const earned = Math.round(frac * 100);
+    this.weaponPts += earned;
+    const pts = this.weaponPts;
+    const tier = frac >= 1 ? 'gun' : pts >= T.gun ? 'gun' : pts >= T.sword ? 'sword' : pts >= T.shank ? 'shank' : 'fists';
+    const order = JUNKYARD_TIER_ORDER;
+    this.weapon = order[Math.max(order.indexOf(tier), order.indexOf(this.weapon))];
+    this.results[this.station] = { frac, label, weapon: this.weapon, earned };
     this._next();
   }
 
@@ -344,7 +354,7 @@ class JailJunkyardGame {
       }
       reps.push({ h, hw, c, speed, items });
     }
-    this.box = { reps, i: 0, sub: 'aim', ph: Math.PI * jyHash(3), m: 0, t: 0, outcome: null, landed: 0, perfects: 0, acc: 0 };
+    this.box = { reps, i: 0, sub: 'aim', aimT: 0, ph: Math.PI * jyHash(3), m: 0, t: 0, outcome: null, landed: 0, perfects: 0, acc: 0 };
   }
 
   _boxGeom() {
@@ -353,7 +363,7 @@ class JailJunkyardGame {
 
   _boxJump() {
     const b = this.box;
-    if (b.sub !== 'aim') return;
+    if (b.sub !== 'aim' || b.aimT < 0.25) return;
     const rep = b.reps[b.i];
     const off = b.m - rep.c;
     b.outcome = Math.abs(off) <= rep.hw ? 'land' : off < 0 ? 'short' : 'over';
@@ -364,6 +374,7 @@ class JailJunkyardGame {
   _updateBox(dt) {
     const T = JUNKYARD_TUNING.box, b = this.box, rep = b.reps[b.i];
     if (b.sub === 'aim') {
+      b.aimT += dt;
       b.ph += Math.PI * 2 * rep.speed * dt;
       b.m = 0.5 - 0.5 * Math.cos(b.ph);
       return;
@@ -391,7 +402,7 @@ class JailJunkyardGame {
         this._finishStation(b.landed / b.reps.length, `${b.landed}/${b.reps.length} LANDED`);
         return;
       }
-      b.sub = 'aim'; b.t = 0; b.ph = Math.PI * jyHash(b.i + 3) * 2;
+      b.sub = 'aim'; b.t = 0; b.aimT = 0; b.ph = Math.PI * jyHash(b.i + 3) * 2;
     }
   }
 
@@ -479,74 +490,111 @@ class JailJunkyardGame {
 
   _setupFight(idx) {
     const F = JUNKYARD_TUNING.fight[idx];
-    const w = JUNKYARD_WEAPONS[this.weapon];
     const enemies = [];
-    const start = 520, end = F.length - 260;
-    let k = 0, x = start;
+    const start = 650, end = F.length - 300;
     const gap = (end - start) / F.enemies;
+    let k = 0, x = start;
     while (k < F.enemies) {
-      const group = (k % F.groupEvery === F.groupEvery - 1) ? Math.min(3, F.enemies - k) : 1;
-      for (let j = 0; j < group; j++) {
-        const id = idx * 100 + k;
-        enemies.push({
-          x: x + j * 48 + jyHash(id) * 30, z: -8 + jyHash(id + 50) * 20,
-          hp: w.hits, state: 'walk', t: 0, walk: jyHash(id + 9) * 6,
-          speed: 55 + jyHash(id + 3) * 35, rot: 0, pool: 0, alpha: 1,
-          skin: JUNKYARD_LOOKS.skins[Math.floor(jyHash(id + 17) * JUNKYARD_LOOKS.skins.length)],
-          bald: jyHash(id + 23) > 0.6,
-        });
-        k++;
+      const group = jyHash(idx * 57 + k) < F.groupChance ? Math.min(2 + Math.floor(jyHash(k + 400) * 3), F.enemies - k) : 1;
+      for (let j = 0; j < group; j++, k++) {
+        const e = this._makeEnemy(idx * 100 + k, x + j * 44 + jyHash(k) * 40, false);
+        if (jyHash(idx * 31 + k + 900) < F.brutes) { e.brute = true; e.hp += this.weapon === 'fists' ? 1 : JUNKYARD_TUNING.bruteHP; e.speed *= 0.8; }
+        enemies.push(e);
       }
       x += gap * group;
     }
-    enemies.sort((a, b) => a.z - b.z);
     this.gore = []; this.splats = [];
     this.fight = {
-      idx, px: 0, length: F.length, enemies, walk: 0,
-      cool: 0, attackT: 0, flinch: 0, kos: 0, total: F.enemies, shoves: 0,
-      tracer: null, hitstop: 0, done: 0,
+      idx, px: 0, length: F.length, enemies, run: 0,
+      cool: 0, attackT: 0, face: 1, faceT: 0,
+      hp: JUNKYARD_TUNING.playerHP, hurt: 0, invuln: 0, down: 0,
+      kos: 0, total: enemies.length, hitsTaken: 0, knockdowns: 0,
+      combo: 0, comboT: 0, tracer: null, hitstop: 0, done: 0,
+      chaseT: F.chaseEvery, spawnId: idx * 1000 + 500,
     };
   }
 
+  _makeEnemy(id, x, chaser) {
+    const T = JUNKYARD_TUNING;
+    return {
+      x, z: -10 + jyHash(id + 50) * 22, hp: JUNKYARD_WEAPONS[this.weapon].hits,
+      state: 'approach', t: 0, cool: 0, dir: 1, chaser,
+      walk: jyHash(id + 9) * 6, speed: 70 + jyHash(id + 3) * 80,
+      rot: 0, pool: 0,
+      skin: JUNKYARD_LOOKS.skins[Math.floor(jyHash(id + 17) * JUNKYARD_LOOKS.skins.length)],
+      bald: jyHash(id + 23) > 0.6,
+    };
+  }
+
+  _alive(e) { return e.state === 'approach' || e.state === 'windup' || e.state === 'recover' || e.state === 'stagger'; }
+
   _attack() {
     const f = this.fight, w = JUNKYARD_WEAPONS[this.weapon];
-    if (f.cool > 0 || f.done) return;
-    f.cool = w.cooldown; f.attackT = 0.18;
-    const live = f.enemies.filter(e => e.state === 'walk' || e.state === 'windup' || e.state === 'stagger');
-    const view = this.VW * 0.72 + 20;
-    let targets;
-    if (w.ranged) targets = live.filter(e => e.x - f.px > -10 && e.x - f.px < view);
-    else targets = live.filter(e => e.x - f.px > -20 && e.x - f.px < w.range);
-    targets.sort((a, b) => a.x - b.x);
-    if (!w.multi) targets = targets.slice(0, 1);
+    if (f.cool > 0 || f.done || f.down > 0) return;
+    f.cool = w.cooldown; f.attackT = 0.16;
+    const live = f.enemies.filter(e => this._alive(e));
+    let cands = w.ranged
+      ? live.filter(e => e.x - f.px > -this.VW * 0.35 && e.x - f.px < this.VW * 0.65)
+      : live.filter(e => Math.abs(e.x - f.px) < w.range);
+    // Whoever is about to hit you gets priority, then nearest.
+    const pri = (e) => Math.abs(e.x - f.px) - (e.state === 'windup' ? 60 : 0);
+    cands.sort((a, b) => pri(a) - pri(b));
+    if (cands.length) { f.face = cands[0].x >= f.px ? 1 : -1; f.faceT = 0.3; }
+    const targets = w.multi ? cands.filter(e => (e.x >= f.px ? 1 : -1) === f.face) : cands.slice(0, 1);
     if (w.ranged) {
-      f.tracer = targets.length ? { x: targets[0].x, y: this.groundY + targets[0].z - 80, t: 0.08 } : { x: f.px + view, y: this.groundY - 84, t: 0.08 };
+      const tg = targets[0];
+      f.tracer = { x: tg ? tg.x : f.px + f.face * this.VW, y: tg ? this.groundY + tg.z - 80 : this.groundY - 84, t: 0.07 };
       this.shake = Math.max(this.shake, 3);
     }
     targets.forEach(e => this._hit(e));
   }
 
   _hit(e) {
-    const f = this.fight, g = this.groundY + e.z;
+    const T = JUNKYARD_TUNING, f = this.fight, g = this.groundY + e.z;
+    e.dir = e.x >= f.px ? 1 : -1;
     e.hp--;
     if (e.hp <= 0) {
       e.state = 'dead'; e.t = 0;
-      f.kos++; f.hitstop = 0.06;
+      f.kos++; f.hitstop = 0.035;
+      f.combo = f.comboT > 0 ? f.combo + 1 : 1; f.comboT = T.comboWindow;
       this.shake = Math.max(this.shake, 7);
-      this._blood(e.x, g - 85, 26, 1);
-      this._addScore(JUNKYARD_TUNING.koPoints, e.x - this._camX() + 10, g - 150);
+      this._blood(e.x, g - 85, 26, 1, e.dir);
+      const bonus = f.combo >= 3 ? T.comboPoints * f.combo : 0;
+      this._addScore(T.koPoints + bonus, e.x - this._camX() + 10, g - 150);
+      if (f.combo >= 3) this.floaters.add(this.VW / 2, this.VH * 0.3, `${f.combo}X COMBO`, '#ff3d9a', { size: 40, life: 40 });
     } else {
-      e.state = 'stagger'; e.t = 0.28;
-      this._blood(e.x, g - 90, 8, 0.6);
+      e.state = 'stagger'; e.t = 0.22;
+      this._blood(e.x, g - 90, 8, 0.6, e.dir);
       this.shake = Math.max(this.shake, 3);
       this.floaters.add(e.x - this._camX(), g - 140, 'POW', '#f2f2f2', { size: 24, life: 22 });
     }
   }
 
-  _blood(x, y, n, power) {
+  _playerHit(e) {
+    const T = JUNKYARD_TUNING, f = this.fight;
+    if (f.invuln > 0 || f.down > 0 || f.done) return;
+    f.hp--; f.hitsTaken++;
+    f.hurt = 0.3; f.invuln = T.invuln;
+    f.combo = 0;
+    this.shake = 11; this.flash = 0.55;
+    this._blood(f.px, this.groundY - 90, 10, 0.6, e.x >= f.px ? -1 : 1);
+    this._addScore(-T.hitPenalty, this.VW * 0.35, this.groundY - 170);
+    if (f.hp <= 0) {
+      f.down = T.downTime; f.knockdowns++;
+      this._addScore(-T.downPenalty, this.VW * 0.35, this.groundY - 210);
+      this.floaters.add(this.VW / 2, this.VH * 0.3, 'KNOCKED DOWN', '#ff5a4a', { size: 44, life: 60 });
+      // Clear some room so getting up isn't an instant second knockdown.
+      f.enemies.forEach(o => {
+        if (this._alive(o) && Math.abs(o.x - f.px) < 200) { o.state = 'stagger'; o.t = 0.5; o.dir = o.x >= f.px ? 1 : -1; }
+      });
+    }
+  }
+
+  _blood(x, y, n, power, dir) {
+    dir = dir || 1;
     for (let i = 0; i < n; i++) {
       this.gore.push({
-        x, y, vx: (40 + Math.random() * 260) * power - 40, vy: -(60 + Math.random() * 300) * power,
+        x, y, vx: dir * ((40 + Math.random() * 260) * power - 40), vy: -(60 + Math.random() * 300) * power,
         r: 2 + Math.random() * 3.5, floor: this.groundY - 4 + Math.random() * 18,
       });
     }
@@ -561,59 +609,99 @@ class JailJunkyardGame {
     if (this.splats.length > 400) this.splats.splice(0, this.splats.length - 400);
   }
 
-  _camX() { return this.fight.px - this.VW * 0.28; }
+  _camX() { return this.fight.px - this.VW * 0.35; }
 
   _updateFight(dt) {
-    const T = JUNKYARD_TUNING, f = this.fight;
+    const T = JUNKYARD_TUNING, f = this.fight, F = T.fight[f.idx];
     if (f.tracer) { f.tracer.t -= dt; if (f.tracer.t <= 0) f.tracer = null; }
     if (f.hitstop > 0) { f.hitstop -= dt; return; }
     f.cool -= dt; f.attackT -= dt;
-    f.flinch = Math.max(0, f.flinch - dt);
-    const alive = (e) => e.state === 'walk' || e.state === 'windup' || e.state === 'stagger';
-    const blocked = f.enemies.some(e => alive(e) && e.x - f.px > -20 && e.x - f.px < T.brawlRange);
-    if (f.done) {
-      f.done += dt;
-      if (f.done > 0.9) this._next();
-    } else if (!blocked) {
-      f.px += T.walkSpeed * (f.flinch > 0 ? 0.3 : 1) * dt;
-      f.walk += dt * 9;
+    f.faceT -= dt; if (f.faceT <= 0) f.face = 1;
+    f.invuln -= dt; f.hurt = Math.max(0, f.hurt - dt);
+    f.comboT -= dt; if (f.comboT <= 0) f.combo = 0;
+
+    if (f.down > 0) {
+      f.down -= dt;
+      if (f.down <= 0) { f.hp = T.playerHP; f.invuln = 1.2; }
+    } else if (f.done) {
+      f.done += dt; f.px += T.runSpeed * 0.5 * dt; f.run += dt * 8;
+      if (f.done > 1.0) { this._next(); return; }
+    } else {
+      f.px += T.runSpeed * (f.hurt > 0 ? 0.45 : 1) * dt;
+      f.run += dt * 14;
+      if (Math.floor(f.run / Math.PI) !== Math.floor((f.run - dt * 14) / Math.PI)) {
+        this.particles.burst(this.VW * 0.35 * this.u, this.groundY * this.u, '#8a7560', 3, { speed: 1.4, life: 14 });
+      }
+      // Chasers come in from behind.
+      f.chaseT -= dt;
+      if (f.chaseT <= 0) {
+        f.chaseT = F.chaseEvery * (0.7 + 0.6 * Math.random());
+        const n = Math.random() < F.chasePair ? 2 : 1;
+        for (let i = 0; i < n; i++) {
+          f.enemies.push(this._makeEnemy(f.spawnId++, f.px - this.VW * 0.35 - 60 - i * 50, true));
+          f.total++;
+        }
+      }
     }
-    const onScreen = this.VW * 0.72 + 60;
+
+    const wake = this.VW * 0.65 + 80;
     f.enemies.forEach(e => {
       const dx = e.x - f.px;
-      if (e.state === 'walk') {
-        if (dx < onScreen) { e.x -= e.speed * dt; e.walk += dt * 7; }
-        if (dx < T.enemyReach) { e.state = 'windup'; e.t = T.windup; }
+      e.cool -= dt;
+      if (e.state === 'approach') {
+        if (dx > wake) return;
+        const behind = dx < 0;
+        const sp = behind ? T.chaseSpeed * (0.92 + 0.16 * jyHash(e.speed)) : e.speed;
+        e.x += (behind ? 1 : -1) * sp * dt;
+        e.walk += dt * (behind ? 15 : 9);
+        if (Math.abs(dx) < T.enemyReach && e.cool <= 0 && f.down <= 0 && !f.done) { e.state = 'windup'; e.t = T.windup; }
+        if (dx < -this.VW * 0.35 - 260) e.state = 'gone';
       } else if (e.state === 'windup') {
         e.t -= dt;
+        // Lunge after you so running past doesn't dodge everything.
+        e.x += Math.sign(f.px - e.x) * T.lunge * dt;
         if (e.t <= 0) {
-          e.state = 'passed';
-          f.shoves++; f.flinch = 0.45;
-          this.shake = 9; this.flash = 0.4;
-          this._addScore(-T.shovePenalty, this.VW * 0.28, this.groundY - 160);
+          if (Math.abs(e.x - f.px) < T.enemyReach + 25) this._playerHit(e);
+          e.state = 'recover'; e.t = T.recover; e.cool = T.recover + 0.3;
         }
+      } else if (e.state === 'recover') {
+        e.t -= dt;
+        if (e.t <= 0) e.state = 'approach';
       } else if (e.state === 'stagger') {
-        e.t -= dt; e.x += 130 * dt;
-        if (e.t <= 0) e.state = 'walk';
+        e.t -= dt; e.x += e.dir * 170 * dt;
+        if (e.t <= 0) e.state = 'approach';
       } else if (e.state === 'dead') {
         e.t += dt;
-        e.rot = Math.min(Math.PI / 2, e.t / 0.3 * Math.PI / 2);
-        if (e.t < 0.3) e.x += 90 * dt;
+        e.rot = e.dir * Math.min(Math.PI / 2, e.t / 0.3 * Math.PI / 2);
+        if (e.t < 0.3) e.x += e.dir * 110 * dt;
         e.pool = Math.min(1, Math.max(0, (e.t - 0.25) / 1.4));
-      } else if (e.state === 'passed') {
-        e.x -= 170 * dt; e.walk += dt * 9;
-        e.alpha = Math.max(0, e.alpha - dt * 1.2);
       }
     });
-    if (!f.done && f.px >= f.length) { f.done = 0.001; this.fightStats[f.idx] = { kos: f.kos, total: f.total, shoves: f.shoves }; }
+    f.enemies = f.enemies.filter(e => e.state !== 'gone' && !(e.state === 'dead' && e.x - f.px < -this.VW));
+    if (!f.done && f.px >= f.length) {
+      f.done = 0.001;
+      this.fightStats[f.idx] = { kos: f.kos, total: f.total, hits: f.hitsTaken, knockdowns: f.knockdowns };
+    }
   }
 
   _drawFight() {
     const ctx = this.ctx, f = this.fight, g = this.groundY, camX = this._camX();
-    const w = JUNKYARD_WEAPONS[this.weapon];
+    const T = JUNKYARD_TUNING, w = JUNKYARD_WEAPONS[this.weapon];
+    const pX = this.VW * 0.35;
+    // Speed streaks.
+    if (!f.done && f.down <= 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let k = 0; k < 10; k++) {
+        const sx = ((k * 173 - f.px * 1.5) % (this.VW + 200) + this.VW + 200) % (this.VW + 200) - 100;
+        const sy = g - 40 - jyHash(k) * 260;
+        ctx.moveTo(sx, sy); ctx.lineTo(sx + 60 + jyHash(k + 3) * 60, sy);
+      }
+      ctx.stroke();
+    }
     // Destination marker.
     const signX = f.length + 40 - camX;
-    const last = f.idx === JUNKYARD_TUNING.fight.length - 1;
+    const last = f.idx === T.fight.length - 1;
     if (signX < this.VW + 100) {
       if (last) {
         ctx.fillStyle = '#f2f2f2'; ctx.fillRect(signX - 4, g - 150, 8, 150); ctx.fillRect(signX + 160, g - 150, 8, 150);
@@ -627,62 +715,89 @@ class JailJunkyardGame {
         this._label('STATION 2', signX, g - 145, 28, '#1a1410');
       }
     }
-    // Blood on the ground under everything standing.
     ctx.fillStyle = '#8a0f12';
     this.splats.forEach(s => { const sx = s.x - camX; if (sx > -20 && sx < this.VW + 20) { ctx.beginPath(); ctx.ellipse(sx, s.y, s.r * 1.6, s.r * 0.6, 0, 0, Math.PI * 2); ctx.fill(); } });
     f.enemies.forEach(e => {
       if (e.state !== 'dead' || e.pool <= 0) return;
-      const sx = e.x - camX + 60;
+      const sx = e.x - camX + e.dir * 60;
       ctx.fillStyle = '#7a0a0e';
       ctx.beginPath(); ctx.ellipse(sx, g + e.z + 4, 70 * e.pool, 14 * e.pool, 0, 0, Math.PI * 2); ctx.fill();
     });
-    // Bodies and enemies (back to front), player slotted at z=0.
     let playerDrawn = false;
     const drawPlayer = () => {
-      const p = f.attackT > 0 ? 1 - f.attackT / 0.18 : -1;
-      this._person(this.VW * 0.28, g, {
-        ...JUNKYARD_LOOKS.player,
-        stride: (f.flinch > 0 || f.done) ? 0 : Math.sin(f.walk) * 13,
-        rot: f.flinch > 0 ? -0.25 * Math.sin(f.flinch / 0.45 * Math.PI) : 0,
-        weapon: this.weapon, attackP: p,
-        ...this._weaponArm(p),
-      });
       playerDrawn = true;
+      if (f.invuln > 0 && f.down <= 0 && Math.floor(f.invuln * 16) % 2) return;
+      let rot = 0, y = g;
+      if (f.down > 0) {
+        const elapsed = T.downTime - f.down;
+        const q = Math.min(1, elapsed / 0.2) * Math.min(1, f.down / 0.25);
+        rot = -Math.PI / 2 * q;
+      } else if (f.hurt > 0) rot = -0.3 * Math.sin(f.hurt / 0.3 * Math.PI);
+      else if (!f.done) rot = 0.1;
+      const p = f.attackT > 0 ? 1 - f.attackT / 0.16 : -1;
+      const arm = this._weaponArm(p);
+      if (p < 0 && f.down <= 0) arm.armB = 0.9 + Math.sin(f.run) * 1.1;
+      this._person(pX, y, {
+        ...JUNKYARD_LOOKS.player,
+        face: f.face,
+        stride: (f.down > 0) ? 0 : Math.sin(f.run) * (f.done ? 12 : 19),
+        rot: rot * f.face, weapon: this.weapon, ...arm,
+      });
     };
     f.enemies.forEach(e => {
       if (!playerDrawn && e.z > 0) drawPlayer();
       const sx = e.x - camX;
-      if (sx < -160 || sx > this.VW + 80 || e.alpha <= 0) return;
-      const stride = e.state === 'walk' || e.state === 'passed' ? Math.sin(e.walk) * 12 : 0;
-      let armF = 1.2 + Math.sin(e.walk) * 0.4, armB = 1.9 - Math.sin(e.walk) * 0.4;
-      if (e.state === 'windup') { armF = -1.3 + Math.sin(e.t * 30) * 0.15; armB = -1.0; }
+      if (sx < -160 || sx > this.VW + 80) return;
+      const running = e.state === 'approach';
+      const stride = running ? Math.sin(e.walk) * (e.x < f.px ? 18 : 12) : 0;
+      let armF = 1.2 + Math.sin(e.walk) * 0.5, armB = 1.9 - Math.sin(e.walk) * 0.5;
+      if (e.state === 'windup') { const q = 1 - e.t / T.windup; armF = jyLerp(-0.6, -2.4, q); armB = -0.4; }
+      if (e.state === 'recover') { armF = 0.1; armB = 1.4; }
       if (e.state === 'stagger') { armF = -0.6; armB = -0.9; }
       if (e.state === 'dead') { armF = -1.6; armB = -2.2; }
+      const face = e.state === 'dead' ? -e.dir : (e.x > f.px ? -1 : 1);
       this._person(sx, g + e.z, {
         ...JUNKYARD_LOOKS.inmate, skin: e.skin, hair: e.bald ? null : JUNKYARD_LOOKS.inmate.hair,
-        face: e.state === 'passed' ? -1 : -1, stride, armF, armB, rot: e.rot, alpha: e.alpha,
-        dead: e.state === 'dead',
+        face, stride, armF, armB, rot: e.rot, dead: e.state === 'dead', scale: e.brute ? 1.3 : 1,
       });
+      if (e.state === 'windup') {
+        const pulse = 1 + 0.25 * Math.sin(this.phaseT * 30);
+        this.ctx.save();
+        this.ctx.shadowColor = '#ff2a2a'; this.ctx.shadowBlur = 12;
+        this._label('!', sx, g + e.z - (e.brute ? 190 : 150), 40 * pulse, '#ff3a3a');
+        this.ctx.restore();
+      }
     });
     if (!playerDrawn) drawPlayer();
-    // Flying blood.
     ctx.fillStyle = '#c4141a';
     this.gore.forEach(p => { ctx.beginPath(); ctx.arc(p.x - camX, p.y, p.r, 0, Math.PI * 2); ctx.fill(); });
-    // Gun tracer.
     if (f.tracer) {
-      ctx.strokeStyle = `rgba(255,230,150,${f.tracer.t / 0.08})`; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(this.VW * 0.28 + 62, g - 84); ctx.lineTo(f.tracer.x - camX, f.tracer.y); ctx.stroke();
+      ctx.strokeStyle = `rgba(255,230,150,${f.tracer.t / 0.07})`; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(pX + f.face * 62, g - 84); ctx.lineTo(f.tracer.x - camX, f.tracer.y); ctx.stroke();
     }
-    // Sword arc.
     if (this.weapon === 'sword' && f.attackT > 0) {
-      const p = 1 - f.attackT / 0.18;
+      const p = 1 - f.attackT / 0.16;
+      ctx.save();
+      ctx.translate(pX, g - 86); ctx.scale(f.face, 1);
       ctx.strokeStyle = `rgba(230,240,255,${0.6 * (1 - p)})`; ctx.lineWidth = 16;
-      ctx.beginPath(); ctx.arc(this.VW * 0.28, g - 86, 112, -2.0, jyLerp(-2.0, 0.9, Math.min(1, p * 1.4))); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, 112, -2.0, jyLerp(-2.0, 0.9, Math.min(1, p * 1.4))); ctx.stroke();
+      ctx.restore();
+    }
+    // Health.
+    for (let i = 0; i < T.playerHP; i++) {
+      const hx = this.VW - 24 - i * 30, hy = 34, on = i < (f.down > 0 ? 0 : f.hp);
+      ctx.fillStyle = on ? '#ff3a4a' : 'rgba(255,255,255,0.18)';
+      ctx.beginPath();
+      ctx.moveTo(hx, hy + 9);
+      ctx.bezierCurveTo(hx - 16, hy - 2, hx - 8, hy - 14, hx, hy - 5);
+      ctx.bezierCurveTo(hx + 8, hy - 14, hx + 16, hy - 2, hx, hy + 9);
+      ctx.fill();
     }
     if (this.phaseT < 2.6) {
       ctx.globalAlpha = Math.min(1, (2.6 - this.phaseT) / 0.5);
       this._hudCenter('FIGHT TO THE ' + (last ? 'FINISH' : 'NEXT STATION'), this.VH * 0.2, 34, '#f2f2f2');
       this._hudCenter(`${w.name} — ${this.touchUI ? 'TAP' : 'TAP / SPACE'} TO ATTACK`, this.VH * 0.2 + 40, 24, '#f4c542');
+      this._hudCenter('THEY HIT BACK WHEN YOU SEE !', this.VH * 0.2 + 74, 22, '#ff8a7a');
       ctx.globalAlpha = 1;
     }
     this._hudCenter(`KO ${f.kos}/${f.total}`, g + 70, 30, '#f2f2f2');
@@ -707,7 +822,7 @@ class JailJunkyardGame {
     ctx.save();
     ctx.translate(x, y);
     if (o.rot) ctx.rotate(o.rot);
-    ctx.scale(o.face || 1, 1);
+    ctx.scale((o.face || 1) * (o.scale || 1), o.scale || 1);
     if (o.alpha != null) ctx.globalAlpha = o.alpha;
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     const stride = o.stride || 0, tuck = o.tuck || 0;
@@ -886,8 +1001,9 @@ class JailJunkyardGame {
       ? (this.touchUI ? 'TAP TO JUMP THE ROPES' : 'TAP / SPACE TO JUMP THE ROPES')
       : (this.touchUI ? 'SWIPE UP WHEN THE MARKER IS IN THE GREEN' : 'TAP / SPACE WHEN THE MARKER IS IN THE GREEN');
     this._hudCenter(how, y + 105, 22, '#f4c542');
-    this._hudCenter('YOUR SCORE PICKS YOUR WEAPON', y + 150, 20, '#c8c0b0');
+    this._hudCenter(`WEAPON POINTS ${this.weaponPts} — THEY ADD UP`, y + 150, 20, '#c8c0b0');
     this._ladder(y + 210, null);
+    this._hudCenter('A PERFECT STATION = GUN', y + 262, 18, '#c8c0b0');
     if (this.phaseT > 0.6) this._hudCenter('TAP TO START', y + 300, 28, '#f2f2f2');
   }
 
@@ -896,8 +1012,8 @@ class JailJunkyardGame {
     this._overlay(0.72);
     const r = this.results[this.station];
     const y = this.VH * 0.2;
-    this._hudCenter(r.label, y, 30, '#c8c0b0');
-    this._hudCenter('YOU GET', y + 44, 26, '#c8c0b0');
+    this._hudCenter(`${r.label}  +${r.earned}`, y, 30, '#c8c0b0');
+    this._hudCenter(`WEAPON POINTS ${this.weaponPts}`, y + 44, 26, '#f4c542');
     const p = Math.min(1, this.phaseT / 0.5);
     const glow = ctx.createRadialGradient(this.VW / 2, y + 135, 10, this.VW / 2, y + 135, 150);
     glow.addColorStop(0, 'rgba(244,197,66,0.45)'); glow.addColorStop(1, 'rgba(244,197,66,0)');
@@ -911,6 +1027,7 @@ class JailJunkyardGame {
     ctx.restore();
     this._hudCenter(JUNKYARD_WEAPONS[this.weapon].name, y + 230, 52, '#f4c542');
     this._ladder(y + 310, this.weapon);
+    this._hudCenter('A PERFECT STATION = GUN', y + 360, 18, '#c8c0b0');
     if (this.phaseT > 0.6) this._hudCenter('TAP TO FIGHT', y + 400, 28, '#f2f2f2');
   }
 
