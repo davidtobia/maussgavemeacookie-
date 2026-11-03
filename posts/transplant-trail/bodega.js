@@ -1087,8 +1087,9 @@ class BodegaGame {
     const r = card.reward;
     cardEl.innerHTML = `
       <div class="report-card-head">Report Card</div>
-      <div class="report-card-grade" style="color:${GRADE_COLORS[card.grade]}">${card.grade}</div>
+      <div class="report-card-grade" style="color:${gradeColor(card.grade)}">${card.grade}</div>
       <div class="report-card-score">Score: ${earned}</div>
+      ${card.next ? `<div class="report-card-next">Next: ${card.next.grade} at ${card.next.score}</div>` : ''}
       ${r ? `<div class="report-card-reward">${card.isNew ? 'Unlocked' : 'Earned'}: <b>${r.name}</b></div>
              <div class="report-card-note">You're riding it now. Switch rides any time under "Change transportation."</div>` : ''}`;
     cardEl.classList.remove('hidden');

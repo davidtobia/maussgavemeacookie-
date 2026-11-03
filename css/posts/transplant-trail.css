@@ -917,6 +917,7 @@ html.game-zoom-lock button {
 .report-card-head { font-size: 22px; letter-spacing: 3px; text-transform: uppercase; border-bottom: 2px solid #2a2420; padding-bottom: 4px; }
 .report-card-grade { font-size: 96px; line-height: 1; font-weight: bold; margin: 8px 0 2px; }
 .report-card-score { font-size: 22px; }
+.report-card-next { font-size: 17px; opacity: 0.7; }
 .report-card-reward { font-size: 24px; margin-top: 10px; }
 .report-card-note { font-size: 17px; opacity: 0.75; margin-top: 4px; }
 

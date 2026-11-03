@@ -8,21 +8,44 @@
  * its results screen.
  */
 
+// Full report-card scale, best first.
+const GRADE_ORDER = ['A+', 'A', 'A-', 'B+', 'B', 'B-', 'C+', 'C', 'C-', 'D+', 'D', 'D-', 'F'];
+
 const MINIGAME_GRADES = {
   bodega: {
-    // minimum score for each grade; anything lower is an F
-    cutoffs: { 'A+': 3500, 'A': 2400, 'B': 1300, 'C': 800, 'D': 400 },
+    // Minimum score for each grade; below D- is an F. Tuned against
+    // simulated players: a good run without the mushroom is a C, catching
+    // the mushroom usually lands a B, and an A takes a near-perfect run
+    // on top of the mushroom.
+    cutoffs: {
+      'A+': 4600, 'A': 4100, 'A-': 3700,
+      'B+': 3300, 'B': 2900, 'B-': 2500,
+      'C+': 2100, 'C': 1700, 'C-': 1300,
+      'D+': 1000, 'D': 700,  'D-': 400,
+    },
     // what each grade earns (a vehicle id), if anything
-    rewards: { 'A+': 'showtime-express', 'A': 'showtime-express', 'B': 'pogo-stick', 'C': 'pogo-stick' },
+    rewards: {
+      'A+': 'showtime-express', 'A': 'showtime-express', 'A-': 'showtime-express',
+      'B+': 'pogo-stick', 'B': 'pogo-stick', 'B-': 'pogo-stick',
+    },
   },
 };
 
-const GRADE_COLORS = { 'A+': '#1fbf55', 'A': '#1fbf55', 'B': '#2f7fd6', 'C': '#d6a21f', 'D': '#e07a1f', 'F': '#e02424' };
+const GRADE_COLORS = { A: '#1fbf55', B: '#2f7fd6', C: '#d6a21f', D: '#e07a1f', F: '#e02424' };
+function gradeColor(grade) { return GRADE_COLORS[grade[0]]; }
 
 function gradeFor(game, score) {
   const cut = MINIGAME_GRADES[game].cutoffs;
-  for (const g of ['A+', 'A', 'B', 'C', 'D']) if (score >= cut[g]) return g;
+  for (const g of GRADE_ORDER) if (g !== 'F' && score >= cut[g]) return g;
   return 'F';
+}
+
+// The next grade up and the score it needs (null if you got an A+).
+function nextGrade(game, grade) {
+  const i = GRADE_ORDER.indexOf(grade);
+  if (i <= 0) return null;
+  const g = GRADE_ORDER[i - 1];
+  return { grade: g, score: MINIGAME_GRADES[game].cutoffs[g] };
 }
 
 // Works out the grade, unlocks the reward if there is one, and returns
@@ -35,5 +58,5 @@ function reportCard(gameState, game, score) {
   if (!gameState.unlockedVehicles) gameState.unlockedVehicles = [];
   const isNew = !!reward && !gameState.unlockedVehicles.includes(reward.id);
   if (isNew) gameState.unlockedVehicles.push(reward.id);
-  return { grade, reward, isNew };
+  return { grade, reward, isNew, next: nextGrade(game, grade) };
 }
