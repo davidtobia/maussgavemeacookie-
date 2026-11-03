@@ -342,6 +342,7 @@ class CannonGame {
       this._tapHandler = null;
       cancelAnimationFrame(this._aimAF);
       document.getElementById('cannon-aim').classList.add('hidden');
+      TTAudio.sfx('explosion'); TTAudio.sfx('whoosh');
       this.launchFlight(this.aim.power, this.aim.angle);
     }
   }
@@ -571,6 +572,7 @@ class CannonGame {
     if (f.flapCooldown > 0) return;
     f.vy += f.flapForce;
     if (f.vy > 20) f.vy = 20;
+    TTAudio.sfx('jump');
     f.flapCooldown = f.flapCooldownMax;
     f.flapFlash = 10;
     // Jetpack isn't actually infinite — lean on it too hard and it cooks off.
@@ -588,6 +590,7 @@ class CannonGame {
     const f = this.flight;
     if (!f || f.exploded) return;
     f.exploded = true;
+    TTAudio.sfx('explosion');
     f.damage = 100;
     f.splashTimer = 40; // reuse the same lingering-visual beat as a splash
     f.vx = 0; f.vy = 0;
@@ -598,6 +601,7 @@ class CannonGame {
   useRocket() {
     const f = this.flight; if (!f || f.rocketLeft <= 0) return;
     f.rocketLeft--;
+    TTAudio.sfx('engine-rev'); TTAudio.sfx('whoosh');
     f.vx += f.rocketBoost;
     f.vy += f.rocketBoost * 0.45;
     document.getElementById('cannon-flight-hud').classList.add('hidden');
@@ -653,6 +657,7 @@ class CannonGame {
   triggerSplash() {
     const f = this.flight;
     f.splashed = true;
+    TTAudio.sfx('splash');
     f.splashTimer = 40;
     f.splashX = f.distance;
     f.worldY = 0; f.vx = 0; f.vy = 0;
@@ -1166,7 +1171,12 @@ class CannonGame {
       // uses), and a burst of debris right where it hit -- before this,
       // getting clipped by a helicopter looked and felt identical to
       // grabbing a coin except for one number changing in the corner.
+      const cue = { coin: 'coin', ring: 'chime', light_cloud: 'boing', updraft: 'boing', pretzel: 'select', pigeon_flock: 'whoosh',
+        rainbow_cloud: 'powerup', dark_cloud: 'oof', hydrant: 'splash', subway_grate: 'whoosh', hotdog_cart: 'boing',
+        dumpster: 'crunch', rat_dumpster: 'squish', manhole: 'land', moon: 'fanfare' }[e.type];
+      if (cue) TTAudio.sfx(cue);
       if (f.damage > dmgBefore) {
+        TTAudio.sfx('punch');
         f.hitFlash = 14;
         const kick = Math.min(16, (f.damage - dmgBefore) * 0.7);
         f.shakeX = (Math.random() - 0.5) * kick * 2;

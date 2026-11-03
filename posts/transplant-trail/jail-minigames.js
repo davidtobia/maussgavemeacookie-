@@ -195,12 +195,9 @@ class JailRhythmGame {
   _startAudio() {
     this.audioCtx = null;
     this.perfOrigin = performance.now();
-    try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (Ctx) this.audioCtx = new Ctx();
-    } catch (e) { this.audioCtx = null; }
+    // The shared context (sound.js), so the mute button covers the beat.
+    this.audioCtx = TTAudio._ensure() ? TTAudio.ctx : null;
     if (this.audioCtx) {
-      if (this.audioCtx.state === 'suspended') this.audioCtx.resume().catch(() => {});
       this.audioStartCtxTime = this.audioCtx.currentTime + 0.05;
       this._beatIdx = 0;
       this._schedulerTimer = setInterval(() => this._scheduleAudio(), 25);
@@ -233,7 +230,7 @@ class JailRhythmGame {
     osc.frequency.exponentialRampToValueAtTime(45, when + 0.09);
     gain.gain.setValueAtTime(0.9, when);
     gain.gain.exponentialRampToValueAtTime(0.001, when + 0.16);
-    osc.connect(gain).connect(ctx.destination);
+    osc.connect(gain).connect(TTAudio.raw);
     osc.start(when); osc.stop(when + 0.18);
   }
 
@@ -246,7 +243,7 @@ class JailRhythmGame {
     const src = ctx.createBufferSource(); src.buffer = buf;
     const filt = ctx.createBiquadFilter(); filt.type = 'highpass'; filt.frequency.value = 6000;
     const gain = ctx.createGain(); gain.gain.setValueAtTime(0.22, when);
-    src.connect(filt).connect(gain).connect(ctx.destination);
+    src.connect(filt).connect(gain).connect(TTAudio.raw);
     src.start(when);
   }
 
@@ -258,7 +255,7 @@ class JailRhythmGame {
     gain.gain.setValueAtTime(0.001, when);
     gain.gain.linearRampToValueAtTime(0.28, when + 0.03);
     gain.gain.exponentialRampToValueAtTime(0.001, when + 0.5);
-    osc.connect(gain).connect(ctx.destination);
+    osc.connect(gain).connect(TTAudio.raw);
     osc.start(when); osc.stop(when + 0.55);
   }
 
@@ -575,6 +572,5 @@ class JailRhythmGame {
     this.canvas.removeEventListener('touchstart', this._canvasTouchH);
     this.canvas.removeEventListener('touchend', this._canvasTouchEndH);
     document.getElementById('jail-rhythm-hud').classList.add('hidden');
-    if (this.audioCtx) { try { this.audioCtx.close(); } catch (e) { /* ignore */ } }
   }
 }

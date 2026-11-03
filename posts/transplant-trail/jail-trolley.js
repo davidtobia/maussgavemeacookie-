@@ -172,8 +172,11 @@ class JailTrolleyGame {
     if (!dir) return;
     if (this.phase === 'run') {
       const f = this._nextFork();
-      if (f && f.x0 - this.px < TROLLEY_TUNING.decideDist * 1.6) { f.choice = dir; f.touched = true; }
-    } else if (this.phase === 'escape') this.escSide = dir;
+      if (f && f.x0 - this.px < TROLLEY_TUNING.decideDist * 1.6) {
+        if (f.choice !== dir) TTAudio.sfx('lever');
+        f.choice = dir; f.touched = true;
+      }
+    } else if (this.phase === 'escape') { if (this.escSide !== dir) TTAudio.sfx('jump'); this.escSide = dir; }
   }
 
   _setPhase(p) { this.phase = p; this.phaseT = 0; }
@@ -222,6 +225,7 @@ class JailTrolleyGame {
     // Slow-mo while a fork's choice is up.
     const nf = this.phase === 'run' ? this._nextFork() : null;
     this.deciding = nf && nf.x0 - this.px < T.decideDist && nf.x0 - this.px > 0 ? nf : null;
+    if (this.deciding && !this.deciding.chimed) { this.deciding.chimed = true; TTAudio.sfx('shimmer'); }
     const dt = rawDt * (this.deciding ? T.slowmo : 1);
     this.phaseT += rawDt; this.time += dt;
     this.shake = Math.max(0, this.shake - rawDt * 30);
@@ -240,6 +244,11 @@ class JailTrolleyGame {
     if (this.phase === 'twist') speed = this.phaseT < 0.5 ? T.runSpeed * (1 - this.phaseT / 0.5) : (this.phaseT > T.twistTime - 0.6 ? T.runSpeed * 0.6 : 0);
     this.px += speed * dt;
 
+    if (this.phase === 'run') {
+      if (!this.rumble) this.rumble = TTAudio.loop('rumble');
+      const gap = this.px - this.tx;
+      this.rumble.set(this.tv / T.runSpeed, jailClamp(1.1 - gap / 500, 0.15, 1));
+    }
     if (this.phase === 'run') this._updateRun(dt);
     else if (this.phase === 'twist') this._updateTwist(dt);
     else if (this.phase === 'escape') this._updateEscape(dt);
@@ -268,7 +277,7 @@ class JailTrolleyGame {
       if (g.kind !== 'coins' || !f.locked || g.lane !== f.choice) return;
       g.coins.forEach(c => {
         const cx = g.x + c.dx * T.victimScale;
-        if (!c.got && this.px >= cx) { c.got = true; this.donated += 1000; this.floaters.add(this.sx(cx), this.sy(this._pathY(cx)) - 50, '+$1,000 TO HER', '#f4c542', { size: 16, life: 30 }); }
+        if (!c.got && this.px >= cx) { c.got = true; this.donated += 1000; TTAudio.sfx('coin'); this.floaters.add(this.sx(cx), this.sy(this._pathY(cx)) - 50, '+$1,000 TO HER', '#f4c542', { size: 16, life: 30 }); }
       });
     }));
 
@@ -293,6 +302,8 @@ class JailTrolleyGame {
     if (this.px >= this.courseEnd - 260) {
       this.twist = { cx: this.px + this._carD() + 170 };
       this._setPhase('twist');
+      TTAudio.music(null);
+      if (this.rumble) this.rumble.set(0.5, 0.4);
     }
   }
 
@@ -307,6 +318,8 @@ class JailTrolleyGame {
     if (g.kind === 'people') {
       this.killed.people += g.n;
       this.tStall = 0.25 + 0.08 * g.n;
+      TTAudio.sfx('splat');
+      for (let i = 0; i < Math.min(3, g.n); i++) setTimeout(() => TTAudio.sfx('scream'), i * 90);
       g.people.forEach(p => this._ragdoll(wx + p.dx * T.victimScale, wy - 20, p.skin, p.shirt));
       this.blood = Math.min(1, this.blood + 0.08 * g.n);
       this.utils += worst - g.cost;
@@ -315,12 +328,14 @@ class JailTrolleyGame {
     } else if (g.kind === 'shrimp') {
       this.killed.shrimp += 1e6;
       this.tStall = 0.6;
+      TTAudio.sfx('squish'); TTAudio.sfx('splat');
       for (let i = 0; i < 70; i++) this.debris.push(this._piece(wx + Math.random() * g.w, wy - 10, 'shrimp', '#ff8a9a', 1.1));
       this.utils += worst - g.cost;
       pop('-1,000,000 SHRIMP', '#ff8a9a');
       this.shake = 8;
     } else if (g.kind === 'future') {
       this.tSurge = 0.7;
+      TTAudio.sfx('whoosh'); TTAudio.sfx('zero');
       this.debris.push(this._piece(wx + 30, wy - 80, 'sign', '#c8a060', 1.2));
       this.utils += worst - g.cost;
       pop('-1.0e58 UTILS', '#ff4a4a', 36);
@@ -328,6 +343,7 @@ class JailTrolleyGame {
     } else if (g.kind === 'robot') {
       this.killed.robots++;
       this.tStall = 0.45;
+      TTAudio.sfx('explosion');
       for (let i = 0; i < 34; i++) this.debris.push(this._piece(wx + 30, wy - 40, 'spark', Math.random() < 0.5 ? '#f4c542' : '#9aa4b0', 1.2));
       this.utils += worst - g.cost;
       pop('AI RISK AVERTED', '#7ec89a');
@@ -335,6 +351,7 @@ class JailTrolleyGame {
     } else if (g.kind === 'lobster') {
       this.killed.lobsters += 6;
       this.tStall = 0.4;
+      TTAudio.sfx('splash'); TTAudio.sfx('fanfare');
       for (let i = 0; i < 6; i++) this.debris.push(this._piece(wx + 40, wy - 60, 'lobster', '#e0402a', 1.2));
       for (let i = 0; i < 24; i++) this.debris.push(this._piece(wx + 40, wy - 40, 'drop', '#bfe6ff', 1));
       this.utils += worst - g.cost;
@@ -342,15 +359,19 @@ class JailTrolleyGame {
     } else if (g.kind === 'coinflip') {
       this.tStall = 0.3;
       const win = Math.random() < 0.51;
+      TTAudio.sfx('coinflip');
+      setTimeout(() => TTAudio.sfx(win ? 'coin' : 'zero'), 420);
       this.debris.push(this._piece(wx + 40, wy - 50, 'coin', '#f4c542', 1.3));
       if (win) { this.utils = this.utils === 0 ? 1000 : this.utils * 2; pop('DOUBLED', '#f4c542', 42); }
       else { this.utils = 0; pop('ZERO', '#ff4a4a', 52); this.flash = 0.8; this.flashColor = '0,0,0'; }
     } else if (g.kind === 'mugger') {
       this.tSurge = 1.0;
       this.utils = this.utils / 2;
+      TTAudio.sfx('fail');
       pop('MUGGED: -50%', '#ff4a4a', 34);
     } else {
       this.tSurge = 0.7;
+      TTAudio.sfx('whoosh');
       pop('TROLLEY SPEEDS UP', '#ffb04a', 24);
     }
     if (this.tSurge > 0) this.tStall = 0;
@@ -360,6 +381,7 @@ class JailTrolleyGame {
     const T = TROLLEY_TUNING;
     this.trolleyHits++;
     this.stun = T.stunTime;
+    TTAudio.sfx('splat'); TTAudio.sfx('oof');
     this.tStop = T.trolleyDerail;
     this.carPenalty += T.runOverPenalty;
     this.shake = 14; this.flash = 0.9; this.flashColor = '224,40,40';
@@ -370,10 +392,13 @@ class JailTrolleyGame {
 
   _updateTwist(dt) {
     const T = TROLLEY_TUNING, t = this.phaseT;
+    if (t > 0.6 && !this.twist.morphed) { this.twist.morphed = true; TTAudio.sfx('morph'); }
     if (this.trolleyAlive) {
       this.tx = Math.min(this.tx + T.runSpeed * 0.7 * dt, this.px - 120);
       if (t > 2.6) {
         this.trolleyAlive = false;
+        TTAudio.sfx('crunch'); TTAudio.sfx('explosion');
+        if (this.rumble) { this.rumble.stop(); this.rumble = null; }
         this.shake = 22; this.flash = 1; this.flashColor = '255,255,255';
         const y = this._pathY(this.tx);
         for (let i = 0; i < 44; i++) this.debris.push(this._piece(this.tx - 80, y - 50, 'metal', Math.random() < 0.5 ? '#c8402a' : '#f4c542', 1.6));
@@ -385,6 +410,7 @@ class JailTrolleyGame {
       this.escape = { t: 0, next: T.stompFirst };
       this.escY = this._pathY(this.px);
       this._setPhase('escape');
+      TTAudio.music('trolleyDark');
     }
   }
 
@@ -403,10 +429,12 @@ class JailTrolleyGame {
       if (!s.slammed && s.t >= T.stompWarn) {
         s.slammed = true;
         this.shake = 16;
+        TTAudio.sfx('stomp');
         const pSide = this.escY < 0 ? -1 : 1;
         if (Math.abs(this.px - s.x) < 110 && pSide === s.side && Math.abs(this.escY) > T.B * 0.5 && this.squash <= 0) {
           this.squashes++;
           this.squash = 0.8;
+          TTAudio.sfx('squish');
           this.flash = 0.7; this.flashColor = '120,160,60';
           this.floaters.add(this.sx(this.px), this.sy(this.escY) - 90, 'SQUASHED', '#a8d84a', { size: 42, life: 60 });
         }
@@ -414,7 +442,7 @@ class JailTrolleyGame {
       }
     });
     this.stomps = this.stomps.filter(s => s.t < T.stompWarn + 0.6);
-    if (e.t >= T.escapeTime) this._setPhase('results');
+    if (e.t >= T.escapeTime) { this._setPhase('results'); TTAudio.music(null); TTAudio.sfx('fanfare'); }
   }
 
   _updateDebris(dt) {
@@ -1256,6 +1284,7 @@ class JailTrolleyGame {
 
   destroy() {
     this.finished = true;
+    if (this.rumble) { this.rumble.stop(); this.rumble = null; }
     if (this._af) cancelAnimationFrame(this._af);
     this._af = null;
     this.canvas.removeEventListener('touchstart', this._touchH);

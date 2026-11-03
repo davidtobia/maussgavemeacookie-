@@ -860,6 +860,7 @@ class JailGame {
     this.phase = 'minigame';
     const char = JAIL_CHARACTERS.find(c => c.id === charId);
     const onDone = (result) => this.onMinigameResult(charId, result);
+    TTAudio.music({ rhythm: null, junkyard: 'junkyard', trolley: 'trolley' }[char.minigame] || null);
     if (char.minigame === 'rhythm') this.activeMinigame = new JailRhythmGame(this, charId, onDone);
     else if (char.minigame === 'junkyard') this.activeMinigame = new JailJunkyardGame(this, charId, onDone);
     else if (char.minigame === 'trolley') this.activeMinigame = new JailTrolleyGame(this, charId, onDone);
@@ -896,6 +897,7 @@ class JailGame {
   }
 
   showResultPanel(charId, result, prevBest) {
+    TTAudio.music('jail');
     this.phase = 'result';
     const char = JAIL_CHARACTERS.find(c => c.id === charId);
     const bestNow = Math.max(prevBest, result.friendshipGain);

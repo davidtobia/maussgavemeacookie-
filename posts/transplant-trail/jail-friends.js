@@ -45,6 +45,8 @@ class JailFriendScreen {
     this.canvas.addEventListener('pointerdown', this._ptrH);
     window.addEventListener('keydown', this._keyH);
 
+    TTAudio.music('friend');
+    TTAudio.sfx('fanfare');
     this.last = performance.now();
     this._loop();
   }

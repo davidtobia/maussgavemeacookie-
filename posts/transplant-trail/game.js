@@ -139,6 +139,7 @@ class TransplantTrail {
     if (screen) {
       screen.classList.add('active');
       this.state.currentScreen = screenId;
+      TTAudio.onScreen(screenId);
     }
 
     // The canvas mini-games (cannon, heist, bodega) all have touch-action:

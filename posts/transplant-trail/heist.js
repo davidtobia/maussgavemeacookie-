@@ -331,6 +331,7 @@ class HeistGame {
     const g = this.mech;
     if (!g || g.kind !== 'getaway' || g.airborne) return;
     g.airborne = true;
+    TTAudio.sfx('boing');
     g.jumpVy = -3.4;
     g.jumpHeight = 0;
     g.flips = 0;
@@ -344,6 +345,7 @@ class HeistGame {
     const g = this.mech;
     if (!g || g.kind !== 'getaway' || g.nitro <= 0 || g.nitroActive > 0) return;
     g.nitro--;
+    TTAudio.sfx('engine-rev'); TTAudio.sfx('whoosh');
     g.nitroActive = 90;
     g.heat = Math.max(0, g.heat - HEIST_TUNING.getaway.heat.nitroSub);
   }
@@ -360,6 +362,7 @@ class HeistGame {
     const g = this.mech;
     if (!g || g.kind !== 'getaway' || g.aiming || g.gunAmmo <= 0) return;
     g.gunAmmo--;
+    TTAudio.sfx('gun');
     const px = this.canvas.width * 0.22;
     g.shots.push({ x: px - 44, y: g.laneY, lane: g.lane, kind: 'bullet', vx: -26 });
   }
@@ -372,6 +375,8 @@ class HeistGame {
     const g = this.mech;
     if (!g || g.kind !== 'getaway' || g.jumpedOff) return;
     if (g.sirens < this.jumpOutMin || g.sirens > this.jumpOutMax) return;
+    this._stopGetawaySounds();
+    TTAudio.sfx('whoosh'); setTimeout(() => TTAudio.sfx('splash'), 900);
     g.jumpedOff = true;
     this.jumpedOffBridge = true;
     this.stopLoop();
@@ -1043,6 +1048,7 @@ class HeistGame {
   }
 
   triggerHotspot(char, spot) {
+    TTAudio.sfx('select');
     spot.triggered = true;
     char.pendingHotspot = null;
     const flavor = this.floorFlavor(char.id, spot.zoneId);
@@ -1296,6 +1302,7 @@ class HeistGame {
   }
 
   floorCaught() {
+    TTAudio.sfx('fail');
     this.stopLoop();
     document.getElementById('heist-floor-hud').classList.add('hidden');
     document.getElementById('heist-floor-toast').classList.add('hidden');
@@ -1342,6 +1349,7 @@ class HeistGame {
   }
 
   floorSuccess() {
+    TTAudio.sfx('fanfare');
     this.stopLoop();
     document.getElementById('heist-floor-hud').classList.add('hidden');
     document.getElementById('heist-floor-toast').classList.add('hidden');
@@ -2051,6 +2059,7 @@ class HeistGame {
   }
 
   endMaze() {
+    TTAudio.sfx('chime');
     this.stopLoop();
     this.hideHud();
     document.getElementById('heist-maze-pads').classList.add('hidden');
@@ -2100,6 +2109,9 @@ class HeistGame {
     this.stopLoop();
     this.hideOverlays();
     this.phase = 'getaway';
+    this._stopGetawaySounds();
+    this.engineSnd = TTAudio.loop('engine'); this.engineSnd.set(0.9, 0.8);
+    this.sirenSnd = TTAudio.loop('siren'); this.sirenSnd.set(1, 1);
 
     const driver = getHeistCrew(this.assign.lookout);
     const cfg = HEIST_TUNING.getaway[driver.id];
@@ -2461,6 +2473,7 @@ class HeistGame {
   // another one is already rolling. Force one back into the mix soon.
   applyGetawayPickup(type) {
     const g = this.mech;
+    TTAudio.sfx('powerup');
     if (type === 'nitro') {
       g.nitro = Math.min(3, g.nitro + 1);
       this.setHudHint('Nitro canister. Hit NITRO for a burst.', g.cfg.label);
@@ -2478,6 +2491,7 @@ class HeistGame {
   }
 
   spawnGetawayBurst(x, y) {
+    TTAudio.sfx('explosion');
     for (let i = 0; i < 14; i++) {
       const a = Math.random() * Math.PI * 2, speed = 1.5 + Math.random() * 4;
       this.mech.particles.push({
@@ -2552,9 +2566,16 @@ class HeistGame {
   // ENDING — scripted capture, then the Act 3 stub
   // ------------------------------------------------
 
+  _stopGetawaySounds() {
+    if (this.engineSnd) { this.engineSnd.stop(); this.engineSnd = null; }
+    if (this.sirenSnd) { this.sirenSnd.stop(); this.sirenSnd = null; }
+  }
+
   showEnding() {
     this.phase = 'ending';
     this.stopLoop();
+    this._stopGetawaySounds();
+    TTAudio.sfx('fail');
 
     const driver = getHeistCrew(this.assign.lookout);
     let flavor;
@@ -2624,6 +2645,7 @@ class HeistGame {
   finish() {
     this.phase = 'done';
     this.stopLoop();
+    this._stopGetawaySounds();
     this.hideHud();
     this.hideOverlays();
     if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);

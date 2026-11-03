@@ -226,6 +226,7 @@ class JetskiGame {
   }
 
   destroy() {
+    this._stopSounds();
     if (this._af) cancelAnimationFrame(this._af);
     this._af = null;
     window.removeEventListener('resize', this._resize);
@@ -240,6 +241,11 @@ class JetskiGame {
     window.removeEventListener('pointerup', this._pu);
     window.removeEventListener('keydown', this._kd);
     window.removeEventListener('keyup', this._ku);
+  }
+
+  _stopSounds() {
+    if (this.engineSnd) { this.engineSnd.stop(); this.engineSnd = null; }
+    if (this.chopSnd) { this.chopSnd.stop(); this.chopSnd = null; }
   }
 
   _exit() {
@@ -416,7 +422,11 @@ class JetskiGame {
     this._updateFx(dt);
     if (this.state === 'intro') {
       this.introT += dt;
-      if (this.introT > 3.2) { this.state = 'race'; this.speed = JS.baseSpeed * 0.85; this.flash = 1; }
+      if (this.introT > 3.2) {
+        this.state = 'race'; this.speed = JS.baseSpeed * 0.85; this.flash = 1;
+        TTAudio.sfx('splash'); TTAudio.sfx('whoosh');
+        this.engineSnd = TTAudio.loop('engine');
+      }
       return;
     }
     if (this.state === 'results') return;
@@ -427,6 +437,10 @@ class JetskiGame {
 
     if (this.state === 'race') {
       this.boostT = Math.max(0, this.boostT - dt);
+      this._sndTick = ((this._sndTick || 0) + 1) % 6;
+      if (this.engineSnd && this._sndTick === 0) {
+        this.engineSnd.set(Math.min(1.6, this.speed / JS.maxSpeed) + (this.boostT > 0 ? 0.3 : 0), this.heli ? 0.3 : this.grounded ? 1 : 0.55);
+      }
 
       // --- forward speed: the mountain does the work ---
       // the real slope under you -- the back of a wave speeds you up, the
@@ -439,10 +453,17 @@ class JetskiGame {
       if (this.heli) {
         this.heli.t += dt;
         if (this.heli.phase === 'dance') {
-          if (this.heli.t > JS.danceTime) { this.heli = { phase: 'fly', t: 0 }; this.flash = 0.8; this.shake = 10; }
+          if (this.heli.t > JS.danceTime) {
+            this.heli = { phase: 'fly', t: 0 }; this.flash = 0.8; this.shake = 10;
+            TTAudio.sfx('whoosh');
+            if (!this.chopSnd) { this.chopSnd = TTAudio.loop('chop'); this.chopSnd.set(1, 1); }
+          }
         } else if (this.heli.phase === 'fly') {
           this.speed += (JS.baseSpeed * JS.flySpeed - this.speed) * Math.min(1, dt * 3);
-          if (this.heli.t > JS.flyTime) this.heli = { phase: 'land', t: 0 };
+          if (this.heli.t > JS.flyTime) {
+            this.heli = { phase: 'land', t: 0 };
+            if (this.chopSnd) { this.chopSnd.stop(); this.chopSnd = null; }
+          }
         } else if (this.heli.t > 0.6) {
           this.heli = null;
           this.speed = Math.min(this.speed, JS.maxSpeed * 0.8);
@@ -503,6 +524,7 @@ class JetskiGame {
       const vAhead = (this._surf(pz2 + this.speed * look, this.playerX) - surf) / look;
       if (this.state === 'race' && vAhead < vHere - JS.gravity * look * JS.stick) {
         this.grounded = false;
+        if (this.speed > JS.baseSpeed) TTAudio.sfx('whoosh');
         this.airT = 0;
         this.vy = vNow;
         this.riderY = surf;
@@ -538,6 +560,7 @@ class JetskiGame {
       this.trick = null;
       if (tr.phase === 'anim' && tr.t >= JS.trickTime * 0.7) { // nearly done counts
         this.tricksLanded++;
+        TTAudio.sfx('splash'); TTAudio.sfx(tr.perfect ? 'perfect' : 'chime');
         const pts = Math.round(tr.def.score * (tr.perfect ? 1.5 : 1));
         this._addScore(pts, tr.def.name);
         this.boost = Math.min(1, this.boost + JS.trickBoost);
@@ -551,10 +574,12 @@ class JetskiGame {
       this.wobble = 1;
       this.shake = 14;
       this.popups.push({ text: 'BAIL', life: 1, max: 1, bad: true });
+      TTAudio.sfx('splash'); TTAudio.sfx('fail');
       this._splash(0, 0.4, '#ffffff', 24);
       return;
     }
     if (wasAir > 0.25) {
+      TTAudio.sfx(hard ? 'splash' : 'land');
       this.shake = Math.max(this.shake, hard ? 9 : 4);
       this._splash(0, 0.5, '#ffffff', hard ? 18 : 8);
     }
@@ -563,6 +588,7 @@ class JetskiGame {
   _startTrick(i) {
     const def = JETSKI_TRICKS[i];
     if (!def || this.trick || !this.wheel) return;
+    TTAudio.sfx('select');
     if (def.skill && JETSKI_SKILLS[def.skill]) {
       this.trick = { def, phase: 'skill', t: 0 };
       this.skill = JETSKI_SKILLS[def.skill]({ trick: def });
@@ -651,12 +677,14 @@ class JetskiGame {
       this.boost -= JS.boostCost;
       this.boostT = JS.boostTime;
       this.speed += JS.boostKick;
+      TTAudio.sfx('engine-rev'); TTAudio.sfx('whoosh');
       this.shake = Math.max(this.shake, 6);
       this._splash(0, 0.5, '#bff3ff', 12);
     } else if (kind === 'special' && this.special >= 1 && !this.heli) {
       this.special = 0;
       this.heli = { phase: 'dance', t: 0 };
       this.trick = null;
+      TTAudio.sfx('powerup');
     }
   }
 
@@ -673,6 +701,8 @@ class JetskiGame {
     if (sk.success) {
       this.hits++;
       this.kos++;
+      TTAudio.sfx('punch'); TTAudio.sfx('splash');
+      if (Math.random() < 0.5) TTAudio.sfx('scream');
       r.knock = 1.6;
       r.fly = 1;
       r.ko = !!r.goon;
@@ -688,6 +718,7 @@ class JetskiGame {
       this.wobble = 0.6;
       this.speed *= 0.9;
       this.popups.push({ text: 'MISS', life: 0.8, max: 0.8, bad: true });
+      TTAudio.sfx('oof');
     }
   }
 
@@ -1011,6 +1042,8 @@ class JetskiGame {
   _finish() {
     this.state = 'splash';
     this.endT = 0;
+    this._stopSounds();
+    TTAudio.sfx('splash'); TTAudio.sfx('fanfare');
     this.flash = 1;
     this.shake = 12;
     this._splash(0, 0.2, '#ffffff', 40);

@@ -327,6 +327,11 @@ class BodegaGame {
         if (item.mushroom) this.startTrip();
         // tripping: everything is good
         const good = item.good || !!this.trip;
+        if (!item.mushroom) {
+          if (this.trip) { TTAudio.sfx('catch', { combo: this.combo + 1 }); TTAudio.sfx('pop'); }
+          else if (good) TTAudio.sfx(item.golden ? 'coin' : 'catch', { combo: this.combo + 1 });
+          else TTAudio.sfx('bad');
+        }
         if (good) this.combo++; else this.combo = 0;
         const mult = good ? Math.min(T.comboMaxMult, 1 + Math.floor((this.combo - 1) / T.comboStep)) : 1;
         item.awarded = Math.abs(item.points) * (good ? 1 : -1) * mult;
@@ -384,6 +389,9 @@ class BodegaGame {
   startTrip() {
     this.trip = { at: this.elapsed };
     this.tripped = true;
+    TTAudio.sfx('powerup');
+    TTAudio.sfx('trip');
+    TTAudio.music('bodegaTrip');
     this.mushroomsDropped = BODEGA_TUNING.mushroomAt.length; // caught it -- no second one
     this.catInvasion = null;
     this.poopSplat = null;
@@ -1038,6 +1046,7 @@ class BodegaGame {
     if (this.animFrame)   cancelAnimationFrame(this.animFrame);
     if (this._keyHandler) document.removeEventListener('keydown', this._keyHandler);
     if (this._resizeHandler) window.removeEventListener('resize', this._resizeHandler);
+    TTAudio.sfx('buzzer');
     this.showResults();
   }
 
@@ -1063,6 +1072,7 @@ class BodegaGame {
     // spendable cash -- same reversal as cannon's boroughBucks.
     this.gameState.bodegaScore = (this.gameState.bodegaScore || 0) + earned;
 
+    TTAudio.sfx('reveal');
     document.getElementById('bodega-gamble-text').textContent = earned > 0
       ? `Bag's packed. You made off with $${earned} worth of groceries.`
       : `Bag's packed, but you dropped more than you caught. Nothing extra this trip.`;

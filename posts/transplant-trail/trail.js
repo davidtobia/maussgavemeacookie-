@@ -138,6 +138,7 @@ class TrailGame {
   }
 
   dismissEvent() {
+    TTAudio.sfx('click');
     const eventBox = document.getElementById('trail-event');
     eventBox.classList.add('hidden');
     this.state.paused = false;
@@ -955,6 +956,7 @@ class TrailGame {
     this.checkChapterSave();
 
     const landmark = this.getCurrentLandmark();
+    TTAudio.sfx('arrive');
 
     // The heist trigger was an hour/money-based timer layered with
     // three separate flags (wisemenJoined, wiseEricsPitched,
@@ -1422,6 +1424,7 @@ class TrailGame {
     const text = this.toastQueue.shift();
     if (!text) { this._toasting = false; return; }
     this._toasting = true;
+    TTAudio.sfx('toast');
     el.textContent = text;
     el.classList.remove('hidden');
     clearTimeout(this._toastTimer);
@@ -1492,7 +1495,7 @@ class TrailGame {
       const btn = document.createElement('button');
       btn.className = 'trail-chip' + (mode.id === this.state.spendingMode ? ' active' : '');
       btn.innerHTML = `${mode.name}<small>$${mode.dailyCost}/day</small>`;
-      btn.onclick = () => { this.state.spendingMode = mode.id; this.updateStatusDisplay(); };
+      btn.onclick = () => { TTAudio.sfx('click'); this.state.spendingMode = mode.id; this.updateStatusDisplay(); };
       sWrap.appendChild(btn);
     });
     const active = tWrap.querySelector('.active');
@@ -1501,6 +1504,7 @@ class TrailGame {
 
   pickTransport(mode) {
     if (mode.id === this.state.transportation) return;
+    TTAudio.sfx('select');
     this.state.transportation = mode.id;
     // Rain's surge pricing on an app car, charged once when you book it.
     if (mode.id === 'app-car' && this.state.vibeWeather === 'raining') {

@@ -254,7 +254,7 @@ class RushGame {
     window.removeEventListener('keydown', this._kd);
     window.removeEventListener('keyup', this._ku);
     this._stopMusic();
-    if (this.audio) { try { this.audio.close(); } catch (e) { /* ignore */ } this.audio = null; }
+    this.audio = null;
   }
 
   _exit() {
@@ -1000,11 +1000,8 @@ class RushGame {
   // ------------------------------------------------------------------
 
   _ensureAudio() {
-    if (this.audio) { if (this.audio.state === 'suspended') this.audio.resume().catch(() => {}); return; }
-    try {
-      const Ctx = window.AudioContext || window.webkitAudioContext;
-      if (Ctx) this.audio = new Ctx();
-    } catch (e) { this.audio = null; }
+    // The shared context (sound.js), so the mute button covers this too.
+    this.audio = TTAudio._ensure() ? TTAudio.ctx : null;
   }
 
   _tone(type, f0, f1, dur, vol, when) {
@@ -1018,7 +1015,7 @@ class RushGame {
       if (f1 !== f0) osc.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
       g.gain.setValueAtTime(vol, t);
       g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-      osc.connect(g).connect(a.destination);
+      osc.connect(g).connect(TTAudio.raw);
       osc.start(t); osc.stop(t + dur + 0.02);
     } catch (e) { /* ignore */ }
   }

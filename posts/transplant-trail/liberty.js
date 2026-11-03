@@ -89,7 +89,7 @@ class LibertyScene {
       const btn = document.createElement('button');
       btn.className = 'menu-option';
       btn.textContent = buttons.length > 1 ? `${i + 1}. ${b.label}` : b.label;
-      btn.onclick = b.onClick;
+      btn.onclick = () => { TTAudio.sfx('select'); b.onClick(); };
       if (b.look) {
         btn.addEventListener('pointerenter', () => { this.look = b.look; });
         btn.addEventListener('pointerleave', () => { this.look = null; });

@@ -186,7 +186,7 @@ class JailJunkyardGame {
     else if (s === 'box') { this.station = 'box'; this._setupBox(); this.phase = 'intro'; }
     else if (s === 'weapon') this.phase = 'weapon';
     else if (s === 'fight0' || s === 'fight1') { this._setupFight(s === 'fight0' ? 0 : 1); this.phase = 'fight'; }
-    else if (s === 'finish') this.phase = 'finish';
+    else if (s === 'finish') { this.phase = 'finish'; TTAudio.sfx('fanfare'); }
   }
 
   _beginStation() { this.phase = this.station; this.phaseT = 0; }
@@ -200,6 +200,7 @@ class JailJunkyardGame {
     const order = JUNKYARD_TIER_ORDER;
     this.weapon = order[Math.max(order.indexOf(tier), order.indexOf(this.weapon))];
     this.results[this.station] = { frac, label, weapon: this.weapon, earned };
+    TTAudio.sfx('reveal');
     this._next();
   }
 
@@ -258,6 +259,7 @@ class JailJunkyardGame {
     const r = this.rope;
     if (r.air) { r.buffer = r.t; return; }
     r.air = true; r.vy = r.v0; r.buffer = -1;
+    TTAudio.sfx('jump');
   }
 
   _updateRope(dt) {
@@ -278,10 +280,12 @@ class JailJunkyardGame {
       const px = this.cx, py = this.groundY;
       if (r.h > T.clearH) {
         r.cleared++; r.streak++;
+        TTAudio.sfx(r.streak % 5 === 0 ? 'chime' : 'tick');
         this._addScore(T.points, px + 40, py - 150 - r.h);
         if (r.streak > 0 && r.streak % 5 === 0) this.floaters.add(px, py - 210, `${r.streak} STREAK`, '#7ec89a', { size: 30, life: 46 });
       } else {
         r.streak = 0; r.stumble = 0.35;
+        TTAudio.sfx('trip-up');
         this.flash = 0.6; this.shake = 6;
         this.floaters.add(px, py - 170, 'TRIPPED', '#ff5a4a', { size: 30, life: 40 });
       }
@@ -369,6 +373,7 @@ class JailJunkyardGame {
     b.outcome = Math.abs(off) <= rep.hw ? 'land' : off < 0 ? 'short' : 'over';
     b.off = off; b.power = b.m;
     b.sub = 'jump'; b.t = 0;
+    TTAudio.sfx('boing');
   }
 
   _updateBox(dt) {
@@ -388,11 +393,13 @@ class JailJunkyardGame {
         const perfect = Math.abs(b.off) <= rep.hw * T.perfectFrac;
         b.landed++; b.acc += acc;
         if (perfect) b.perfects++;
+        TTAudio.sfx('land'); TTAudio.sfx(perfect ? 'perfect' : 'chime');
         this._addScore(Math.round(T.points + T.accuracyPoints * acc), G.bx, this.groundY - rep.h - 150);
         this.floaters.add(G.bx, this.groundY - rep.h - 190, perfect ? 'PERFECT' : 'STUCK IT', perfect ? '#f4c542' : '#7ec89a', { size: 34, life: 50 });
         this.particles.burst(G.bx * this.u, (this.groundY - rep.h) * this.u, '#f4c542', perfect ? 22 : 10, { speed: 3, life: 30, upBias: 1.2 });
       } else {
         this.shake = 8; this.flash = 0.5;
+        TTAudio.sfx('land'); TTAudio.sfx('fail');
         this.floaters.add(G.bx, this.groundY - rep.h - 170, b.outcome === 'short' ? 'TOO LOW' : 'TOO FAR', '#ff5a4a', { size: 34, life: 50 });
       }
     }
@@ -532,6 +539,7 @@ class JailJunkyardGame {
     const f = this.fight, w = JUNKYARD_WEAPONS[this.weapon];
     if (f.cool > 0 || f.done || f.down > 0) return;
     f.cool = w.cooldown; f.attackT = 0.16;
+    TTAudio.sfx({ fists: 'swish', shank: 'stab', sword: 'swish', gun: 'gun' }[this.weapon]);
     const live = f.enemies.filter(e => this._alive(e));
     let cands = w.ranged
       ? live.filter(e => e.x - f.px > -this.VW * 0.35 && e.x - f.px < this.VW * 0.65)
@@ -556,14 +564,18 @@ class JailJunkyardGame {
     if (e.hp <= 0) {
       e.state = 'dead'; e.t = 0;
       f.kos++; f.hitstop = 0.035;
+      TTAudio.sfx(this.weapon === 'gun' ? 'splat' : 'punch'); TTAudio.sfx('splat');
+      if (Math.random() < 0.35) TTAudio.sfx('scream');
       f.combo = f.comboT > 0 ? f.combo + 1 : 1; f.comboT = T.comboWindow;
       this.shake = Math.max(this.shake, 7);
       this._blood(e.x, g - 85, 26, 1, e.dir);
       const bonus = f.combo >= 3 ? T.comboPoints * f.combo : 0;
       this._addScore(T.koPoints + bonus, e.x - this._camX() + 10, g - 150);
+      if (f.combo >= 3) TTAudio.sfx('ko');
       if (f.combo >= 3) this.floaters.add(this.VW / 2, this.VH * 0.3, `${f.combo}X COMBO`, '#ff3d9a', { size: 40, life: 40 });
     } else {
       e.state = 'stagger'; e.t = 0.22;
+      TTAudio.sfx('punch');
       this._blood(e.x, g - 90, 8, 0.6, e.dir);
       this.shake = Math.max(this.shake, 3);
       this.floaters.add(e.x - this._camX(), g - 140, 'POW', '#f2f2f2', { size: 24, life: 22 });
@@ -574,6 +586,7 @@ class JailJunkyardGame {
     const T = JUNKYARD_TUNING, f = this.fight;
     if (f.invuln > 0 || f.down > 0 || f.done) return;
     f.hp--; f.hitsTaken++;
+    TTAudio.sfx('oof');
     f.hurt = 0.3; f.invuln = T.invuln;
     f.combo = 0;
     this.shake = 11; this.flash = 0.55;
@@ -581,6 +594,7 @@ class JailJunkyardGame {
     this._addScore(-T.hitPenalty, this.VW * 0.35, this.groundY - 170);
     if (f.hp <= 0) {
       f.down = T.downTime; f.knockdowns++;
+      TTAudio.sfx('fail');
       this._addScore(-T.downPenalty, this.VW * 0.35, this.groundY - 210);
       this.floaters.add(this.VW / 2, this.VH * 0.3, 'KNOCKED DOWN', '#ff5a4a', { size: 44, life: 60 });
       // Clear some room so getting up isn't an instant second knockdown.
