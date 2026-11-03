@@ -25,6 +25,11 @@ const BODEGA_TUNING = {
   tossChance: 0.18,               // thrown in from a side instead of dropped
   goldenChance: 0.22, goldenPoints: 50, // share of chopped cheeses that come down golden
   comboStep: 3, comboMaxMult: 5,
+  // finale: magic mushroom
+  mushroomAt: [27, 33],           // seconds into the round it drops (second one = another chance)
+  tripSeconds: 6,
+  tripSpawnMult: 0.45,            // items pour down this much faster while tripping
+  tripMouthHalfW: 170,            // catch half-width of the mouth (bag is 68)
 };
 
 class BodegaGame {
@@ -40,6 +45,10 @@ class BodegaGame {
     this.combo = 0;
     this.frenzy = 0;         // 0..1 visual pulse while a frenzy wave is on
     this._lastT = 0;
+    this.trip = null;        // { timer, maxTimer } while the mushroom's kicked in
+    this.mouth = 0;          // 0 = bag, 1 = fully a mouth (eased)
+    this.mushroomsDropped = 0;
+    this.chomp = 0;
     this.items = [];
     this.basketX = 200;
     // Catch feedback: a catch used to just tick the DOM score text with
@@ -205,6 +214,7 @@ class BodegaGame {
   getSpawnRate() {
     const T = BODEGA_TUNING;
     const base = T.spawnStart + (T.spawnEnd - T.spawnStart) * this.progress();
+    if (this.trip) return base * T.tripSpawnMult;
     return this.inFrenzy() ? base * T.frenzySpawnMult : base;
   }
 
@@ -214,6 +224,18 @@ class BodegaGame {
     // doesn't give more reaction time than a short one.
     const hScale = Math.max(0.85, this.canvas.height / 760);
     return (T.fallStart + (T.fallEnd - T.fallStart) * this.progress()) * hScale;
+  }
+
+  // The finale power-up: drops from the top, slower than everything else
+  // so it's catchable, spinning and pulsing purple.
+  spawnMushroom() {
+    const W = this.canvas.width;
+    this.items.push({
+      label: 'Mushroom', good: true, mushroom: true, points: 50, color: '#a24bff',
+      w: 76, h: 60, rot: 0, spin: 0.08,
+      x: W * (0.25 + Math.random() * 0.5), y: -70,
+      vx: 0, vy: this.getFallSpeed() * 0.6, gravity: 0, speed: this.getFallSpeed() * 0.6,
+    });
   }
 
   spawnItem() {
@@ -272,6 +294,11 @@ class BodegaGame {
       this.spawnItem();
     }
     this.frenzy += ((this.inFrenzy() ? 1 : 0) - this.frenzy) * 0.12;
+    const T0 = BODEGA_TUNING;
+    if (this.mushroomsDropped < T0.mushroomAt.length && !this.trip && this.elapsed >= T0.mushroomAt[this.mushroomsDropped]) {
+      this.mushroomsDropped++;
+      if (!this.items.some(i => i.mushroom)) this.spawnMushroom();
+    }
 
     const W = this.canvas.width;
     this.items.forEach(item => {
@@ -285,7 +312,8 @@ class BodegaGame {
     });
 
     const basketY = this.canvas.height - 85;
-    const halfW   = 68;
+    // the bag, or -- tripping -- a huge mouth
+    const halfW   = 68 + (BODEGA_TUNING.tripMouthHalfW - 68) * this.mouth;
 
     this.items = this.items.filter(item => {
       const caught =
@@ -297,9 +325,13 @@ class BodegaGame {
 
       if (caught) {
         const T = BODEGA_TUNING;
-        if (item.good) this.combo++; else this.combo = 0;
-        const mult = item.good ? Math.min(T.comboMaxMult, 1 + Math.floor((this.combo - 1) / T.comboStep)) : 1;
-        item.awarded = item.points * mult;
+        if (item.mushroom) this.startTrip();
+        // tripping: everything is good
+        const good = item.good || !!this.trip;
+        if (good) this.combo++; else this.combo = 0;
+        const mult = good ? Math.min(T.comboMaxMult, 1 + Math.floor((this.combo - 1) / T.comboStep)) : 1;
+        item.awarded = Math.abs(item.points) * (good ? 1 : -1) * mult;
+        if (this.trip) item.tripped = true;
         this.score = Math.max(0, this.score + item.awarded);
         document.getElementById('bodega-score').textContent = `Score: ${this.score}`;
         this.spawnCatchFx(item);
@@ -335,11 +367,27 @@ class BodegaGame {
       big: item.awarded >= 30,
       life: 46, maxLife: 46, good: item.good,
     });
-    if (item.good) this.bagPunch = 1;
+    if (item.good || item.tripped) this.bagPunch = 1;
     else this.bagShake = 1;
 
+    if (item.tripped) {
+      this.chomp = 1;
+      this.popups[this.popups.length - 1].good = true;
+      this.popups[this.popups.length - 1].trippy = true;
+      return; // no cat, no poop -- you're past caring
+    }
     if (item.label === 'Bodega Cat') this.triggerCatInvasion();
     if (item.label === 'Poop') this.triggerPoopSplat();
+  }
+
+  startTrip() {
+    const frames = BODEGA_TUNING.tripSeconds * 60;
+    this.trip = { timer: frames, maxTimer: frames };
+    this.mushroomsDropped = BODEGA_TUNING.mushroomAt.length; // caught it -- no second one
+    this.catInvasion = null;
+    this.poopSplat = null;
+    this.basketLocked = false;
+    this.items = this.items.filter(i => !i.mushroom);
   }
 
   // ~1.6 seconds (was ~2 -- shortened now that items fall about twice
@@ -391,6 +439,12 @@ class BodegaGame {
     // bagShake above.
     const targetTilt = this.basketLocked ? 0.5 : 0;
     this.basketTilt += (targetTilt - this.basketTilt) * 0.15;
+    if (this.trip) {
+      this.trip.timer -= k;
+      if (this.trip.timer <= 0) this.trip = null;
+    }
+    this.mouth += ((this.trip ? 1 : 0) - this.mouth) * Math.min(1, 0.12 * k);
+    this.chomp *= Math.pow(0.85, k);
   }
 
   // ============================================
@@ -498,6 +552,27 @@ class BodegaGame {
         ctx.fillStyle = '#82e0aa';
         ctx.beginPath(); ctx.arc(cx - 3,  y + 7,  5,  0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(cx + 5,  y + 9,  4,  0, Math.PI * 2); ctx.fill();
+        break;
+      }
+
+      case 'Mushroom': {
+        // pulsing purple cap with white spots on a pale stem
+        const pulse = 1 + 0.12 * Math.sin(this.frameCounter * 0.25);
+        ctx.save();
+        ctx.translate(cx, y + h / 2);
+        ctx.scale(pulse, pulse);
+        ctx.translate(-cx, -(y + h / 2));
+        ctx.fillStyle = '#f1e6d6';
+        ctx.fillRect(cx - 9, y + h * 0.45, 18, h * 0.55);
+        ctx.fillStyle = '#9b3cff';
+        ctx.beginPath(); ctx.ellipse(cx, y + h * 0.48, w * 0.5, h * 0.5, 0, Math.PI, 0); ctx.fill();
+        ctx.fillStyle = '#c98bff';
+        ctx.beginPath(); ctx.ellipse(cx - w * 0.15, y + h * 0.2, w * 0.14, h * 0.08, -0.4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        [[-0.24, 0.3, 6], [0.05, 0.14, 7], [0.26, 0.32, 5], [-0.05, 0.36, 4]].forEach(([dx, dy, r]) => {
+          ctx.beginPath(); ctx.arc(cx + dx * w, y + dy * h, r, 0, Math.PI * 2); ctx.fill();
+        });
+        ctx.restore();
         break;
       }
 
@@ -692,6 +767,18 @@ class BodegaGame {
 
     this.renderBackground();
 
+    // Tripping: the whole scene breathes and sways
+    const tripK = this.trip ? Math.min(1, (this.trip.maxTimer - this.trip.timer) / 30, this.trip.timer / 30) : 0;
+    ctx.save();
+    if (tripK > 0) {
+      const t = this.frameCounter * 0.05;
+      ctx.translate(width / 2, height / 2);
+      ctx.rotate(Math.sin(t * 1.3) * 0.05 * tripK);
+      const sc = 1 + Math.sin(t * 2.1) * 0.04 * tripK;
+      ctx.scale(sc, 1 + Math.cos(t * 1.7) * 0.04 * tripK);
+      ctx.translate(-width / 2, -height / 2);
+    }
+
     // Falling items
     // Frenzy wave: a pulsing warm wash so the surge is something you
     // see arrive, not just a spawn-rate number changing.
@@ -709,11 +796,13 @@ class BodegaGame {
       // Catch-or-avoid at a glance: a green glow behind anything you want,
       // a red one behind anything you don't.
       const cy = item.y + item.h / 2;
-      const glow = ctx.createRadialGradient(item.x, cy, 4, item.x, cy, item.w * 0.75);
-      glow.addColorStop(0, item.good ? 'rgba(60,230,110,0.55)' : 'rgba(255,50,50,0.55)');
-      glow.addColorStop(1, item.good ? 'rgba(60,230,110,0)' : 'rgba(255,50,50,0)');
+      const gc = item.mushroom ? '170,80,255' : (item.good || this.trip) ? '60,230,110' : '255,50,50';
+      const gr = item.w * (item.mushroom ? 1.1 + 0.15 * Math.sin(this.frameCounter * 0.25) : 0.75);
+      const glow = ctx.createRadialGradient(item.x, cy, 4, item.x, cy, gr);
+      glow.addColorStop(0, `rgba(${gc},${item.mushroom ? 0.75 : 0.55})`);
+      glow.addColorStop(1, `rgba(${gc},0)`);
       ctx.fillStyle = glow;
-      ctx.beginPath(); ctx.arc(item.x, cy, item.w * 0.75, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(item.x, cy, gr, 0, Math.PI * 2); ctx.fill();
 
       if (item.golden) { ctx.shadowColor = '#ffd84a'; ctx.shadowBlur = 22; }
       this.drawItemShape(ctx, item);
@@ -724,11 +813,12 @@ class BodegaGame {
       // Badge: green check = catch it, red X = avoid it. Drawn upright
       // (not spinning with the item) so it reads instantly.
       const bx = item.x + item.w * 0.42, by = item.y - 2, br = 11;
-      ctx.fillStyle = item.good ? '#1fbf55' : '#e02424';
+      const showGood = item.good || !!this.trip;
+      ctx.fillStyle = item.mushroom ? '#9b3cff' : showGood ? '#1fbf55' : '#e02424';
       ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.lineCap = 'round';
       ctx.beginPath();
-      if (item.good) { ctx.moveTo(bx - 5, by); ctx.lineTo(bx - 1, by + 4); ctx.lineTo(bx + 6, by - 4); }
+      if (showGood) { ctx.moveTo(bx - 5, by); ctx.lineTo(bx - 1, by + 4); ctx.lineTo(bx + 6, by - 4); }
       else { ctx.moveTo(bx - 4, by - 4); ctx.lineTo(bx + 4, by + 4); ctx.moveTo(bx + 4, by - 4); ctx.lineTo(bx - 4, by + 4); }
       ctx.stroke();
       ctx.lineCap = 'butt';
@@ -738,9 +828,11 @@ class BodegaGame {
       ctx.font = 'bold 16px VT323';
       ctx.lineWidth = 3; ctx.strokeStyle = '#000';
       ctx.strokeText(item.label, item.x, item.y + item.h + 16);
-      ctx.fillStyle = item.golden ? '#ffd84a' : item.good ? '#5dff8f' : '#ff5a5a';
+      ctx.fillStyle = item.mushroom ? '#d6a2ff' : item.golden ? '#ffd84a' : showGood ? '#5dff8f' : '#ff5a5a';
       ctx.fillText(item.label, item.x, item.y + item.h + 16);
     });
+
+    ctx.restore();
 
     // Shopping bag -- was two goalpost bars with a rail between them,
     // which read as nothing in particular. basketY/the ~140px span stay
@@ -766,6 +858,10 @@ class BodegaGame {
     ctx.rotate(this.basketTilt);
     ctx.translate(-cx, -basketY);
 
+    if (this.mouth > 0.05) {
+      ctx.restore();
+      this.drawMouth(ctx, cx, basketY);
+    } else {
     ctx.fillStyle = '#c8935a';
     ctx.beginPath();
     ctx.moveTo(cx - topW / 2, basketY);
@@ -803,6 +899,7 @@ class BodegaGame {
     ctx.ellipse(cx + topW / 4, basketY - 6, 11, 13, 0, Math.PI, 0, true);
     ctx.stroke();
     ctx.restore();
+    }
 
     // Catch particles -- sparkle burst for a good grab, scattered crumbs
     // for a bad one.
@@ -820,7 +917,7 @@ class BodegaGame {
       ctx.globalAlpha = Math.min(1, p.life / (p.maxLife * 0.6));
       ctx.font = p.big ? 'bold 32px VT323' : 'bold 20px VT323';
       ctx.textAlign = 'center';
-      ctx.fillStyle = p.good ? (p.big ? '#ffd84a' : '#7ec89a') : '#e74c3c';
+      ctx.fillStyle = p.trippy ? `hsl(${(this.frameCounter * 12 + p.x) % 360},100%,65%)` : p.good ? (p.big ? '#ffd84a' : '#7ec89a') : '#e74c3c';
       ctx.fillText(p.text, p.x, p.y);
       ctx.globalAlpha = 1;
     });
@@ -839,10 +936,63 @@ class BodegaGame {
     // and the cat is supposed to dominate the screen while it's here.
     if (this.poopSplat) this.drawPoopSplat(ctx);
     if (this.catInvasion) this.drawCatInvasion(ctx);
+    if (tripK > 0) this.drawTripOverlay(ctx, tripK);
+  }
+
+  // Color cycling over everything plus rings pulsing out from the mouth.
+  drawTripOverlay(ctx, k) {
+    const { width, height } = this.canvas;
+    const t = this.frameCounter;
+    ctx.save();
+    const g = ctx.createLinearGradient(0, 0, width, height);
+    for (let i = 0; i <= 6; i++) g.addColorStop(i / 6, `hsl(${(t * 6 + i * 60) % 360},100%,55%)`);
+    ctx.globalCompositeOperation = 'color';
+    ctx.globalAlpha = 0.45 * k;
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, width, height);
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.25 * k;
+    const cx = this.basketX, cy = height - 85;
+    for (let i = 0; i < 6; i++) {
+      const r = ((t * 4 + i * 80) % 480);
+      ctx.strokeStyle = `hsl(${(t * 8 + i * 50) % 360},100%,60%)`;
+      ctx.lineWidth = 14;
+      ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // The bag, grown into a giant chomping mouth: lips, teeth, tongue. Width
+  // matches the catch range (tripMouthHalfW).
+  drawMouth(ctx, cx, y) {
+    const halfW = 68 + (BODEGA_TUNING.tripMouthHalfW - 68) * this.mouth;
+    const open = (0.55 + 0.25 * Math.sin(this.frameCounter * 0.35)) * (1 - this.chomp * 0.7);
+    const h = 70 * open + 12;
+    ctx.save();
+    // lips
+    ctx.fillStyle = '#e8336a';
+    ctx.beginPath(); ctx.ellipse(cx, y + 18, halfW + 14, h / 2 + 16, 0, 0, Math.PI * 2); ctx.fill();
+    // inside
+    ctx.fillStyle = '#3a0718';
+    ctx.beginPath(); ctx.ellipse(cx, y + 18, halfW, h / 2, 0, 0, Math.PI * 2); ctx.fill();
+    // tongue
+    ctx.fillStyle = '#ff7aa0';
+    ctx.beginPath(); ctx.ellipse(cx, y + 18 + h * 0.22, halfW * 0.55, h * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+    // teeth top and bottom
+    ctx.fillStyle = '#fff';
+    const n = Math.max(4, Math.round(halfW / 18));
+    for (let i = 0; i < n; i++) {
+      const tx = cx - halfW * 0.8 + (i / (n - 1)) * halfW * 1.6;
+      const tw = (halfW * 1.6) / n * 0.8;
+      ctx.fillRect(tx - tw / 2, y + 18 - h / 2 - 2, tw, 12);
+      ctx.fillRect(tx - tw / 2, y + 18 + h / 2 - 10, tw, 12);
+    }
+    ctx.restore();
   }
 
   endCatching() {
     this.running = false;
+    this.trip = null;
     clearInterval(this.timerInterval);
     if (this.animFrame)   cancelAnimationFrame(this.animFrame);
     if (this._keyHandler) document.removeEventListener('keydown', this._keyHandler);
