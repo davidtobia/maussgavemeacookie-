@@ -128,7 +128,7 @@ const JAIL_CHARACTERS = [
     name: '[PLACEHOLDER NAME — LUIGI]',
     tag: '[PLACEHOLDER ONE-LINE SUBTITLE]',
     color: '#7ec89a',
-    minigame: 'bench',
+    minigame: 'junkyard',
     yard: { x: 140, y: 88, entourage: 3, turfR: 14 },
     discoverToast: '[PLACEHOLDER: line shown the first time you get close enough to make him out]',
   },

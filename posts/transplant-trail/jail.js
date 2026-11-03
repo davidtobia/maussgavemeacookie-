@@ -16,7 +16,7 @@
  * is what lets the project owner rewrite the entire arc's content without
  * touching a line of code here.
  *
- * Debug entry: `window.JAIL_DEBUG = { startAt: 'yard'|'rhythm'|'bench'|
+ * Debug entry: `window.JAIL_DEBUG = { startAt: 'yard'|'rhythm'|'junkyard'|
  * 'trip', friendship: { diddy: 40, ... } }`, set before `?jail=1` boots
  * this up, jumps straight past intake/dialogue into the yard or a
  * specific mini-game — for iterating on one piece without replaying the
@@ -79,7 +79,7 @@ class JailGame {
     const dbg = window.JAIL_DEBUG;
     if (dbg && dbg.friendship) Object.assign(this.friendship, dbg.friendship);
 
-    const mgMap = { rhythm: 'diddy', bench: 'mangione', trip: 'sbf' };
+    const mgMap = { rhythm: 'diddy', junkyard: 'mangione', bench: 'mangione', trip: 'sbf' };
     if (dbg && dbg.startAt === 'yard') { this.startYard(); return; }
     if (dbg && mgMap[dbg.startAt]) {
       this.startYard();
@@ -111,7 +111,7 @@ class JailGame {
   }
 
   hideMinigameHuds() {
-    ['jail-rhythm-hud', 'jail-bench-hud', 'jail-trip-hud'].forEach(id => {
+    ['jail-rhythm-hud', 'jail-trip-hud'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.add('hidden');
     });
@@ -858,7 +858,7 @@ class JailGame {
     const char = JAIL_CHARACTERS.find(c => c.id === charId);
     const onDone = (result) => this.onMinigameResult(charId, result);
     if (char.minigame === 'rhythm') this.activeMinigame = new JailRhythmGame(this, charId, onDone);
-    else if (char.minigame === 'bench') this.activeMinigame = new JailBenchGame(this, charId, onDone);
+    else if (char.minigame === 'junkyard') this.activeMinigame = new JailJunkyardGame(this, charId, onDone);
     else if (char.minigame === 'trip') this.activeMinigame = new JailTripGame(this, charId, onDone);
   }
 
