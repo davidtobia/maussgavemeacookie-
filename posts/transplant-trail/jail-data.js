@@ -572,19 +572,27 @@ const JAIL_YARD_FLAVOR = [
 // time, jail-minigames.js converts bar/slot position into milliseconds.
 // ~30 bars at 104bpm is a ~70s chart, per the plan's recommended trim.
 
+// Diddy's rhythm chart. Each bar is 8 eighth-note slots:
+//   0 1 2   tap that lane          - (after a lane)  hold it that many slots
+//   g h i   champagne (gold, x3)   x y z   subpoena -- DON'T tap
+//   o       baby oil -- DON'T tap (middle lane)
+// Sections are 4 bars each and set the dance move + its callout.
 const JAIL_RHYTHM_CHART = {
-  bpm: 104,
-  offsetMs: 600, // lead-in before the first note, so the chart doesn't demand a hit at frame 0
+  bpm: 112,
+  offsetMs: 1400,
   bars: [
-    '0.......', '0...1...', '0.1.0.1.', '0.1.2...',
-    '0.1.2.1.', '2.1.0...', '0.1.2.0.', '1.1.2.2.',
-    '0.2.0.2.', '0.1.2.1.', '1.0.1.0.', '0.1.2.1.',
-    '2.2.1.1.', '0.0.1.1.', '2.1.0.1.', '0.1.2.1.',
-    '........', '0...2...', '0.1.2.1.', '1.2.0.2.',
-    '0.1.2.0.', '1.2.0.1.', '2.0.1.2.', '0.1.2.1.',
-    '0011.22.', '1.0.2.0.', '2.1.0.1.', '0.1.2.1.',
-    '0.2.1.0.', '2.1.0.2.', '01210121', '0.1.2...',
+    '0...1...', '0.1.2...', '0.1.2.1.', '0...2---',
+    '0.1.x.1.', '2.1.0...', '0.g.2.1.', '1.z.1.0.',
+    '0.1.2.1.', '0---2.1.', '1.o.1.2.', '2.1.0.h.',
+    '0.1.2.1.', '0121.y..', '2.1.0---', 'g.h.i...',
   ],
+  sections: [
+    { move: 'bop', call: 'THE DIDDY BOP' },
+    { move: 'robot', call: 'THE ROBOT' },
+    { move: 'sprinkler', call: "IT'S THE REMIX!", remix: true },
+    { move: 'helicopter', call: 'THE HELICOPTER' },
+  ],
+  adlibs: { 8: 'LET\'S GO!', 16: 'TAKE THAT, TAKE THAT!', 26: 'BAD BOY!' },
 };
 
 // ----------------------------------------------------------------------
