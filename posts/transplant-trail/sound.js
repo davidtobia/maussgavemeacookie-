@@ -148,6 +148,19 @@ const TT_SCREEN_SONGS = {
   'cannon-game': 'cannon', 'heist-game': 'heist', 'jail-game': 'jail',
 };
 
+// A short silent WAV, built once (for the iOS media-session trick).
+const TT_SILENT_WAV = (() => {
+  const n = 2205, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const w = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 22050, true); v.setUint32(28, 44100, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  w(36, 'data'); v.setUint32(40, n * 2, true);
+  let bin = ''; const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return 'data:audio/wav;base64,' + btoa(bin);
+})();
+
 const TTAudio = {
   ctx: null, out: null, musicBus: null, master: null,
   muted: false,
@@ -155,8 +168,14 @@ const TTAudio = {
 
   init() {
     try { this.muted = localStorage.getItem('tt-muted') === '1'; } catch (e) { /* private mode */ }
-    const unlock = () => { this._ensure(); };
-    ['pointerdown', 'touchstart', 'keydown'].forEach(ev => document.addEventListener(ev, unlock, { capture: true, passive: true }));
+    // iOS only lets audio start inside certain gestures -- touchend and
+    // click count, touchstart/pointerdown don't -- so listen on all of
+    // them and keep trying until the context is actually running.
+    const unlock = () => { this._ensure(); this._unlockIOS(); };
+    ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'click', 'keydown'].forEach(ev =>
+      document.addEventListener(ev, unlock, { capture: true, passive: true }));
+    // Play as media, so the iPhone ring/silent switch doesn't mute it.
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) { /* older iOS */ }
     document.addEventListener('visibilitychange', () => {
       if (!this.ctx) return;
       if (document.hidden) this.ctx.suspend().catch(() => {});
@@ -173,7 +192,7 @@ const TTAudio = {
 
   _ensure() {
     if (this.ctx) {
-      if (this.ctx.state === 'suspended' && !document.hidden) this.ctx.resume().catch(() => {});
+      if (this.ctx.state !== 'running' && this.ctx.state !== 'closed' && !document.hidden) this.ctx.resume().catch(() => {});
       return true;
     }
     const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -203,6 +222,30 @@ const TTAudio = {
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     if (this._want !== undefined) { const w = this._want; this._want = undefined; this.music(w); }
     return true;
+  },
+
+  // Older iOS (no navigator.audioSession): a silent looping <audio> tag,
+  // started inside a gesture, flips the page into the media audio
+  // session so Web Audio plays with the silent switch on. Also play one
+  // silent buffer through the context itself, the classic unlock.
+  _unlockIOS() {
+    if (!this.ctx) return;
+    if (!this._silentBuf) {
+      try {
+        const b = this.ctx.createBuffer(1, 1, 22050);
+        const src = this.ctx.createBufferSource();
+        src.buffer = b; src.connect(this.ctx.destination); src.start(0);
+        this._silentBuf = true;
+      } catch (e) { /* ignore */ }
+    }
+    if (!this._mediaTag && !navigator.audioSession) {
+      const a = document.createElement('audio');
+      a.setAttribute('playsinline', '');
+      a.loop = true;
+      a.src = TT_SILENT_WAV;
+      const p = a.play();
+      if (p && p.then) p.then(() => { this._mediaTag = a; }).catch(() => {});
+    }
   },
 
   _buildButton() {
