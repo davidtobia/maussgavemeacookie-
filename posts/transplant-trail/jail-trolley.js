@@ -26,26 +26,48 @@
 const TROLLEY_TUNING = {
   runSpeed: 440, zoomMin: 0.46, zoomMax: 0.8,
   forkFirst: 1000, ramp: 260, branch: 560, mainGap: 420, B: 170, groundY: 330,
-  decideDist: 460, slowmo: 0.42,
+  freezeDist: 250,
   carGap: 560, carMin: 110,
   trolleyStartGap: 270, trolleyClose: 30, trolleyMaxGap: 380, trolleyHitGap: 34,
   stallSpeed: 110, surgeSpeed: 150,
   stunTime: 0.8, trolleyDerail: 1.3, runOverPenalty: 260,
-  twistTime: 3.6, escapeTime: 10, stompFirst: 1.4, stompLast: 0.8, stompWarn: 0.9,
+  twistTime: 3.6, escapeTime: 9, stompFirst: 1.7, stompLast: 1.05, stompWarn: 1.15,
   shrimpWeight: 0.0003, victimScale: 2.2,
 };
 
-// [DO NOTHING (top), PULL THE LEVER (bottom)]
-const TROLLEY_FORKS = [
-  ['people:5', 'people:1'],
-  ['people:1', 'shrimp'],
-  ['people:12', 'future'],
-  ['people:1', 'robot'],
-  ['people:5', 'coinflip'],
-  ['lobster', 'people:2'],
-  ['people:3', 'mugger'],
-  ['people:1', 'coins'],
+// Every fork: [DO NOTHING (top track), PULL THE LEVER (bottom track)].
+// The first fork is always the classic; the rest are drawn at random from
+// TROLLEY_SCENARIOS each run. Option fields:
+//   draw   what's tied to the track: people (n, look), shrimp, future,
+//          robot, lobster, coinflip, mugger, coins, sauce, phone, dog, sign
+//   name   what the card says (people default to "N PEOPLE")
+//   cost   EA "badness" in utils -- lower is better, negative means the
+//          math says running it over is good (people default to n)
+//   costLabel  how the card shows it
+// These are drafts -- rewrite freely.
+const TROLLEY_CLASSIC = [{ draw: 'people', n: 5 }, { draw: 'people', n: 1 }];
+const TROLLEY_SCENARIOS = [
+  [{ draw: 'people', n: 10, look: 'ortho', name: '10 ORTHODONTISTS' },
+   { draw: 'sauce', name: 'EVERY SAUCE, FOREVER', cost: 25, costLabel: '-25 UTILS (FLAVOR)' }],
+  [{ draw: 'people', n: 1 }, { draw: 'shrimp' }],
+  [{ draw: 'people', n: 12 }, { draw: 'future' }],
+  [{ draw: 'robot' }, { draw: 'people', n: 1 }],
+  [{ draw: 'people', n: 5 }, { draw: 'coinflip' }],
+  [{ draw: 'lobster' }, { draw: 'people', n: 2 }],
+  [{ draw: 'people', n: 3 }, { draw: 'mugger' }],
+  [{ draw: 'people', n: 6, look: 'mime', name: '6 MIMES', cost: -6, costLabel: '+6 UTILS (SILENCE)' },
+   { draw: 'phone', name: 'YOUR PHONE, AT 1% FOREVER', cost: 40, costLabel: '-40 UTILS' }],
+  [{ draw: 'people', n: 4, look: 'vest', name: '4 GUYS IN PATAGONIA VESTS' },
+   { draw: 'dog', name: 'ONE VERY GOOD DOG', cost: 1000, costLabel: '-1,000 UTILS' }],
+  [{ draw: 'people', n: 8, look: 'clap', name: '8 PEOPLE WHO CLAP WHEN THE PLANE LANDS' },
+   { draw: 'sign', text: 'RESY', name: 'YOUR CARBONE RESERVATION', cost: 30, costLabel: '-30 UTILS' }],
+  [{ draw: 'people', n: 7, look: 'eric', name: '7 GUYS NAMED ERIC' },
+   { draw: 'people', n: 1, look: 'landlord', name: 'YOUR LANDLORD', cost: -50, costLabel: '+50 UTILS' }],
+  [{ draw: 'people', n: 3, look: 'dj', name: '3 DJS AT THE MIRAGE' },
+   { draw: 'sign', text: 'L', name: 'THE L TRAIN, FOREVER', cost: 20, costLabel: '-20 UTILS' }],
+  [{ draw: 'coins', name: 'CASH (IT GOES TO HER)' }, { draw: 'people', n: 1 }],
 ];
+const TROLLEY_FORK_COUNT = 8;
 
 const TROLLEY_SKINS = ['#e8b48a', '#c98e62', '#8d5a3b', '#5e3b26', '#f0c9a0'];
 const TROLLEY_SHIRTS = ['#3a6ea8', '#a83a3a', '#3aa86a', '#d6a21f', '#7a4aa8', '#d0d0d0', '#2a2a2a'];
@@ -101,7 +123,9 @@ class JailTrolleyGame {
     this.shake = 0; this.flash = 0; this.flashColor = '224,40,40';
 
     this.period = 2 * T.ramp + T.branch + T.mainGap;
-    this.forks = TROLLEY_FORKS.map((def, k) => {
+    const pool = TROLLEY_SCENARIOS.slice().sort(() => Math.random() - 0.5);
+    const defs = [TROLLEY_CLASSIC, ...pool.slice(0, TROLLEY_FORK_COUNT - 1)];
+    this.forks = defs.map((def, k) => {
       const x0 = T.forkFirst + k * this.period;
       const x1 = x0 + 2 * T.ramp + T.branch;
       const groups = def.map((spec, i) => {
@@ -110,7 +134,7 @@ class JailTrolleyGame {
         g.x = x0 + T.ramp + 30;
         return g;
       });
-      return { k, x0, x1, groups, choice: -1, touched: false, locked: false, resolved: false };
+      return { k, x0, x1, groups, choice: -1, chosen: false, locked: false, resolved: false };
     });
     this.courseEnd = this.forks[this.forks.length - 1].x1 + T.mainGap;
 
@@ -171,10 +195,11 @@ class JailTrolleyGame {
     if (this.phase === 'results') { if (this.phaseT > 0.8) this._end(); return; }
     if (!dir) return;
     if (this.phase === 'run') {
-      const f = this._nextFork();
-      if (f && f.x0 - this.px < TROLLEY_TUNING.decideDist * 1.6) {
-        if (f.choice !== dir) TTAudio.sfx('lever');
-        f.choice = dir; f.touched = true;
+      const f = this.choosing;
+      if (f && this.freezeT > 0.35) {
+        TTAudio.sfx('lever');
+        f.choice = dir; f.chosen = true;
+        this.choosing = null;
       }
     } else if (this.phase === 'escape') { if (this.escSide !== dir) TTAudio.sfx('jump'); this.escSide = dir; }
   }
@@ -224,10 +249,15 @@ class JailTrolleyGame {
     const T = TROLLEY_TUNING;
     // Slow-mo while a fork's choice is up.
     const nf = this.phase === 'run' ? this._nextFork() : null;
-    this.deciding = nf && nf.x0 - this.px < T.decideDist && nf.x0 - this.px > 0 ? nf : null;
-    if (this.deciding && !this.deciding.chimed) { this.deciding.chimed = true; TTAudio.sfx('shimmer'); }
-    const dt = rawDt * (this.deciding ? T.slowmo : 1);
-    this.phaseT += rawDt; this.time += dt;
+    // At each fork the world stops until you pick a track.
+    if (nf && !nf.chosen && !this.choosing && nf.x0 - this.px < T.freezeDist) {
+      this.choosing = nf; this.freezeT = 0;
+      TTAudio.sfx('shimmer');
+    }
+    this.deciding = this.choosing;
+    if (this.choosing) this.freezeT += rawDt;
+    const dt = this.choosing ? 0 : rawDt;
+    this.phaseT += rawDt; this.time += this.choosing ? rawDt * 0.3 : dt;
     this.shake = Math.max(0, this.shake - rawDt * 30);
     this.flash = Math.max(0, this.flash - rawDt * 2.5);
     const late = this.phase === 'twist' || this.phase === 'escape' || this.phase === 'results';
@@ -323,7 +353,7 @@ class JailTrolleyGame {
       g.people.forEach(p => this._ragdoll(wx + p.dx * T.victimScale, wy - 20, p.skin, p.shirt));
       this.blood = Math.min(1, this.blood + 0.08 * g.n);
       this.utils += worst - g.cost;
-      pop(g.n === 1 ? '1 DEAD' : `${g.n} DEAD`, '#ff4a4a');
+      pop(g.n === 1 ? (g.look === 'landlord' ? 'LANDLORD DOWN' : '1 DEAD') : `${g.n} DEAD`, '#ff4a4a');
       this.shake = 6 + g.n;
     } else if (g.kind === 'shrimp') {
       this.killed.shrimp += 1e6;
@@ -364,6 +394,33 @@ class JailTrolleyGame {
       this.debris.push(this._piece(wx + 40, wy - 50, 'coin', '#f4c542', 1.3));
       if (win) { this.utils = this.utils === 0 ? 1000 : this.utils * 2; pop('DOUBLED', '#f4c542', 42); }
       else { this.utils = 0; pop('ZERO', '#ff4a4a', 52); this.flash = 0.8; this.flashColor = '0,0,0'; }
+    } else if (g.kind === 'sauce') {
+      this.tStall = 0.45;
+      TTAudio.sfx('splat'); TTAudio.sfx('squish');
+      ['#c0281e', '#e8c020', '#f2f0e8', '#d8301e', '#3a2010', '#ff7a20'].forEach(c => { for (let i = 0; i < 8; i++) this.debris.push(this._piece(wx + 60, wy - 30, 'drop', c, 1.2)); });
+      this.utils += worst - g.cost;
+      pop('NO MORE SAUCE. EVER.', '#ffb04a');
+      this.shake = 7;
+    } else if (g.kind === 'phone') {
+      this.tStall = 0.3;
+      TTAudio.sfx('crunch');
+      for (let i = 0; i < 24; i++) this.debris.push(this._piece(wx + 24, wy - 30, 'metal', Math.random() < 0.5 ? '#1a1a1a' : '#6ab0d8', 1.1));
+      this.utils += worst - g.cost;
+      pop('PHONE: 1% FOREVER', '#ff6a6a');
+      this.shake = 6;
+    } else if (g.kind === 'dog') {
+      // The dog jumps clear. The dog is always fine.
+      this.tSurge = 0.6;
+      TTAudio.sfx('boing');
+      this.utils += worst - g.cost;
+      pop('THE DOG IS FINE', '#9af0a8', 34);
+    } else if (g.kind === 'sign') {
+      this.tStall = 0.3;
+      TTAudio.sfx('crunch');
+      this.debris.push(this._piece(wx + 40, wy - 64, 'sign', '#c8a060', 1.3));
+      this.utils += worst - g.cost;
+      pop(g.name.replace('YOUR ', '').replace(', FOREVER', '') + ': GONE', '#ff9a8a', 26);
+      this.shake = 6;
     } else if (g.kind === 'mugger') {
       this.tSurge = 1.0;
       this.utils = this.utils / 2;
@@ -808,36 +865,70 @@ class JailTrolleyGame {
     ctx.globalAlpha = 1;
   }
 
-  // The two cards: DO NOTHING (top branch) / PULL THE LEVER (bottom branch).
+  // The world is frozen at a fork: two cards, DO NOTHING (top branch) and
+  // PULL THE LEVER (bottom branch), each with a picture of what's tied to
+  // that track. Tap one.
   _drawChoice(f) {
-    const ctx = this.ctx, VW = this.VW, VH = this.VH;
-    const k = 1 - jailClamp((f.x0 - this.px) / TROLLEY_TUNING.decideDist, 0, 1);
-    const ease = jtSmooth(Math.min(1, k * 4));
+    const ctx = this.ctx, VW = this.VW, VH = this.VH, T = TROLLEY_TUNING;
+    const ease = jtSmooth(Math.min(1, this.freezeT * 4));
+    ctx.fillStyle = `rgba(10,6,20,${0.35 * ease})`; ctx.fillRect(0, 0, VW, VH);
+    const w = Math.min(VW - 24, 480), h = Math.max(150, VH * 0.22), x = (VW - w) / 2;
     const cards = [
-      { side: -1, head: 'DO NOTHING', y: VH * 0.07, g: f.groups[0] },
-      { side: 1, head: 'PULL THE LEVER', y: VH * 0.74, g: f.groups[1] },
+      { side: -1, head: 'DO NOTHING', y: VH * 0.04, g: f.groups[0], color: '#5a2a8a' },
+      { side: 1, head: 'PULL THE LEVER', y: VH * 0.96 - h, g: f.groups[1], color: '#8a2a3a' },
     ];
-    const w = Math.min(VW - 28, 460), h = VH * 0.19;
     cards.forEach(c => {
-      const mine = f.choice === c.side;
-      const x = (VW - w) / 2;
-      const yy = c.y + (1 - ease) * (c.side < 0 ? -h : h);
-      // Leader line to the victims on that branch.
-      const gx = this.sx(c.g.x + c.g.w / 2), gy = this.sy(this._branchY(f, c.g.x + c.g.w / 2, c.side)) - 30;
+      const yy = c.y + (1 - ease) * (c.side < 0 ? -h - 20 : h + 20);
+      // dotted line from the card to that branch
+      const gx = this.sx(c.g.x + c.g.w / 2), gy = this.sy(this._branchY(f, c.g.x + c.g.w / 2, c.side)) - 20;
       ctx.globalAlpha = ease;
-      ctx.strokeStyle = mine ? '#ff5a5a' : 'rgba(255,255,255,0.6)'; ctx.lineWidth = 2.5; ctx.setLineDash([6, 6]);
-      ctx.beginPath(); ctx.moveTo(VW / 2, c.side < 0 ? yy + h : yy); ctx.lineTo(jailClamp(gx, 20, VW - 20), gy); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2.5; ctx.setLineDash([6, 6]);
+      ctx.beginPath(); ctx.moveTo(x + w * 0.2, c.side < 0 ? yy + h : yy); ctx.lineTo(jailClamp(gx, 20, VW - 20), gy); ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = mine ? 'rgba(200,30,40,0.92)' : 'rgba(20,14,30,0.82)';
-      jailRoundRectPath(ctx, x, yy, w, h, 14); ctx.fill();
-      ctx.strokeStyle = mine ? '#ffffff' : 'rgba(255,255,255,0.35)'; ctx.lineWidth = mine ? 4 : 2; ctx.stroke();
-      this._label(c.head, VW / 2, yy + h * 0.2, 22, mine ? '#ffffff' : '#c8c0d8');
-      this._label(c.g.name, VW / 2, yy + h * 0.5, Math.min(40, 40 * (w - 30) / Math.max(1, this._measure(c.g.name, 40))), '#ffffff');
+      ctx.fillStyle = 'rgba(16,10,26,0.94)';
+      jailRoundRectPath(ctx, x, yy, w, h, 16); ctx.fill();
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.stroke();
+      // header strip
+      ctx.fillStyle = c.color;
+      jailRoundRectPath(ctx, x, yy, w, 34, 16); ctx.fill(); ctx.fillRect(x, yy + 18, w, 16);
+      this._label(c.head, x + 16, yy + 18, 24, '#ffffff', 'left');
+      this._label('TAP', x + w - 16, yy + 18, 20, Math.sin(this.time * 20) > -0.3 ? '#f4c542' : '#ffffff', 'right');
+      // picture of what's on that track
+      const iconW = w * 0.36, iconH = h - 50, ix = x + 12, iy = yy + 42;
+      ctx.fillStyle = 'rgba(255,255,255,0.06)'; jailRoundRectPath(ctx, ix, iy, iconW, iconH, 10); ctx.fill();
+      const gw = c.g.w / T.victimScale;
+      const sc = Math.min(1.9, (iconW - 16) / Math.max(40, gw), (iconH - 14) / 90);
+      ctx.save();
+      ctx.beginPath(); ctx.rect(ix, iy, iconW, iconH); ctx.clip();
+      ctx.translate(ix + iconW / 2 - (gw * sc) / 2, iy + iconH - 10);
+      ctx.fillStyle = '#9aa0a8'; ctx.fillRect(-10, 0, gw * sc + 20, 3);
+      ctx.scale(sc, sc);
+      const saveW = c.g.w, saveHit = c.g.hit; c.g.w = gw; c.g.hit = false;
+      this._drawGroup(c.g);
+      c.g.w = saveW; c.g.hit = saveHit;
+      ctx.restore();
+      // name + utils
+      const tx = ix + iconW + 14, tw = x + w - 14 - tx;
+      const lines = this._wrap(c.g.name, 30, tw);
+      const size = lines.length > 2 ? 24 : 30;
+      const wrapped = lines.length > 2 ? this._wrap(c.g.name, size, tw) : lines;
+      const nameTop = yy + 42 + (iconH - wrapped.length * size - 26) / 2 + size / 2;
+      wrapped.forEach((ln, i) => this._label(ln, tx, nameTop + i * size, size, '#ffffff', 'left'));
       const good = c.g.cost == null || c.g.cost <= 0;
-      this._label(c.g.costLabel, VW / 2, yy + h * 0.78, 22, mine ? '#ffe0a0' : (good ? '#9af0a8' : '#ff9a8a'));
-      this._label(mine ? 'TROLLEY GOES HERE' : 'TAP', x + w - 12, yy + 16, 15, mine ? '#ffffff' : '#f4c542', 'right');
+      this._label(c.g.costLabel, tx, nameTop + wrapped.length * size + 4, 20, good ? '#9af0a8' : '#ff9a8a', 'left');
       ctx.globalAlpha = 1;
     });
+  }
+
+  _wrap(text, size, maxW) {
+    const words = text.split(' '), lines = [];
+    let cur = '';
+    words.forEach(wd => {
+      const next = cur ? cur + ' ' + wd : wd;
+      if (cur && this._measure(next, size) > maxW) { lines.push(cur); cur = wd; } else cur = next;
+    });
+    if (cur) lines.push(cur);
+    return lines;
   }
 
   _measure(text, size) { this.ctx.font = `bold ${size}px VT323, monospace`; return this.ctx.measureText(text).width; }
@@ -873,7 +964,7 @@ class JailTrolleyGame {
     const y = this.VH * 0.14, cx = this.VW / 2;
     this._label('TROLLEY PROBLEMS', cx, y, 54, '#ffffff');
     this._label('CATCH HER', cx, y + 52, 32, '#ffd0e0');
-    this._label('AT EACH FORK, TAP THE TRACK YOU PICK', cx, y + 108, 21, '#ffffff');
+    this._label('AT EACH FORK, TIME STOPS: PICK A TRACK', cx, y + 108, 21, '#ffffff');
     this._label('THE TROLLEY BEHIND YOU FOLLOWS YOUR TRACK', cx, y + 136, 21, '#ffffff');
     this._label('KILLS SLOW IT DOWN · AN EMPTY TRACK LETS IT CATCH YOU', cx, y + 168, 16, '#ff9a8a');
     this._label('SCORED IN UTILS', cx, y + 194, 18, '#9af0a8');
@@ -904,18 +995,18 @@ class JailTrolleyGame {
 
   // ------------------------------------------------------------ kept pieces
 
-  _makeGroup(spec, lane, gx, seed) {
-    const [kind, nStr] = spec.split(':');
-    const n = nStr ? +nStr : 0;
-    const g = { kind, n, lane, x: gx, w: 40, hit: false, seed, t: 0 };
+  _makeGroup(opt, lane, gx, seed) {
+    const kind = opt.draw, n = opt.n || 0;
+    const g = { kind, n, lane, x: gx, w: 40, hit: false, seed, t: 0, look: opt.look, text: opt.text };
+    const LOOK_SHIRTS = { ortho: '#f2f2f2', mime: '#f2f2f2', vest: '#7ab0e0', clap: '#e0a070', eric: '#3a6ea8', landlord: '#2a2a3a', dj: '#1a1a1a' };
     if (kind === 'people') {
       g.w = Math.max(30, n * 20);
       g.people = [];
       for (let i = 0; i < n; i++) {
         g.people.push({
           dx: i * 20 + (n > 6 ? (i % 2) * 6 : 0), row: n > 6 ? i % 2 : 0,
-          skin: TROLLEY_SKINS[Math.floor(jyHash(seed * 31 + i) * TROLLEY_SKINS.length)],
-          shirt: TROLLEY_SHIRTS[Math.floor(jyHash(seed * 17 + i) * TROLLEY_SHIRTS.length)],
+          skin: opt.look === 'mime' ? '#f4f0ec' : TROLLEY_SKINS[Math.floor(jyHash(seed * 31 + i) * TROLLEY_SKINS.length)],
+          shirt: LOOK_SHIRTS[opt.look] || TROLLEY_SHIRTS[Math.floor(jyHash(seed * 17 + i) * TROLLEY_SHIRTS.length)],
           ph: jyHash(seed + i * 3) * 6,
         });
       }
@@ -927,26 +1018,38 @@ class JailTrolleyGame {
       g.name = '1,000,000 SHRIMP'; g.costLabel = `-${jtFmt(g.cost)} UTILS`;
     } else if (kind === 'future') {
       g.w = 120; g.cost = 1e58;
-      g.name = '10^58 FUTURE PEOPLE'; g.costLabel = '-1.0e58 UTILS';
+      g.name = '10^58 HYPOTHETICAL FUTURE PEOPLE'; g.costLabel = '-1.0e58 UTILS';
     } else if (kind === 'robot') {
       g.w = 46; g.cost = -1e12;
-      g.name = 'AGI'; g.costLabel = '+1.0e12 UTILS';
+      g.name = 'AN AGI'; g.costLabel = '+1.0e12 UTILS (SAVES HUMANITY)';
     } else if (kind === 'lobster') {
       g.w = 70; g.cost = -50;
-      g.name = 'BOILING LOBSTERS'; g.costLabel = '+50 UTILS';
+      g.name = 'A POT OF BOILING LOBSTERS'; g.costLabel = '+50 UTILS (FREES THEM)';
     } else if (kind === 'coinflip') {
       g.w = 60; g.cost = null;
-      g.name = '51% DOUBLE / 49% ZERO'; g.costLabel = 'EV +2%';
+      g.name = 'A COIN: 51% DOUBLE, 49% ZERO'; g.costLabel = 'EV +2%';
     } else if (kind === 'mugger') {
       g.w = 40; g.cost = -Infinity;
-      g.name = "PASCAL'S MUGGER"; g.costLabel = '+∞ UTILS';
+      g.name = "PASCAL'S MUGGER"; g.costLabel = '+∞ UTILS (PROMISED)';
     } else if (kind === 'coins') {
       g.w = 220; g.cost = 0;
       g.name = 'CASH'; g.costLabel = '0 UTILS';
       g.coins = Array.from({ length: 7 }, (_, i) => ({ dx: i * 34, got: false }));
+    } else if (kind === 'sauce') {
+      g.w = 120; g.cost = 25;
+    } else if (kind === 'phone') {
+      g.w = 50; g.cost = 40;
+    } else if (kind === 'dog') {
+      g.w = 70; g.cost = 1000;
+    } else if (kind === 'sign') {
+      g.w = 80; g.cost = 20;
     } else {
       g.w = 60; g.cost = 0; g.name = 'EMPTY TRACK'; g.costLabel = '0 UTILS';
     }
+    if (opt.name) g.name = opt.name;
+    if (opt.cost != null) g.cost = opt.cost;
+    if (opt.costLabel) g.costLabel = opt.costLabel;
+    if (!g.costLabel) g.costLabel = `${g.cost > 0 ? '-' : '+'}${jtFmt(Math.abs(g.cost))} UTILS`;
     return g;
   }
 
@@ -976,6 +1079,37 @@ class JailTrolleyGame {
     }
   }
 
+  // Costume details on a tied-up person (drawn over the shirt; head after).
+  _drawLook(look, p) {
+    const ctx = this.ctx;
+    if (!look) return;
+    if (look === 'mime') {
+      ctx.fillStyle = '#111';
+      for (let i = 0; i < 3; i++) ctx.fillRect(-7, -24 + i * 7, 14, 3);
+    } else if (look === 'vest') {
+      ctx.fillStyle = '#2d5a3f'; ctx.fillRect(-7, -26, 5, 18); ctx.fillRect(2, -26, 5, 18);
+    } else if (look === 'eric') {
+      ctx.fillStyle = '#fff'; ctx.fillRect(-5, -22, 10, 6);
+      ctx.fillStyle = '#c02020'; ctx.fillRect(-5, -22, 10, 2);
+    } else if (look === 'landlord') {
+      ctx.fillStyle = '#f2f2f2'; ctx.beginPath(); ctx.moveTo(-3, -26); ctx.lineTo(0, -19); ctx.lineTo(3, -26); ctx.fill();
+      ctx.strokeStyle = '#f4c542'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(9, -12, 3, 0, Math.PI * 2); ctx.stroke();
+    } else if (look === 'ortho') {
+      ctx.fillStyle = '#7ab0e0'; ctx.fillRect(-7, -26, 14, 4);
+    }
+  }
+
+  // Things on the head, drawn after the face.
+  _drawHat(look) {
+    const ctx = this.ctx;
+    if (look === 'mime') { ctx.fillStyle = '#111'; ctx.beginPath(); ctx.ellipse(1, -40, 8, 3, -0.2, 0, Math.PI * 2); ctx.fill(); }
+    else if (look === 'ortho') { ctx.strokeStyle = '#b8c0c8'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, -31, 9, 0.2, Math.PI - 0.2); ctx.stroke(); }
+    else if (look === 'dj') {
+      ctx.strokeStyle = '#222'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(0, -34, 8, Math.PI, 0); ctx.stroke();
+      ctx.fillStyle = '#e24ac8'; ctx.fillRect(-10, -36, 4, 6); ctx.fillRect(6, -36, 4, 6);
+    } else if (look === 'landlord') { ctx.fillStyle = '#ccc'; ctx.fillRect(-7, -41, 14, 3); }
+  }
+
   _drawGroup(g) {
     const ctx = this.ctx, t = this.time;
     if (g.kind === 'people') {
@@ -984,16 +1118,72 @@ class JailTrolleyGame {
         ctx.save(); ctx.translate(p.dx, -p.row * 6);
         const flail = Math.sin(t * 14 + p.ph);
         ctx.strokeStyle = p.skin; ctx.lineWidth = 4; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(-4, -22); ctx.lineTo(-10, -36 - flail * 6); ctx.moveTo(4, -22); ctx.lineTo(10, -36 + flail * 6); ctx.stroke();
+        ctx.beginPath();
+        if (g.look === 'clap') {
+          // clapping, even now
+          const c = Math.abs(Math.sin(t * 9 + p.ph)) * 5;
+          ctx.moveTo(-4, -22); ctx.lineTo(-1 - c, -38); ctx.moveTo(4, -22); ctx.lineTo(1 + c, -38);
+        } else {
+          ctx.moveTo(-4, -22); ctx.lineTo(-10, -36 - flail * 6); ctx.moveTo(4, -22); ctx.lineTo(10, -36 + flail * 6);
+        }
+        ctx.stroke();
         ctx.fillStyle = p.shirt; jailRoundRectPath(ctx, -7, -26, 14, 22, 4); ctx.fill();
+        this._drawLook(g.look, p);
         ctx.strokeStyle = '#c8a060'; ctx.lineWidth = 2;
         ctx.beginPath(); ctx.moveTo(-9, -14); ctx.lineTo(9, -12); ctx.moveTo(-9, -9); ctx.lineTo(9, -7); ctx.stroke();
         ctx.fillStyle = p.skin; ctx.beginPath(); ctx.arc(0, -33, 7, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#1a1010';
         ctx.beginPath(); ctx.arc(-2.5, -35, 1.3, 0, Math.PI * 2); ctx.arc(2.5, -35, 1.3, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.ellipse(0, -30, 2.2, 3 + Math.abs(flail), 0, 0, Math.PI * 2); ctx.fill();
+        this._drawHat(g.look);
         ctx.restore();
       });
+    } else if (g.kind === 'sauce') {
+      if (g.hit) { ['#c0281e', '#e8c020', '#f2f0e8', '#6a3a1a'].forEach((c, i) => { ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(20 + i * 26, -3, 18, 4, 0, 0, Math.PI * 2); ctx.fill(); }); return; }
+      const bottles = [['#c0281e', '#c0281e'], ['#e8c020', '#e8c020'], ['#f2f0e8', '#d0d0d0'], ['#d8301e', '#2a8a3a'], ['#3a2010', '#c02020'], ['#ff7a20', '#f2f2f2']];
+      bottles.forEach(([body, cap], i) => {
+        const x = 6 + i * 20, wob = Math.sin(t * 3 + i) * 0.05;
+        ctx.save(); ctx.translate(x, -2); ctx.rotate(wob);
+        ctx.fillStyle = body; jailRoundRectPath(ctx, -6, -30, 12, 30, 3); ctx.fill();
+        ctx.fillStyle = cap; ctx.fillRect(-3, -37, 6, 8);
+        ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillRect(-4, -20, 8, 7);
+        ctx.restore();
+      });
+      ctx.strokeStyle = '#c8a060'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(0, -14); ctx.lineTo(g.w, -14); ctx.stroke();
+    } else if (g.kind === 'phone') {
+      if (g.hit) { ctx.fillStyle = '#222'; ctx.fillRect(4, -6, 40, 5); return; }
+      ctx.fillStyle = '#1a1a1a'; jailRoundRectPath(ctx, 6, -64, 36, 62, 6); ctx.fill();
+      ctx.fillStyle = '#2a3a4a'; ctx.fillRect(9, -58, 30, 50);
+      ctx.strokeStyle = '#ff3a3a'; ctx.lineWidth = 2; ctx.strokeRect(15, -40, 16, 9);
+      ctx.fillStyle = Math.sin(t * 6) > 0 ? '#ff3a3a' : '#5a1a1a'; ctx.fillRect(16, -39, 2, 7);
+      ctx.fillRect(31, -37, 2, 3);
+      this._t('1%', 24, -24, 12, '#ff6a6a');
+      ctx.strokeStyle = '#c8a060'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(2, -20); ctx.lineTo(46, -18); ctx.stroke();
+    } else if (g.kind === 'dog') {
+      const away = g.hit ? Math.min(1, g.t * 3) : 0;
+      g.t += 1 / 60;
+      ctx.save(); ctx.translate(0, -away * 140);
+      const wag = Math.sin(t * 18) * 0.5;
+      ctx.fillStyle = '#d8a050';
+      ctx.beginPath(); ctx.ellipse(32, -18, 22, 11, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(56, -28, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(64, -24, 6, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#b07830'; ctx.beginPath(); ctx.ellipse(52, -24, 4, 7, 0.3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#1a1010'; ctx.beginPath(); ctx.arc(59, -31, 1.6, 0, Math.PI * 2); ctx.arc(69, -25, 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#ff8aa0'; ctx.beginPath(); ctx.ellipse(66, -19, 2.5, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#d8a050'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+      [16, 26, 40, 48].forEach(x => { ctx.beginPath(); ctx.moveTo(x, -10); ctx.lineTo(x, 0); ctx.stroke(); });
+      ctx.save(); ctx.translate(10, -22); ctx.rotate(-0.8 + wag); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-14, 0); ctx.stroke(); ctx.restore();
+      ctx.restore();
+    } else if (g.kind === 'sign') {
+      if (g.hit) return;
+      ctx.fillStyle = '#7a5a3a'; ctx.fillRect(18, -50, 5, 50); ctx.fillRect(58, -50, 5, 50);
+      ctx.fillStyle = g.text === 'L' ? '#a7a9ac' : '#d0383a';
+      jailRoundRectPath(ctx, 4, -84, 72, 40, 6); ctx.fill();
+      if (g.text === 'L') { ctx.fillStyle = '#f2f2f2'; ctx.beginPath(); ctx.arc(40, -64, 15, 0, Math.PI * 2); ctx.fill(); this._t('L', 40, -63, 22, '#a7a9ac'); }
+      else this._t(g.text || '?', 40, -63, 22, '#ffffff');
     } else if (g.kind === 'shrimp') {
       if (g.hit) { ctx.fillStyle = 'rgba(255,138,154,0.6)'; ctx.beginPath(); ctx.ellipse(g.w / 2, -3, g.w / 2 + 10, 5, 0, 0, Math.PI * 2); ctx.fill(); return; }
       for (let i = 0; i < 70; i++) {
